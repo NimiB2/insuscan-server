@@ -1,0 +1,46 @@
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '3.5.0'
+    id 'io.spring.dependency-management' version '1.1.7'
+}
+
+group = 'com.insuscan'
+version = '1.0.0'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // Spring Web for RESTful API
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    
+    // Firebase Admin SDK for Firestore
+    implementation 'com.google.firebase:firebase-admin:9.2.0'
+    
+    // Dev tools for hot reload
+    developmentOnly 'org.springframework.boot:spring-boot-devtools'
+    
+    // OpenAPI/Swagger documentation
+    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.8'
+    
+    // WebClient for external API calls (Google Vision, USDA)
+    implementation 'org.springframework.boot:spring-boot-starter-webflux'
+    
+    // Validation
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+    
+    // Testing
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+}
