@@ -79,9 +79,6 @@ public class ScanServiceImpl implements ScanService {
         // Step 2: Get nutrition data
         List<MealEntity.FoodItem> foodItems = new ArrayList<>();
         float totalCarbs = 0f;
-        float totalCalories = 0f;
-        float totalProtein = 0f;
-        float totalFat = 0f;
 
         float weightPerItem = estimatedWeightGrams != null 
             ? estimatedWeightGrams / visionResult.getDetectedFoods().size()
@@ -98,15 +95,9 @@ public class ScanServiceImpl implements ScanService {
             if (nutrition.isFound()) {
                 float itemCarbs = nutrition.calculateCarbs(weightPerItem);
                 item.setCarbs(itemCarbs);
-                item.setCalories(nutrition.getCaloriesPer100g() * weightPerItem / 100f);
-                item.setProtein(nutrition.getProteinPer100g() * weightPerItem / 100f);
-                item.setFat(nutrition.getFatPer100g() * weightPerItem / 100f);
                 item.setUsdaFdcId(nutrition.getFdcId());
                 
                 totalCarbs += itemCarbs;
-                totalCalories += item.getCalories();
-                totalProtein += item.getProtein();
-                totalFat += item.getFat();
             } else {
                 item.setCarbs(0f);
                 log.warn("No nutrition data for: {}", detected.getName());
@@ -125,9 +116,6 @@ public class ScanServiceImpl implements ScanService {
         meal.setImageUrl(request.getImageUrl());
         meal.setFoodItems(foodItems);
         meal.setTotalCarbs(totalCarbs);
-        meal.setTotalCalories(totalCalories);
-        meal.setTotalProtein(totalProtein);
-        meal.setTotalFat(totalFat);
         meal.setStatus(MealStatus.PENDING);
         
         // Set portion analysis if provided

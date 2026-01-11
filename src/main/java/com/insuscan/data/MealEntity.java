@@ -18,9 +18,6 @@ public class MealEntity {
     
     // Total nutritional summary
     private Float totalCarbs;
-    private Float totalCalories;
-    private Float totalProtein;
-    private Float totalFat;
     
     // Portion analysis data
     private Float estimatedWeight;      // Total weight in grams
@@ -51,9 +48,6 @@ public class MealEntity {
         private String nameHebrew;      // Hebrew translation if available
         private Float quantity;         // Amount in grams
         private Float carbs;            // Carbs in grams
-        private Float calories;
-        private Float protein;
-        private Float fat;
         private Float confidence;       // Detection confidence 0.0 to 1.0
         private String usdaFdcId;       // USDA FoodData Central ID
 
@@ -71,15 +65,6 @@ public class MealEntity {
         
         public Float getCarbs() { return carbs; }
         public void setCarbs(Float carbs) { this.carbs = carbs; }
-        
-        public Float getCalories() { return calories; }
-        public void setCalories(Float calories) { this.calories = calories; }
-        
-        public Float getProtein() { return protein; }
-        public void setProtein(Float protein) { this.protein = protein; }
-        
-        public Float getFat() { return fat; }
-        public void setFat(Float fat) { this.fat = fat; }
         
         public Float getConfidence() { return confidence; }
         public void setConfidence(Float confidence) { this.confidence = confidence; }
@@ -103,15 +88,6 @@ public class MealEntity {
 
     public Float getTotalCarbs() { return totalCarbs; }
     public void setTotalCarbs(Float totalCarbs) { this.totalCarbs = totalCarbs; }
-
-    public Float getTotalCalories() { return totalCalories; }
-    public void setTotalCalories(Float totalCalories) { this.totalCalories = totalCalories; }
-
-    public Float getTotalProtein() { return totalProtein; }
-    public void setTotalProtein(Float totalProtein) { this.totalProtein = totalProtein; }
-
-    public Float getTotalFat() { return totalFat; }
-    public void setTotalFat(Float totalFat) { this.totalFat = totalFat; }
 
     public Float getEstimatedWeight() { return estimatedWeight; }
     public void setEstimatedWeight(Float estimatedWeight) { this.estimatedWeight = estimatedWeight; }

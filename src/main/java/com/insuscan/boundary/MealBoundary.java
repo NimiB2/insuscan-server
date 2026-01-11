@@ -16,9 +16,6 @@ public class MealBoundary {
     
     // Nutrition totals
     private Float totalCarbs;
-    private Float totalCalories;
-    private Float totalProtein;
-    private Float totalFat;
     
     // Portion analysis results
     private Float estimatedWeight;
@@ -79,30 +76,6 @@ public class MealBoundary {
 
     public void setTotalCarbs(Float totalCarbs) {
         this.totalCarbs = totalCarbs;
-    }
-
-    public Float getTotalCalories() {
-        return totalCalories;
-    }
-
-    public void setTotalCalories(Float totalCalories) {
-        this.totalCalories = totalCalories;
-    }
-
-    public Float getTotalProtein() {
-        return totalProtein;
-    }
-
-    public void setTotalProtein(Float totalProtein) {
-        this.totalProtein = totalProtein;
-    }
-
-    public Float getTotalFat() {
-        return totalFat;
-    }
-
-    public void setTotalFat(Float totalFat) {
-        this.totalFat = totalFat;
     }
 
     public Float getEstimatedWeight() {

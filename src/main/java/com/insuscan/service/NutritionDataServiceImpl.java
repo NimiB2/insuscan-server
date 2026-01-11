@@ -123,12 +123,6 @@ public class NutritionDataServiceImpl implements NutritionDataService {
                         
                         if (nameLower.contains("carbohydrate")) {
                             info.setCarbsPer100g(val);
-                        } else if (nameLower.contains("energy") && nameLower.contains("kcal")) {
-                            info.setCaloriesPer100g(val);
-                        } else if (nameLower.contains("protein")) {
-                            info.setProteinPer100g(val);
-                        } else if (nameLower.contains("fat") && nameLower.contains("total")) {
-                            info.setFatPer100g(val);
                         }
                     }
                 }
@@ -167,36 +161,32 @@ public class NutritionDataServiceImpl implements NutritionDataService {
         Map<String, NutritionInfo> data = new HashMap<>();
         
         // Common foods with approximate values per 100g
-        data.put("rice", createFallback("rice", 28f, 130f, 2.7f, 0.3f));
-        data.put("white rice", createFallback("white rice", 28f, 130f, 2.7f, 0.3f));
-        data.put("bread", createFallback("bread", 49f, 265f, 9f, 3.2f));
-        data.put("pasta", createFallback("pasta", 25f, 131f, 5f, 1.1f));
-        data.put("potato", createFallback("potato", 17f, 77f, 2f, 0.1f));
-        data.put("chicken", createFallback("chicken", 0f, 165f, 31f, 3.6f));
-        data.put("beef", createFallback("beef", 0f, 250f, 26f, 15f));
-        data.put("fish", createFallback("fish", 0f, 206f, 22f, 12f));
-        data.put("egg", createFallback("egg", 1.1f, 155f, 13f, 11f));
-        data.put("apple", createFallback("apple", 14f, 52f, 0.3f, 0.2f));
-        data.put("banana", createFallback("banana", 23f, 89f, 1.1f, 0.3f));
-        data.put("orange", createFallback("orange", 12f, 47f, 0.9f, 0.1f));
-        data.put("vegetables", createFallback("vegetables", 7f, 35f, 2f, 0.3f));
-        data.put("salad", createFallback("salad", 3f, 20f, 1.5f, 0.2f));
-        data.put("cheese", createFallback("cheese", 1.3f, 402f, 25f, 33f));
-        data.put("milk", createFallback("milk", 5f, 61f, 3.2f, 3.3f));
+        data.put("rice", createFallback("rice", 28f));
+        data.put("white rice", createFallback("white rice", 28f));
+        data.put("bread", createFallback("bread", 49f));
+        data.put("pasta", createFallback("pasta", 25f));
+        data.put("potato", createFallback("potato", 17f));
+        data.put("chicken", createFallback("chicken", 0f));
+        data.put("beef", createFallback("beef", 0f));
+        data.put("fish", createFallback("fish", 0f));
+        data.put("egg", createFallback("egg", 1.1f));
+        data.put("apple", createFallback("apple", 14f));
+        data.put("banana", createFallback("banana", 23f));
+        data.put("orange", createFallback("orange", 12f));
+        data.put("vegetables", createFallback("vegetables", 7f));
+        data.put("salad", createFallback("salad", 3f));
+        data.put("cheese", createFallback("cheese", 1.3f));
+        data.put("milk", createFallback("milk", 5f));
         
         return data;
     }
 
     // Helper to create fallback NutritionInfo
-    private static NutritionInfo createFallback(String name, float carbs, 
-            float calories, float protein, float fat) {
+    private static NutritionInfo createFallback(String name, float carbs) {
         NutritionInfo info = new NutritionInfo();
         info.setFoodName(name);
         info.setFound(true);
         info.setCarbsPer100g(carbs);
-        info.setCaloriesPer100g(calories);
-        info.setProteinPer100g(protein);
-        info.setFatPer100g(fat);
         info.setFdcId("fallback-" + name);
         return info;
     }

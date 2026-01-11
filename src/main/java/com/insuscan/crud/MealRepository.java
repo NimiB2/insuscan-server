@@ -237,9 +237,6 @@ public class MealRepository {
         }
         
         map.put("totalCarbs", entity.getTotalCarbs());
-        map.put("totalCalories", entity.getTotalCalories());
-        map.put("totalProtein", entity.getTotalProtein());
-        map.put("totalFat", entity.getTotalFat());
         map.put("estimatedWeight", entity.getEstimatedWeight());
         map.put("plateVolumeCm3", entity.getPlateVolumeCm3());
         map.put("plateDiameterCm", entity.getPlateDiameterCm());
@@ -262,9 +259,6 @@ public class MealRepository {
         map.put("nameHebrew", item.getNameHebrew());
         map.put("quantity", item.getQuantity());
         map.put("carbs", item.getCarbs());
-        map.put("calories", item.getCalories());
-        map.put("protein", item.getProtein());
-        map.put("fat", item.getFat());
         map.put("confidence", item.getConfidence());
         map.put("usdaFdcId", item.getUsdaFdcId());
         return map;
@@ -288,9 +282,6 @@ public class MealRepository {
         }
         
         entity.setTotalCarbs(getFloat(doc, "totalCarbs"));
-        entity.setTotalCalories(getFloat(doc, "totalCalories"));
-        entity.setTotalProtein(getFloat(doc, "totalProtein"));
-        entity.setTotalFat(getFloat(doc, "totalFat"));
         entity.setEstimatedWeight(getFloat(doc, "estimatedWeight"));
         entity.setPlateVolumeCm3(getFloat(doc, "plateVolumeCm3"));
         entity.setPlateDiameterCm(getFloat(doc, "plateDiameterCm"));
@@ -318,9 +309,6 @@ public class MealRepository {
         item.setNameHebrew((String) map.get("nameHebrew"));
         item.setQuantity(toFloat(map.get("quantity")));
         item.setCarbs(toFloat(map.get("carbs")));
-        item.setCalories(toFloat(map.get("calories")));
-        item.setProtein(toFloat(map.get("protein")));
-        item.setFat(toFloat(map.get("fat")));
         item.setConfidence(toFloat(map.get("confidence")));
         item.setUsdaFdcId((String) map.get("usdaFdcId"));
         return item;
