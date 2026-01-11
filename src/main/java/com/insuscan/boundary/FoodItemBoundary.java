@@ -6,9 +6,6 @@ public class FoodItemBoundary {
     private String nameHebrew;
     private Float quantity;         // grams
     private Float carbs;            // grams
-    private Float calories;
-    private Float protein;          // grams
-    private Float fat;              // grams
     private Float confidence;       // 0.0 to 1.0
     private String usdaFdcId;       // USDA FoodData Central ID
     
@@ -45,30 +42,6 @@ public class FoodItemBoundary {
 
     public void setCarbs(Float carbs) {
         this.carbs = carbs;
-    }
-
-    public Float getCalories() {
-        return calories;
-    }
-
-    public void setCalories(Float calories) {
-        this.calories = calories;
-    }
-
-    public Float getProtein() {
-        return protein;
-    }
-
-    public void setProtein(Float protein) {
-        this.protein = protein;
-    }
-
-    public Float getFat() {
-        return fat;
-    }
-
-    public void setFat(Float fat) {
-        this.fat = fat;
     }
 
     public Float getConfidence() {

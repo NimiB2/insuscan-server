@@ -246,9 +246,6 @@ public class MealServiceImpl implements MealService {
         item.setNameHebrew(boundary.getNameHebrew());
         item.setQuantity(boundary.getQuantity());
         item.setCarbs(boundary.getCarbs());
-        item.setCalories(boundary.getCalories());
-        item.setProtein(boundary.getProtein());
-        item.setFat(boundary.getFat());
         item.setConfidence(boundary.getConfidence());
         item.setUsdaFdcId(boundary.getUsdaFdcId());
         return item;

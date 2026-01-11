@@ -1,7 +1,9 @@
 package com.insuscan.enums;
 
 public enum MealStatus {
-    PENDING,      // Meal scanned but not yet confirmed
-    CONFIRMED,    // User confirmed the food detection
-    COMPLETED     // Insulin dose calculated and logged
+    PENDING,     // just created, waiting for confirmation
+    CONFIRMED,   // user confirmed food items and dose
+    COMPLETED,   // insulin injected
+    CANCELLED,   // user cancelled
+    FAILED       // analysis failed
 }

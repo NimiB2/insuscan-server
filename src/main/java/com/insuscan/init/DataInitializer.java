@@ -73,7 +73,7 @@ public class DataInitializer implements CommandLineRunner {
         daniel.setInsulinCarbRatio(0.1f);   // 1:10 ratio
         daniel.setCorrectionFactor(50f);    // 50 mg/dL per unit
         daniel.setTargetGlucose(100);       // 100 mg/dL target
-        daniel.setSyringeType(SyringeType.BD_ULTRA_FINE);
+        daniel.setSyringeType(SyringeType.SYRINGE_30_UNIT);
         daniel.setCreatedAt(new Date());
         daniel.setUpdatedAt(new Date());
         userRepository.save(daniel);
@@ -88,7 +88,7 @@ public class DataInitializer implements CommandLineRunner {
         nimrod.setInsulinCarbRatio(0.083f); // 1:12 ratio
         nimrod.setCorrectionFactor(40f);
         nimrod.setTargetGlucose(110);
-        nimrod.setSyringeType(SyringeType.NOVOFINE);
+        nimrod.setSyringeType(SyringeType.INSULIN_PEN);
         nimrod.setCreatedAt(new Date());
         nimrod.setUpdatedAt(new Date());
         userRepository.save(nimrod);
@@ -120,9 +120,6 @@ public class DataInitializer implements CommandLineRunner {
             createFoodItem("Orange juice", "מיץ תפוזים", 200f, 22f, 90f, 1f, 0f, 0.88f)
         ));
         meal1.setTotalCarbs(38f);
-        meal1.setTotalCalories(320f);
-        meal1.setTotalProtein(16f);
-        meal1.setTotalFat(11f);
         meal1.setEstimatedWeight(330f);
         meal1.setAnalysisConfidence(0.85f);
         meal1.setReferenceDetected(true);
@@ -146,9 +143,6 @@ public class DataInitializer implements CommandLineRunner {
             createFoodItem("Mixed vegetables", "ירקות מעורבים", 100f, 8f, 50f, 2f, 0f, 0.87f)
         ));
         meal2.setTotalCarbs(53f);
-        meal2.setTotalCalories(410f);
-        meal2.setTotalProtein(37f);
-        meal2.setTotalFat(5f);
         meal2.setEstimatedWeight(400f);
         meal2.setPlateDiameterCm(24f);
         meal2.setPlateDepthCm(3f);
@@ -172,9 +166,6 @@ public class DataInitializer implements CommandLineRunner {
             createFoodItem("Tomato sauce", "רוטב עגבניות", 80f, 8f, 35f, 1f, 0f, 0.90f)
         ));
         meal3.setTotalCarbs(68f);
-        meal3.setTotalCalories(325f);
-        meal3.setTotalProtein(11f);
-        meal3.setTotalFat(2f);
         meal3.setEstimatedWeight(280f);
         meal3.setAnalysisConfidence(0.86f);
         meal3.setReferenceDetected(false);
@@ -188,15 +179,12 @@ public class DataInitializer implements CommandLineRunner {
 
     private MealEntity.FoodItem createFoodItem(
             String name, String nameHebrew, Float quantity, 
-            Float carbs, Float calories, Float protein, Float fat, Float confidence) {
+            Float carbs, Float confidence) {
         MealEntity.FoodItem item = new MealEntity.FoodItem();
         item.setName(name);
         item.setNameHebrew(nameHebrew);
         item.setQuantity(quantity);
         item.setCarbs(carbs);
-        item.setCalories(calories);
-        item.setProtein(protein);
-        item.setFat(fat);
         item.setConfidence(confidence);
         return item;
     }

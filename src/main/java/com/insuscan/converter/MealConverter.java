@@ -70,9 +70,7 @@ public class MealConverter {
 
         // Nutrition totals
         boundary.setTotalCarbs(entity.getTotalCarbs());
-        boundary.setTotalCalories(entity.getTotalCalories());
-        boundary.setTotalProtein(entity.getTotalProtein());
-        boundary.setTotalFat(entity.getTotalFat());
+
 
         // Portion analysis
         boundary.setEstimatedWeight(entity.getEstimatedWeight());
@@ -132,9 +130,7 @@ public class MealConverter {
 
         // Nutrition totals
         entity.setTotalCarbs(boundary.getTotalCarbs());
-        entity.setTotalCalories(boundary.getTotalCalories());
-        entity.setTotalProtein(boundary.getTotalProtein());
-        entity.setTotalFat(boundary.getTotalFat());
+
 
         // Portion analysis
         entity.setEstimatedWeight(boundary.getEstimatedWeight());
@@ -186,9 +182,6 @@ public class MealConverter {
         boundary.setNameHebrew(item.getNameHebrew());
         boundary.setQuantity(item.getQuantity());
         boundary.setCarbs(item.getCarbs());
-        boundary.setCalories(item.getCalories());
-        boundary.setProtein(item.getProtein());
-        boundary.setFat(item.getFat());
         boundary.setConfidence(item.getConfidence());
         boundary.setUsdaFdcId(item.getUsdaFdcId());
 
@@ -206,9 +199,6 @@ public class MealConverter {
         item.setNameHebrew(boundary.getNameHebrew());
         item.setQuantity(boundary.getQuantity());
         item.setCarbs(boundary.getCarbs());
-        item.setCalories(boundary.getCalories());
-        item.setProtein(boundary.getProtein());
-        item.setFat(boundary.getFat());
         item.setConfidence(boundary.getConfidence());
         item.setUsdaFdcId(boundary.getUsdaFdcId());
 
@@ -219,27 +209,15 @@ public class MealConverter {
     public void calculateTotals(MealEntity entity) {
         if (entity.getFoodItems() == null || entity.getFoodItems().isEmpty()) {
             entity.setTotalCarbs(0f);
-            entity.setTotalCalories(0f);
-            entity.setTotalProtein(0f);
-            entity.setTotalFat(0f);
             return;
         }
 
         float totalCarbs = 0f;
-        float totalCalories = 0f;
-        float totalProtein = 0f;
-        float totalFat = 0f;
 
         for (MealEntity.FoodItem item : entity.getFoodItems()) {
             if (item.getCarbs() != null) totalCarbs += item.getCarbs();
-            if (item.getCalories() != null) totalCalories += item.getCalories();
-            if (item.getProtein() != null) totalProtein += item.getProtein();
-            if (item.getFat() != null) totalFat += item.getFat();
         }
 
         entity.setTotalCarbs(totalCarbs);
-        entity.setTotalCalories(totalCalories);
-        entity.setTotalProtein(totalProtein);
-        entity.setTotalFat(totalFat);
     }
 }
