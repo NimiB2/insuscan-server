@@ -115,9 +115,9 @@ public class DataInitializer implements CommandLineRunner {
         meal1.setUserId(danielId);
         meal1.setImageUrl("https://example.com/breakfast.jpg");
         meal1.setFoodItems(Arrays.asList(
-            createFoodItem("Toast", "טוסט", 30f, 15f, 80f, 3f, 1f, 0.92f),
-            createFoodItem("Scrambled eggs", "ביצה מקושקשת", 100f, 1f, 150f, 12f, 10f, 0.95f),
-            createFoodItem("Orange juice", "מיץ תפוזים", 200f, 22f, 90f, 1f, 0f, 0.88f)
+            createFoodItem("Toast", "טוסט", 30f, 15f, 80f),
+            createFoodItem("Scrambled eggs", "ביצה מקושקשת", 100f, 1f, 150f),
+            createFoodItem("Orange juice", "מיץ תפוזים", 200f, 22f, 90f)
         ));
         meal1.setTotalCarbs(38f);
         meal1.setEstimatedWeight(330f);
@@ -162,8 +162,8 @@ public class DataInitializer implements CommandLineRunner {
         meal3.setUserId(danielId);
         meal3.setImageUrl("https://example.com/dinner.jpg");
         meal3.setFoodItems(Arrays.asList(
-            createFoodItem("Pasta", "פסטה", 200f, 60f, 290f, 10f, 2f, 0.93f),
-            createFoodItem("Tomato sauce", "רוטב עגבניות", 80f, 8f, 35f, 1f, 0f, 0.90f)
+            createFoodItem("Pasta", "פסטה", 200f, 60f, 290f),
+            createFoodItem("Tomato sauce", "רוטב עגבניות", 80f, 8f, 35f)
         ));
         meal3.setTotalCarbs(68f);
         meal3.setEstimatedWeight(280f);

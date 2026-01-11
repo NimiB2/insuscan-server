@@ -24,7 +24,7 @@ public class FirebaseConfig {
     @Value("${firebase.config.path:firebase-service-account.json}")
     private String firebaseConfigPath;
 
-    @Value("${firebase.project.id:insuscan-project}")
+    @Value("${firebase.project.id:insuscan-1567c}")
     private String projectId;
 
     @PostConstruct
