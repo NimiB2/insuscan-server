@@ -15,8 +15,9 @@ public class FoodRecognitionResult {
 
     // Recognized food item from the recognition service
     public static class RecognizedFoodItem {
-        private String name;      // food name (English)
-        private float confidence; // 0.0 to 1.0
+        private String name;              // food name (English, specific)
+        private float confidence;         // 0.0 to 1.0
+        private Float estimatedPortionGrams; // estimated portion size in grams (optional)
 
         public RecognizedFoodItem() {}
 
@@ -25,11 +26,22 @@ public class FoodRecognitionResult {
             this.confidence = confidence;
         }
 
+        public RecognizedFoodItem(String name, float confidence, Float estimatedPortionGrams) {
+            this.name = name;
+            this.confidence = confidence;
+            this.estimatedPortionGrams = estimatedPortionGrams;
+        }
+
         public String getName() { return name; }
         public void setName(String name) { this.name = name; }
 
         public float getConfidence() { return confidence; }
         public void setConfidence(float confidence) { this.confidence = confidence; }
+
+        public Float getEstimatedPortionGrams() { return estimatedPortionGrams; }
+        public void setEstimatedPortionGrams(Float estimatedPortionGrams) { 
+            this.estimatedPortionGrams = estimatedPortionGrams; 
+        }
     }
 
     public List<RecognizedFoodItem> getDetectedFoods() { return detectedFoods; }

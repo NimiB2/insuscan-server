@@ -196,6 +196,20 @@ public class MealRepository {
         }
     }
 
+    // Find recent meals (all users, ordered by scanned date desc)
+    public List<MealEntity> findAllRecent(int limit) {
+        try {
+            Query query = firestore.collection(COLLECTION_NAME)
+                    .orderBy("scannedAt", Query.Direction.DESCENDING)
+                    .limit(limit);
+            
+            return executeQuery(query);
+        } catch (Exception e) {
+            log.error("Error finding recent meals", e);
+            throw new RuntimeException("Failed to find recent meals", e);
+        }
+    }
+
     // Helper: execute query and return list
     private List<MealEntity> executeQuery(Query query) throws ExecutionException, InterruptedException {
         QuerySnapshot snapshot = query.get().get();

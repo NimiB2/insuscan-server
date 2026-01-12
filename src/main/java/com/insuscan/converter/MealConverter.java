@@ -9,10 +9,11 @@ import com.insuscan.boundary.MealIdBoundary;
 import com.insuscan.boundary.UserIdBoundary;
 import com.insuscan.data.MealEntity;
 import com.insuscan.enums.MealStatus;
+import com.insuscan.util.MealIdGenerator;
+import com.insuscan.util.NumberUtils;
 
 import java.util.Collections;
 import java.util.List;
-import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Component
@@ -20,6 +21,12 @@ public class MealConverter {
 
     @Value("${spring.application.name}")
     private String systemId;
+    
+    private final MealIdGenerator mealIdGenerator;
+    
+    public MealConverter(MealIdGenerator mealIdGenerator) {
+        this.mealIdGenerator = mealIdGenerator;
+    }
 
     // Convert MealEntity to MealBoundary for API responses
     public MealBoundary toBoundary(MealEntity entity) {
@@ -157,9 +164,8 @@ public class MealConverter {
     public MealEntity createNewMealEntity(String userEmail, String imageUrl) {
         MealEntity entity = new MealEntity();
         
-        // Generate new meal ID
-        String mealUuid = UUID.randomUUID().toString();
-        entity.setId(systemId + "_" + mealUuid);
+        // Generate new meal ID with date + sequence format
+        entity.setId(mealIdGenerator.generateMealId(systemId));
         
         // Set user reference
         entity.setUserId(systemId + "_" + userEmail);
@@ -218,6 +224,6 @@ public class MealConverter {
             if (item.getCarbs() != null) totalCarbs += item.getCarbs();
         }
 
-        entity.setTotalCarbs(totalCarbs);
+        entity.setTotalCarbs(NumberUtils.roundTo2Decimals(totalCarbs));
     }
 }

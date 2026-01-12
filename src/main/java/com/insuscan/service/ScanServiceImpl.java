@@ -10,6 +10,9 @@ import com.insuscan.enums.MealStatus;
 import com.insuscan.exception.InsuScanInvalidInputException;
 import com.insuscan.exception.InsuScanNotFoundException;
 import com.insuscan.util.InputValidators;
+import com.insuscan.util.MealIdGenerator;
+import com.insuscan.util.PortionEstimator;
+import com.insuscan.util.NumberUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -27,6 +30,8 @@ public class ScanServiceImpl implements ScanService {
     private final MealRepository mealRepository;
     private final UserRepository userRepository;
     private final MealConverter mealConverter;
+    private final MealIdGenerator mealIdGenerator;
+    private final PortionEstimator portionEstimator;
 
     @Value("${spring.application.name}")
     private String systemId;
@@ -38,12 +43,16 @@ public class ScanServiceImpl implements ScanService {
             NutritionDataService nutritionDataService,
             MealRepository mealRepository,
             UserRepository userRepository,
-            MealConverter mealConverter) {
+            MealConverter mealConverter,
+            MealIdGenerator mealIdGenerator,
+            PortionEstimator portionEstimator) {
         this.imageAnalysisService = imageAnalysisService;
         this.nutritionDataService = nutritionDataService;
         this.mealRepository = mealRepository;
         this.userRepository = userRepository;
         this.mealConverter = mealConverter;
+        this.mealIdGenerator = mealIdGenerator;
+        this.portionEstimator = portionEstimator;
     }
 
     @Override
@@ -76,31 +85,76 @@ public class ScanServiceImpl implements ScanService {
 
         log.info("Vision detected {} food items", visionResult.getDetectedFoods().size());
 
-        // Step 2: Get nutrition data
+        // Step 2: Calculate portion sizes using smart distribution
+        List<PortionEstimator.FoodItem> portionItems = new ArrayList<>();
+        float totalVisionPortions = 0f;
+        
+        for (FoodRecognitionResult.RecognizedFoodItem detected : visionResult.getDetectedFoods()) {
+            portionItems.add(new PortionEstimator.FoodItem(
+                    detected.getName(),
+                    detected.getConfidence(),
+                    detected.getEstimatedPortionGrams()
+            ));
+            
+            if (detected.getEstimatedPortionGrams() != null && detected.getEstimatedPortionGrams() > 0) {
+                totalVisionPortions += detected.getEstimatedPortionGrams();
+            }
+        }
+
+        // Determine total weight to distribute
+        Float totalWeightToDistribute = estimatedWeightGrams;
+        if (totalWeightToDistribute == null) {
+            // If vision provided total, use it; otherwise estimate from food types
+            if (totalVisionPortions > 0) {
+                totalWeightToDistribute = totalVisionPortions;
+                log.info("Using vision-estimated total weight: {}g", totalWeightToDistribute);
+            } else {
+                // Estimate total from food types
+                totalWeightToDistribute = estimateTotalWeightFromFoodTypes(portionItems);
+                log.info("Estimated total weight from food types: {}g", totalWeightToDistribute);
+            }
+        }
+
+        // Use smart portion distribution
+        Map<String, Float> distributedPortions = portionEstimator.distributePortions(
+                portionItems, totalWeightToDistribute);
+
+        // Step 3: Get nutrition data and calculate carbs
         List<MealEntity.FoodItem> foodItems = new ArrayList<>();
         float totalCarbs = 0f;
-
-        float weightPerItem = estimatedWeightGrams != null 
-            ? estimatedWeightGrams / visionResult.getDetectedFoods().size()
-            : DEFAULT_PORTION_WEIGHT / visionResult.getDetectedFoods().size();
 
         for (FoodRecognitionResult.RecognizedFoodItem detected : visionResult.getDetectedFoods()) {
             NutritionInfo nutrition = nutritionDataService.getNutritionInfo(detected.getName());
             
             MealEntity.FoodItem item = new MealEntity.FoodItem();
             item.setName(detected.getName());
-            item.setConfidence(detected.getConfidence());
-            item.setQuantity(weightPerItem);
+            item.setConfidence(NumberUtils.roundTo2Decimals(detected.getConfidence()));
+            
+            // Get portion from smart distribution, or estimate individually
+            Float itemWeight = distributedPortions.get(detected.getName());
+            if (itemWeight == null) {
+                // Fallback: estimate individually
+                itemWeight = portionEstimator.estimatePortion(
+                        detected.getName(), 
+                        detected.getConfidence(), 
+                        detected.getEstimatedPortionGrams());
+            }
+            
+            item.setQuantity(NumberUtils.roundTo2Decimals(itemWeight));
+            log.debug("Food: {} - Portion: {}g (confidence: {:.2f}, vision: {})", 
+                    detected.getName(), itemWeight, detected.getConfidence(),
+                    detected.getEstimatedPortionGrams() != null ? detected.getEstimatedPortionGrams() + "g" : "none");
 
             if (nutrition.isFound()) {
-                float itemCarbs = nutrition.calculateCarbs(weightPerItem);
-                item.setCarbs(itemCarbs);
+                float itemCarbs = nutrition.calculateCarbs(itemWeight);
+                item.setCarbs(NumberUtils.roundTo2Decimals(itemCarbs));
                 item.setUsdaFdcId(nutrition.getFdcId());
                 
                 totalCarbs += itemCarbs;
+                log.debug("  -> Carbs: {}g ({}g per 100g)", itemCarbs, nutrition.getCarbsPer100g());
             } else {
                 item.setCarbs(0f);
-                log.warn("No nutrition data for: {}", detected.getName());
+                log.warn("No nutrition data found for: {}", detected.getName());
             }
 
             foodItems.add(item);
@@ -110,12 +164,11 @@ public class ScanServiceImpl implements ScanService {
 
         // Step 3: Create meal using existing MealEntity structure
         MealEntity meal = new MealEntity();
-        String mealUuid = UUID.randomUUID().toString();
-        meal.setId(systemId + "_" + mealUuid);
+        meal.setId(mealIdGenerator.generateMealId(systemId));
         meal.setUserId(userDocId);
         meal.setImageUrl(request.getImageUrl());
         meal.setFoodItems(foodItems);
-        meal.setTotalCarbs(totalCarbs);
+        meal.setTotalCarbs(NumberUtils.roundTo2Decimals(totalCarbs));
         meal.setStatus(MealStatus.PENDING);
         
         // Set portion analysis if provided
@@ -129,9 +182,21 @@ public class ScanServiceImpl implements ScanService {
         // scannedAt is set in MealEntity constructor
 
         MealEntity saved = mealRepository.save(meal);
-        log.info("Meal saved: {}", mealUuid);
+        log.info("Meal saved: {}", meal.getId());
 
         return mealConverter.toBoundary(saved);
+    }
+
+    /**
+     * Estimate total weight from food types when no user/vision estimate available
+     */
+    private float estimateTotalWeightFromFoodTypes(List<PortionEstimator.FoodItem> items) {
+        float total = 0f;
+        for (PortionEstimator.FoodItem item : items) {
+            float portion = portionEstimator.estimatePortion(item.name, item.confidence, item.visionEstimate);
+            total += portion;
+        }
+        return total;
     }
 
     private void validateScanRequest(ScanRequestBoundary request) {

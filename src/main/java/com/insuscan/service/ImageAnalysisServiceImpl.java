@@ -188,17 +188,19 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
     private String buildPrompt() {
         return """
                 You are a food recognition assistant for a medical-grade diabetes management system.
+                Your analysis is critical for calculating insulin dosages, so accuracy is essential.
 
                 TASK:
-                Analyze the provided image of a food plate and identify visible food items.
+                Analyze the provided image of a food plate and identify visible food items with their estimated portion sizes.
 
                 OUTPUT:
                 Return STRICT JSON only, with the following exact structure:
                 {
                   "items": [
                     {
-                      "name": "string",
-                      "confidence": 0.0
+                      "name": "string (specific food name, e.g., 'spaghetti' not 'pasta', 'cheddar cheese' not 'cheese')",
+                      "confidence": 0.0,
+                      "estimatedPortionGrams": 0.0
                     }
                   ],
                   "warnings": [
@@ -206,16 +208,57 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
                   ]
                 }
 
-                STRICT RULES:
+                FOOD NAME REQUIREMENTS:
+                - Use SPECIFIC food names (e.g., "spaghetti", "penne", "fettuccine" instead of generic "pasta")
+                - Use SPECIFIC types (e.g., "cheddar cheese", "mozzarella", "chicken breast", "salmon fillet")
+                - Use common English names that would be found in nutrition databases
+                - Avoid generic terms like "meat", "vegetables", "sauce" - be specific
+                - If you see multiple items of the same type, combine them (e.g., "3 chicken wings" becomes "chicken wings" with combined portion)
+
+                PORTION ESTIMATION REQUIREMENTS:
+                - Estimate the portion size in GRAMS for each food item
+                - Use visual cues: plate size, relative proportions, typical serving sizes
+                - Consider: a typical adult portion of pasta is 80-120g cooked, rice is 100-150g, protein is 100-200g
+                - Estimate based on what you can see in the image
+                - If uncertain, provide your best estimate but note it in warnings
+                - "estimatedPortionGrams" must be a positive number (minimum 10g, maximum 1000g per item)
+
+                CONFIDENCE REQUIREMENTS:
                 - Include ONLY food items with confidence >= 0.6 in the "items" list
                 - Do NOT include items with confidence below 0.6 in the "items" list
                 - If a food component is uncertain or ambiguous, do NOT add it to "items"
                 - Uncertain or ambiguous detections must be mentioned ONLY in the "warnings" list
                 - "confidence" must be a number between 0.0 and 1.0
+
+                STRICT RULES:
                 - Do NOT guess or hallucinate food items
                 - If no food items meet the confidence threshold, return an empty "items" list
                 - Do NOT add any keys outside the defined JSON schema
                 - Do NOT include explanations, comments, or additional text outside the JSON
+                - All numbers must be valid JSON numbers (no NaN, Infinity, etc.)
+                - Return ONLY valid JSON - no markdown, no code blocks, no additional text
+
+                EXAMPLE OUTPUT:
+                {
+                  "items": [
+                    {
+                      "name": "spaghetti",
+                      "confidence": 0.95,
+                      "estimatedPortionGrams": 180
+                    },
+                    {
+                      "name": "marinara sauce",
+                      "confidence": 0.85,
+                      "estimatedPortionGrams": 120
+                    },
+                    {
+                      "name": "parmesan cheese",
+                      "confidence": 0.75,
+                      "estimatedPortionGrams": 25
+                    }
+                  ],
+                  "warnings": []
+                }
                 """;
     }
 
@@ -228,9 +271,29 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
         List<FoodRecognitionResult.RecognizedFoodItem> results = new ArrayList<>();
         if (items != null && items.isArray()) {
             for (JsonNode item : items) {
-                String name = item.hasNonNull("name") ? item.get("name").asText() : "unknown";
+                String name = item.hasNonNull("name") ? item.get("name").asText().trim() : "unknown";
+                
+                // Skip if name is empty or "unknown"
+                if (name.isEmpty() || "unknown".equalsIgnoreCase(name)) {
+                    continue;
+                }
+                
                 float conf = item.hasNonNull("confidence") ? (float) item.get("confidence").asDouble() : 0.0f;
-                results.add(new FoodRecognitionResult.RecognizedFoodItem(name, conf));
+                
+                // Parse estimated portion (optional field)
+                Float estimatedPortion = null;
+                if (item.has("estimatedPortionGrams")) {
+                    JsonNode portionNode = item.get("estimatedPortionGrams");
+                    if (!portionNode.isNull()) {
+                        double portionValue = portionNode.asDouble();
+                        // Validate portion is reasonable (10g - 1000g)
+                        if (portionValue >= 10 && portionValue <= 1000) {
+                            estimatedPortion = (float) portionValue;
+                        }
+                    }
+                }
+                
+                results.add(new FoodRecognitionResult.RecognizedFoodItem(name, conf, estimatedPortion));
             }
         }
         return results;

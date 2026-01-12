@@ -2,6 +2,7 @@ package com.insuscan.controller;
 
 import com.insuscan.boundary.FoodRecognitionResult;
 import com.insuscan.boundary.MealBoundary;
+import com.insuscan.boundary.NutritionInfo;
 import com.insuscan.boundary.ScanRequestBoundary;
 import com.insuscan.boundary.UserIdBoundary;
 import com.insuscan.converter.MealConverter;
@@ -11,7 +12,11 @@ import com.insuscan.enums.MealStatus;
 import com.insuscan.exception.InsuScanNotFoundException;
 import com.insuscan.service.ImageAnalysisService;
 import com.insuscan.service.MealService;
+import com.insuscan.service.NutritionDataService;
 import com.insuscan.service.ScanService;
+import com.insuscan.util.MealIdGenerator;
+import com.insuscan.util.NumberUtils;
+import com.insuscan.util.PortionEstimator;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -22,7 +27,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
-import java.util.UUID;
+import java.util.Map;
 
 @RestController
 @RequestMapping(path = "/vision")
@@ -34,6 +39,9 @@ public class VisionController {
     private final ImageAnalysisService imageAnalysisService;
     private final MealRepository mealRepository;
     private final MealConverter mealConverter;
+    private final MealIdGenerator mealIdGenerator;
+    private final PortionEstimator portionEstimator;
+    private final NutritionDataService nutritionDataService;
 
     @Value("${spring.application.name}")
     private String systemId;
@@ -42,12 +50,18 @@ public class VisionController {
                            MealService mealService,
                            ImageAnalysisService imageAnalysisService,
                            MealRepository mealRepository,
-                           MealConverter mealConverter) {
+                           MealConverter mealConverter,
+                           MealIdGenerator mealIdGenerator,
+                           PortionEstimator portionEstimator,
+                           NutritionDataService nutritionDataService) {
         this.scanService = scanService;
         this.mealService = mealService;
         this.imageAnalysisService = imageAnalysisService;
         this.mealRepository = mealRepository;
         this.mealConverter = mealConverter;
+        this.mealIdGenerator = mealIdGenerator;
+        this.portionEstimator = portionEstimator;
+        this.nutritionDataService = nutritionDataService;
     }
 
     /**
@@ -139,24 +153,82 @@ public class VisionController {
     
     private MealEntity saveBasicMeal(FoodRecognitionResult result, String email, String imageName) {
         MealEntity meal = new MealEntity();
-        String mealUuid = UUID.randomUUID().toString();
-        meal.setId(systemId + "_" + mealUuid);
+        meal.setId(mealIdGenerator.generateMealId(systemId));
         meal.setUserId(systemId + "_" + email);
         meal.setImageUrl("uploaded://" + imageName);
         
-        // Convert vision results to food items
-        List<MealEntity.FoodItem> foodItems = new ArrayList<>();
+        // Use smart portion estimation and nutrition lookup (same as ScanService)
+        List<PortionEstimator.FoodItem> portionItems = new ArrayList<>();
+        float totalVisionPortions = 0f;
+        
         for (FoodRecognitionResult.RecognizedFoodItem detected : result.getDetectedFoods()) {
+            portionItems.add(new PortionEstimator.FoodItem(
+                    detected.getName(),
+                    detected.getConfidence(),
+                    detected.getEstimatedPortionGrams()
+            ));
+            
+            if (detected.getEstimatedPortionGrams() != null && detected.getEstimatedPortionGrams() > 0) {
+                totalVisionPortions += detected.getEstimatedPortionGrams();
+            }
+        }
+        
+        // Determine total weight to distribute
+        Float totalWeightToDistribute = null;
+        if (totalVisionPortions > 0) {
+            totalWeightToDistribute = totalVisionPortions;
+        } else {
+            // Estimate from food types
+            for (PortionEstimator.FoodItem item : portionItems) {
+                float portion = portionEstimator.estimatePortion(item.name, item.confidence, item.visionEstimate);
+                if (totalWeightToDistribute == null) totalWeightToDistribute = 0f;
+                totalWeightToDistribute += portion;
+            }
+        }
+        
+        // Use smart portion distribution
+        Map<String, Float> distributedPortions = portionEstimator.distributePortions(
+                portionItems, totalWeightToDistribute != null ? totalWeightToDistribute : 200f);
+        
+        // Convert vision results to food items with nutrition data
+        List<MealEntity.FoodItem> foodItems = new ArrayList<>();
+        float totalCarbs = 0f;
+        
+        for (FoodRecognitionResult.RecognizedFoodItem detected : result.getDetectedFoods()) {
+            // Get nutrition data
+            NutritionInfo nutrition = nutritionDataService.getNutritionInfo(detected.getName());
+            
             MealEntity.FoodItem item = new MealEntity.FoodItem();
             item.setName(detected.getName());
-            item.setConfidence(detected.getConfidence());
-            item.setQuantity(100f); // Default quantity
-            item.setCarbs(0f); // Will be calculated later
+            item.setConfidence(NumberUtils.roundTo2Decimals(detected.getConfidence()));
+            
+            // Get portion from smart distribution
+            Float itemWeight = distributedPortions.get(detected.getName());
+            if (itemWeight == null) {
+                // Fallback: estimate individually
+                itemWeight = portionEstimator.estimatePortion(
+                        detected.getName(), 
+                        detected.getConfidence(), 
+                        detected.getEstimatedPortionGrams());
+            }
+            
+            item.setQuantity(NumberUtils.roundTo2Decimals(itemWeight));
+            
+            // Calculate carbs if nutrition data found
+            if (nutrition.isFound()) {
+                float itemCarbs = nutrition.calculateCarbs(itemWeight);
+                item.setCarbs(NumberUtils.roundTo2Decimals(itemCarbs));
+                item.setUsdaFdcId(nutrition.getFdcId());
+                totalCarbs += itemCarbs;
+            } else {
+                item.setCarbs(0f);
+            }
+            
             foodItems.add(item);
         }
         
         meal.setFoodItems(foodItems);
-        meal.setTotalCarbs(0f);
+        meal.setTotalCarbs(NumberUtils.roundTo2Decimals(totalCarbs));
         meal.setStatus(MealStatus.PENDING);
         
         return mealRepository.save(meal);
