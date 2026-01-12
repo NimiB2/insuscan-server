@@ -266,16 +266,34 @@
             <img id="imagePreview" class="image-preview" alt="Preview">
             
             <div class="form-group">
-                <label for="userId">User ID (optional):</label>
-                <input type="text" id="userId" placeholder="prototype_user" value="prototype_user">
+                <label for="email">
+                    📧 Your Email <span style="color: #f44336;">*</span>
+                    <small style="display: block; color: #666; font-weight: normal; margin-top: 5px;">
+                        Required - Links meal to your profile for personalized insulin calculation
+                    </small>
+                </label>
+                <input type="email" id="email" placeholder="your.email@example.com" required>
+                <div id="emailHelp" style="margin-top: 8px; font-size: 12px; color: #666;">
+                    <span id="userStatus"></span>
+                    <a href="#" id="createUserLink" style="display: none; color: #667eea; margin-left: 10px;">Create user with this email</a>
+                </div>
             </div>
             
-            <div class="form-group">
-                <label for="email">Email (required for saving):</label>
-                <input type="text" id="email" placeholder="test@example.com" value="test@example.com">
+            <div class="form-group" style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #eee;">
+                <label style="color: #666; font-size: 14px;">Optional: Help with portion estimation</label>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 10px;">
+                    <div>
+                        <label for="estimatedWeight" style="font-size: 12px; font-weight: normal;">Estimated total weight (grams):</label>
+                        <input type="number" id="estimatedWeight" placeholder="300" style="margin-top: 5px;">
+                    </div>
+                    <div>
+                        <label for="portionConfidence" style="font-size: 12px; font-weight: normal;">Confidence (0.0-1.0):</label>
+                        <input type="number" id="portionConfidence" placeholder="0.8" min="0" max="1" step="0.1" style="margin-top: 5px;">
+                    </div>
+                </div>
             </div>
             
-            <button id="analyzeBtn">🔍 Analyze Image & Save to Firebase</button>
+            <button id="analyzeBtn">🔍 Analyze Image & Calculate Insulin Dose</button>
         </div>
         
         <div class="loading" id="loading">
@@ -289,6 +307,26 @@
                 <!-- Results will be displayed here -->
             </div>
         </div>
+        
+        <div style="margin-top: 40px; padding-top: 30px; border-top: 2px solid #eee;">
+            <h3 style="margin-bottom: 20px;">📋 View Saved Meals</h3>
+            <div style="display: flex; gap: 10px; margin-bottom: 20px; align-items: center;">
+                <input type="email" id="savedMealsEmail" placeholder="Enter email to view meals" 
+                       style="flex: 1; padding: 10px; border: 2px solid #ddd; border-radius: 8px; font-size: 14px;"
+                       value="">
+                <input type="number" id="savedMealsLimit" placeholder="Limit" 
+                       value="10" min="1" max="50"
+                       style="width: 80px; padding: 10px; border: 2px solid #ddd; border-radius: 8px; font-size: 14px;">
+                <button id="loadSavedMealsBtn" style="padding: 10px 20px; background: #667eea; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600;">
+                    Load Saved Meals
+                </button>
+            </div>
+            <div id="savedMealsSection" style="display: none;">
+                <div id="savedMealsList" class="result-box">
+                    <!-- Saved meals will be displayed here -->
+                </div>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -300,10 +338,269 @@
         const loading = document.getElementById('loading');
         const resultSection = document.getElementById('resultSection');
         const resultBox = document.getElementById('resultBox');
-        const userIdInput = document.getElementById('userId');
         const emailInput = document.getElementById('email');
+        const estimatedWeightInput = document.getElementById('estimatedWeight');
+        const portionConfidenceInput = document.getElementById('portionConfidence');
+        const userStatus = document.getElementById('userStatus');
+        const createUserLink = document.getElementById('createUserLink');
+        const savedMealsEmail = document.getElementById('savedMealsEmail');
+        const savedMealsLimit = document.getElementById('savedMealsLimit');
+        const loadSavedMealsBtn = document.getElementById('loadSavedMealsBtn');
+        const savedMealsSection = document.getElementById('savedMealsSection');
+        const savedMealsList = document.getElementById('savedMealsList');
         
         let selectedFile = null;
+        
+        // Auto-fill saved meals email from main email input
+        emailInput.addEventListener('change', () => {
+            savedMealsEmail.value = emailInput.value;
+        });
+        
+        // Load saved meals button
+        loadSavedMealsBtn.addEventListener('click', async () => {
+            const email = savedMealsEmail.value.trim();
+            const limit = parseInt(savedMealsLimit.value) || 10;
+            
+            if (!email || !email.includes('@')) {
+                alert('Please enter a valid email address');
+                return;
+            }
+            
+            loadSavedMealsBtn.disabled = true;
+            loadSavedMealsBtn.textContent = 'Loading...';
+            savedMealsList.innerHTML = '<p style="color: #666;">Loading meals...</p>';
+            savedMealsSection.style.display = 'block';
+            
+            try {
+                const url = `http://localhost:9693/vision/saved?email=${encodeURIComponent(email)}&limit=${limit}`;
+                console.log('Loading saved meals from:', url);
+                
+                const response = await fetch(url);
+                if (!response.ok) {
+                    throw new Error(`Failed to load meals: ${response.status}`);
+                }
+                
+                const meals = await response.json();
+                console.log('Loaded meals:', meals);
+                
+                if (meals.length === 0) {
+                    savedMealsList.innerHTML = `
+                        <div style="padding: 20px; text-align: center; color: #666;">
+                            <p style="font-size: 18px; margin-bottom: 10px;">📭 No saved meals found</p>
+                            <p>No meals have been saved for <strong>${email}</strong> yet.</p>
+                            <p style="margin-top: 10px;">Try analyzing an image above to create your first meal!</p>
+                        </div>
+                    `;
+                } else {
+                    savedMealsList.innerHTML = `
+                        <div style="margin-bottom: 15px; padding: 10px; background: #e8f5e9; border-radius: 8px;">
+                            <strong>✓ Found ${meals.length} saved meal${meals.length === 1 ? '' : 's'}</strong>
+                        </div>
+                        ${meals.map(meal => {
+                            const mealId = meal.mealId ? `${meal.mealId.systemId}_${meal.mealId.mealId}` : 'N/A';
+                            const scannedDate = meal.scannedAt ? new Date(meal.scannedAt).toLocaleString() : 'Unknown date';
+                            const foodItems = meal.foodItems || [];
+                            
+                            return `
+                                <div style="background: white; padding: 20px; margin: 15px 0; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                                    <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 15px;">
+                                        <div>
+                                            <strong style="color: #333; font-size: 16px;">Meal ID:</strong>
+                                            <span style="font-family: monospace; color: #667eea; margin-left: 5px;">${mealId}</span>
+                                        </div>
+                                        <div style="font-size: 12px; color: #666;">${scannedDate}</div>
+                                    </div>
+                                    
+                                    ${foodItems.length > 0 ? `
+                                        <div style="margin: 15px 0;">
+                                            <strong style="color: #333;">Food Items (${foodItems.length}):</strong>
+                                            ${foodItems.map(food => `
+                                                <div style="padding: 10px; margin: 8px 0; background: #f8f9ff; border-radius: 6px; border-left: 3px solid #667eea;">
+                                                    <div style="font-weight: 600; color: #333;">${food.name || 'Unknown'}</div>
+                                                    <div style="font-size: 12px; color: #666; margin-top: 5px;">
+                                                        ${food.quantity ? `Quantity: ${food.quantity.toFixed(2)}g` : ''}
+                                                        ${food.quantity && food.carbs ? ' • ' : ''}
+                                                        ${food.carbs !== null && food.carbs !== undefined ? `Carbs: ${food.carbs.toFixed(2)}g` : ''}
+                                                        ${food.confidence ? ` • Confidence: ${(food.confidence * 100).toFixed(1)}%` : ''}
+                                                    </div>
+                                                </div>
+                                            `).join('')}
+                                        </div>
+                                    ` : '<p style="color: #666;">No food items</p>'}
+                                    
+                                    ${meal.totalCarbs !== null && meal.totalCarbs !== undefined ? `
+                                        <div style="padding: 12px; background: #e8f5e9; border-radius: 8px; margin: 10px 0;">
+                                            <strong>Total Carbs:</strong> ${meal.totalCarbs.toFixed(2)}g
+                                        </div>
+                                    ` : ''}
+                                    
+                                    ${meal.recommendedDose !== null && meal.recommendedDose !== undefined ? `
+                                        <div style="padding: 12px; background: #fff3e0; border-radius: 8px; margin: 10px 0; border-left: 4px solid #ff9800;">
+                                            <strong>💉 Recommended Insulin Dose:</strong> ${meal.recommendedDose.toFixed(2)} units
+                                        </div>
+                                    ` : ''}
+                                    
+                                    ${meal.userId && meal.userId.email ? `
+                                        <div style="font-size: 12px; color: #666; margin-top: 10px;">
+                                            Linked to: <strong>${meal.userId.email}</strong>
+                                        </div>
+                                    ` : ''}
+                                </div>
+                            `;
+                        }).join('')}
+                    `;
+                }
+            } catch (error) {
+                console.error('Error loading saved meals:', error);
+                savedMealsList.innerHTML = `
+                    <div style="padding: 20px; background: #ffebee; border-radius: 8px; color: #c62828;">
+                        <strong>Error loading meals:</strong> ${error.message}
+                    </div>
+                `;
+            } finally {
+                loadSavedMealsBtn.disabled = false;
+                loadSavedMealsBtn.textContent = 'Load Saved Meals';
+            }
+        });
+        
+        // Check if user exists when email changes
+        emailInput.addEventListener('blur', checkUserExists);
+        
+        async function checkUserExists() {
+            const email = emailInput.value.trim();
+            if (!email || !email.includes('@')) {
+                userStatus.innerHTML = '';
+                createUserLink.style.display = 'none';
+                return;
+            }
+            
+            userStatus.innerHTML = 'Checking...';
+            userStatus.style.color = '#666';
+            createUserLink.style.display = 'none';
+            
+            try {
+                // Use query parameter endpoint (more reliable for emails with @ symbol)
+                const encodedEmail = encodeURIComponent(email);
+                const url = `http://localhost:9693/users/by-email?systemId=insuscan&email=${encodedEmail}`;
+                console.log('Checking user at:', url);
+                console.log('Original email:', email);
+                console.log('Encoded email:', encodedEmail);
+                
+                const response = await fetch(url, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json'
+                    }
+                });
+                console.log('Response status:', response.status);
+                console.log('Response ok:', response.ok);
+                
+                if (response.ok) {
+                    const userData = await response.json();
+                    console.log('User data:', userData);
+                    console.log('User data structure:', {
+                        hasUserId: !!userData.userId,
+                        userIdEmail: userData.userId?.email,
+                        userIdSystemId: userData.userId?.systemId,
+                        hasInsulinRatio: userData.insulinCarbRatio != null
+                    });
+                    
+                    // UserBoundary has userId.email, not top-level email
+                    const userEmail = userData.userId?.email || userData.email;
+                    const userId = userData.userId?.systemId && userData.userId?.email 
+                        ? userData.userId.systemId + '_' + userData.userId.email 
+                        : userData.id;
+                    
+                    if (userData && (userEmail || userId)) {
+                        const hasProfile = userData.insulinCarbRatio != null;
+                        userStatus.innerHTML = hasProfile 
+                            ? '✓ User found - personalized insulin calculations will be used'
+                            : '✓ User found - but profile incomplete (no insulin ratio set)';
+                        userStatus.style.color = '#4caf50';
+                        createUserLink.style.display = 'none';
+                    } else {
+                        console.warn('User data structure unexpected:', userData);
+                        userStatus.innerHTML = '⚠ User not found (unexpected response format)';
+                        userStatus.style.color = '#ff9800';
+                        createUserLink.style.display = 'inline';
+                    }
+                } else if (response.status === 404) {
+                    const errorText = await response.text();
+                    console.error('404 Error response:', errorText);
+                    userStatus.innerHTML = '⚠ User not found - click to create<br><small style="color: #999;">(Check server logs for details)</small>';
+                    userStatus.style.color = '#ff9800';
+                    createUserLink.style.display = 'inline';
+                } else {
+                    const errorText = await response.text();
+                    console.error('Error response:', errorText);
+                    userStatus.innerHTML = '⚠ Error checking user (status: ' + response.status + ')<br><small style="color: #999;">' + errorText.substring(0, 100) + '</small>';
+                    userStatus.style.color = '#f44336';
+                    createUserLink.style.display = 'inline';
+                }
+            } catch (error) {
+                console.error('Error checking user:', error);
+                userStatus.innerHTML = '⚠ Error: ' + error.message + ' (check console)';
+                userStatus.style.color = '#f44336';
+                createUserLink.style.display = 'inline';
+            }
+        }
+        
+        // Quick user creation
+        createUserLink.addEventListener('click', async (e) => {
+            e.preventDefault();
+            const email = emailInput.value.trim();
+            if (!email) return;
+            
+            userStatus.innerHTML = 'Creating user...';
+            userStatus.style.color = '#666';
+            createUserLink.style.display = 'none';
+            
+            try {
+                const url = `http://localhost:9693/users/quick?email=${encodeURIComponent(email)}&insulinRatio=1:10`;
+                console.log('Creating user at:', url);
+                
+                const response = await fetch(url, {
+                    method: 'POST'
+                });
+                
+                console.log('Create user response status:', response.status);
+                
+                if (response.ok) {
+                    const userData = await response.json();
+                    console.log('User created:', userData);
+                    userStatus.innerHTML = '✓ User created! You can now scan meals with personalized insulin calculation.';
+                    userStatus.style.color = '#4caf50';
+                    createUserLink.style.display = 'none';
+                } else {
+                    const errorText = await response.text();
+                    console.error('Create user error:', errorText);
+                    let errorMessage = 'Failed to create user';
+                    try {
+                        const errorJson = JSON.parse(errorText);
+                        errorMessage = errorJson.message || errorJson.error || errorMessage;
+                    } catch {
+                        errorMessage = errorText || errorMessage;
+                    }
+                    
+                    if (response.status === 400 && (errorMessage.includes('already exists') || errorMessage.includes('User already exists'))) {
+                        // User already exists, just refresh status
+                        userStatus.innerHTML = 'User already exists, checking...';
+                        await checkUserExists();
+                    } else {
+                        userStatus.innerHTML = '✗ ' + errorMessage;
+                        userStatus.style.color = '#f44336';
+                        createUserLink.style.display = 'inline';
+                        alert('Failed to create user: ' + errorMessage);
+                    }
+                }
+            } catch (error) {
+                console.error('Error creating user:', error);
+                userStatus.innerHTML = '✗ Error: ' + error.message + ' (check console)';
+                userStatus.style.color = '#f44336';
+                createUserLink.style.display = 'inline';
+                alert('Error creating user: ' + error.message + '\n\nCheck browser console for details.');
+            }
+        });
         
         // File input change
         fileInput.addEventListener('change', (e) => {
@@ -353,6 +650,13 @@
                 return;
             }
             
+            const email = emailInput.value.trim();
+            if (!email || !email.includes('@')) {
+                alert('Please enter a valid email address. This is required to link the meal to your profile.');
+                emailInput.focus();
+                return;
+            }
+            
             // Show loading, hide results
             loading.classList.add('active');
             resultSection.classList.remove('active');
@@ -362,23 +666,44 @@
                 const formData = new FormData();
                 formData.append('file', selectedFile);
                 
-                const userId = userIdInput.value || 'prototype_user';
-                const email = emailInput.value || 'test@example.com';
-                const url = `http://localhost:9693/vision/analyze?userId=${encodeURIComponent(userId)}&email=${encodeURIComponent(email)}`;
+                // Build URL with parameters
+                let url = `http://localhost:9693/vision/analyze?email=${encodeURIComponent(email)}`;
+                
+                // Add optional parameters if provided
+                if (estimatedWeightInput.value) {
+                    url += `&estimatedWeightGrams=${encodeURIComponent(estimatedWeightInput.value)}`;
+                }
+                if (portionConfidenceInput.value) {
+                    url += `&portionConfidence=${encodeURIComponent(portionConfidenceInput.value)}`;
+                }
+                
+                console.log('Sending request to:', url);
+                console.log('Email being used:', email);
                 
                 const response = await fetch(url, {
                     method: 'POST',
                     body: formData
                 });
                 
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error('Server error:', response.status, errorText);
+                    throw new Error(`Server error: ${response.status} - ${errorText}`);
+                }
+                
                 const data = await response.json();
+                console.log('Response data:', data);
                 
                 // Hide loading, show results
                 loading.classList.remove('active');
                 resultSection.classList.add('active');
                 analyzeBtn.disabled = false;
                 
-                displayResults(data);
+                // Pass email to displayResults
+                displayResults(data, email);
+                
+                // After successful scan, refresh user status check
+                setTimeout(() => checkUserExists(), 1000);
                 
             } catch (error) {
                 loading.classList.remove('active');
@@ -389,7 +714,10 @@
             }
         });
         
-        function displayResults(data) {
+        function displayResults(data, emailUsed) {
+            // Get email from response or use the one passed in
+            const userEmail = (data.userId && data.userId.email) ? data.userId.email : (emailUsed || emailInput.value.trim());
+            
             // Handle MealBoundary response (new format)
             if (data.mealId || data.foodItems !== undefined) {
                 const foodItems = data.foodItems || [];
@@ -401,6 +729,11 @@
                     <div style="margin-top: 15px;">
                         <strong>Meal ID:</strong> <span style="font-family: monospace; color: #666;">${mealId}</span>
                     </div>
+                    ${userEmail ? `
+                        <div style="margin-top: 10px; padding: 10px; background: #e3f2fd; border-radius: 8px; font-size: 12px;">
+                            <strong>📧 Linked to:</strong> ${userEmail}
+                        </div>
+                    ` : ''}
                     <h4 style="margin-top: 20px;">Detected Foods (${foodItems.length}):</h4>
                     ${foodItems.length > 0 
                         ? foodItems.map(food => `
@@ -408,7 +741,8 @@
                                 <span class="food-name">${food.name || 'Unknown'}</span>
                                 <span class="food-confidence">
                                     ${food.confidence ? (food.confidence * 100).toFixed(1) + '%' : 'N/A'} confidence
-                                    ${food.carbs !== null && food.carbs !== undefined ? ` • ${food.carbs.toFixed(1)}g carbs` : ''}
+                                    ${food.quantity ? ` • ${food.quantity.toFixed(2)}g` : ''}
+                                    ${food.carbs !== null && food.carbs !== undefined ? ` • ${food.carbs.toFixed(2)}g carbs` : ''}
                                 </span>
                             </div>
                         `).join('')
@@ -416,11 +750,21 @@
                     }
                     ${data.totalCarbs !== null && data.totalCarbs !== undefined ? `
                         <div style="margin-top: 15px; padding: 15px; background: #e8f5e9; border-radius: 8px;">
-                            <strong>Total Carbs:</strong> ${data.totalCarbs.toFixed(1)}g
+                            <strong>Total Carbs:</strong> ${data.totalCarbs.toFixed(2)}g
                         </div>
                     ` : ''}
-                    <div style="margin-top: 15px; padding: 10px; background: #fff3e0; border-radius: 8px; font-size: 12px; color: #666;">
-                        ✓ Meal saved to Firebase! View it at: <a href="/view-results.html" style="color: #667eea;">View Results</a>
+                    ${data.recommendedDose !== null && data.recommendedDose !== undefined ? `
+                        <div style="margin-top: 15px; padding: 15px; background: #fff3e0; border-radius: 8px; border-left: 4px solid #ff9800;">
+                            <strong>💉 Recommended Insulin Dose:</strong> ${data.recommendedDose.toFixed(2)} units
+                            ${data.userId && data.userId.email ? `<br><small style="color: #666;">Calculated using ${data.userId.email}'s profile</small>` : ''}
+                        </div>
+                    ` : userEmail ? `
+                        <div style="margin-top: 15px; padding: 15px; background: #fff3e0; border-radius: 8px;">
+                            <small style="color: #666;">ℹ️ No insulin dose calculated. User "${userEmail}" may not exist or profile is incomplete. <a href="#" onclick="checkUserExists(); return false;" style="color: #667eea;">Check user</a></small>
+                        </div>
+                    ` : ''}
+                    <div style="margin-top: 15px; padding: 10px; background: #e8f5e9; border-radius: 8px; font-size: 12px; color: #666;">
+                        ✓ Meal saved to Firebase! ${userEmail ? `Linked to: ${userEmail}` : 'Meal saved successfully'}
                     </div>
                     <details style="margin-top: 15px;">
                         <summary style="cursor: pointer; color: #667eea; font-weight: 600;">View Raw JSON</summary>
@@ -434,6 +778,11 @@
                     resultBox.className = 'result-box success';
                     resultBox.innerHTML = `
                         <span class="status-badge status-success">✓ Success</span>
+                        ${userEmail ? `
+                            <div style="margin-top: 10px; padding: 10px; background: #e3f2fd; border-radius: 8px; font-size: 12px;">
+                                <strong>📧 Linked to:</strong> ${userEmail}
+                            </div>
+                        ` : ''}
                         <h4>Detected Foods (${data.detectedFoods.length}):</h4>
                         ${data.detectedFoods.length > 0 
                             ? data.detectedFoods.map(food => `

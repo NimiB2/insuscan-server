@@ -11,6 +11,9 @@ java {
     toolchain {
         languageVersion = JavaLanguageVersion.of(21)
     }
+    compileJava {
+        options.compilerArgs += ['-parameters']
+    }
 }
 
 repositories {

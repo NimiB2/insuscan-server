@@ -1,5 +1,7 @@
 package com.insuscan.service;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -22,6 +24,8 @@ import java.util.stream.Collectors;
 @Service
 public class UserServiceImpl implements UserService {
 
+    private static final Logger log = LoggerFactory.getLogger(UserServiceImpl.class);
+    
     private final UserRepository userRepository;
     private final UserConverter userConverter;
 
@@ -88,15 +92,27 @@ public class UserServiceImpl implements UserService {
             existing.setRole(update.getRole());
         }
 
-        // Update medical profile if provided
+        // Update medical profile if provided (with validation)
         if (update.getInsulinCarbRatio() != null) {
+            if (!InputValidators.isValidInsulinRatio(update.getInsulinCarbRatio())) {
+                throw new InsuScanInvalidInputException(
+                    "Invalid insulin:carb ratio format. Use format like '1:10'");
+            }
             Float ratio = InputValidators.parseInsulinRatio(update.getInsulinCarbRatio());
             existing.setInsulinCarbRatio(ratio);
         }
         if (update.getCorrectionFactor() != null) {
+            if (!InputValidators.isValidCorrectionFactor(update.getCorrectionFactor())) {
+                throw new InsuScanInvalidInputException(
+                    "Invalid correction factor. Must be between 1 and 200 mg/dL per unit");
+            }
             existing.setCorrectionFactor(update.getCorrectionFactor());
         }
         if (update.getTargetGlucose() != null) {
+            if (!InputValidators.isValidTargetGlucose(update.getTargetGlucose())) {
+                throw new InsuScanInvalidInputException(
+                    "Invalid target glucose. Must be between 60 and 200 mg/dL");
+            }
             existing.setTargetGlucose(update.getTargetGlucose());
         }
 
@@ -138,8 +154,16 @@ public class UserServiceImpl implements UserService {
         InputValidators.validateEmail(email);
 
         String id = systemId + "_" + email;
-        return userRepository.findById(id)
-            .map(userConverter::toBoundary);
+        log.debug("Looking up user - systemId: {}, email: {}, constructed ID: {}", systemId, email, id);
+        
+        Optional<UserEntity> user = userRepository.findById(id);
+        if (user.isPresent()) {
+            log.debug("User found: {}", id);
+        } else {
+            log.warn("User not found with ID: {}", id);
+        }
+        
+        return user.map(userConverter::toBoundary);
     }
 
     @Override
@@ -162,6 +186,20 @@ public class UserServiceImpl implements UserService {
         userRepository.deleteById(targetId);
     }
 
+    @Override
+    public boolean hasCompleteMedicalProfile(String systemId, String email) {
+        String id = systemId + "_" + email;
+        UserEntity user = userRepository.findById(id).orElse(null);
+        
+        if (user == null) {
+            return false;
+        }
+        
+        // Medical profile is complete if insulin:carb ratio is set
+        // (correction factor and target glucose have defaults, so not strictly required)
+        return user.getInsulinCarbRatio() != null;
+    }
+
     // Validate new user registration data
     private void validateNewUser(NewUserBoundary newUser) {
         if (newUser == null) {
@@ -179,6 +217,19 @@ public class UserServiceImpl implements UserService {
                 && !InputValidators.isValidInsulinRatio(newUser.getInsulinCarbRatio())) {
             throw new InsuScanInvalidInputException(
                 "Invalid insulin:carb ratio format. Use format like '1:10'");
+        }
+
+        // Validate medical profile if provided
+        if (newUser.getCorrectionFactor() != null 
+                && !InputValidators.isValidCorrectionFactor(newUser.getCorrectionFactor())) {
+            throw new InsuScanInvalidInputException(
+                "Invalid correction factor. Must be between 1 and 200 mg/dL per unit");
+        }
+
+        if (newUser.getTargetGlucose() != null 
+                && !InputValidators.isValidTargetGlucose(newUser.getTargetGlucose())) {
+            throw new InsuScanInvalidInputException(
+                "Invalid target glucose. Must be between 60 and 200 mg/dL");
         }
     }
 

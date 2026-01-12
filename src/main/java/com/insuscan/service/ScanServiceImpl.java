@@ -13,6 +13,7 @@ import com.insuscan.util.InputValidators;
 import com.insuscan.util.MealIdGenerator;
 import com.insuscan.util.PortionEstimator;
 import com.insuscan.util.NumberUtils;
+import com.insuscan.util.InsulinCalculator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -162,6 +163,27 @@ public class ScanServiceImpl implements ScanService {
 
         log.info("Total carbs: {}g", totalCarbs);
 
+        // Step 4: Calculate insulin dose if user exists and has profile
+        Float recommendedDose = null;
+        if (user != null && totalCarbs > 0) {
+            try {
+                float dose = InsulinCalculator.calculateDoseForUser(totalCarbs, user);
+                recommendedDose = InsulinCalculator.roundDose(dose);
+                
+                // Check for warnings
+                String warning = InsulinCalculator.getDoseWarning(dose);
+                if (warning != null) {
+                    log.warn("Insulin dose warning for user {}: {}", userId.getEmail(), warning);
+                }
+                
+                log.info("Calculated recommended insulin dose: {} units for {}g carbs", 
+                        recommendedDose, totalCarbs);
+            } catch (Exception e) {
+                log.warn("Could not calculate insulin dose: {}", e.getMessage());
+                // Continue without dose - not critical for meal creation
+            }
+        }
+
         // Step 3: Create meal using existing MealEntity structure
         MealEntity meal = new MealEntity();
         meal.setId(mealIdGenerator.generateMealId(systemId));
@@ -169,6 +191,7 @@ public class ScanServiceImpl implements ScanService {
         meal.setImageUrl(request.getImageUrl());
         meal.setFoodItems(foodItems);
         meal.setTotalCarbs(NumberUtils.roundTo2Decimals(totalCarbs));
+        meal.setRecommendedDose(recommendedDose);
         meal.setStatus(MealStatus.PENDING);
         
         // Set portion analysis if provided

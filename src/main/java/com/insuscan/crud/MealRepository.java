@@ -95,6 +95,7 @@ public class MealRepository {
     // Find recent meals by user (ordered by scanned date desc)
     public List<MealEntity> findRecentByUserId(String userId, int limit) {
         try {
+            // Try query with orderBy first (requires composite index)
             Query query = firestore.collection(COLLECTION_NAME)
                     .whereEqualTo("userId", userId)
                     .orderBy("scannedAt", Query.Direction.DESCENDING)
@@ -102,8 +103,37 @@ public class MealRepository {
             
             return executeQuery(query);
         } catch (Exception e) {
-            log.error("Error finding recent meals by user: {}", userId, e);
-            throw new RuntimeException("Failed to find recent meals", e);
+            // If index error, fall back to query without orderBy and sort in memory
+            if (e.getMessage() != null && e.getMessage().contains("index")) {
+                log.warn("Composite index not found, using fallback query (slower). Create index at: {}", 
+                        e.getMessage().contains("create it here") ? "Firebase Console" : "Firebase Console");
+                
+                try {
+                    // Fallback: query without orderBy, then sort in memory
+                    Query fallbackQuery = firestore.collection(COLLECTION_NAME)
+                            .whereEqualTo("userId", userId)
+                            .limit(limit * 2); // Get more to account for no ordering
+                    
+                    List<MealEntity> meals = executeQuery(fallbackQuery);
+                    
+                    // Sort by scannedAt descending in memory
+                    meals.sort((a, b) -> {
+                        if (a.getScannedAt() == null && b.getScannedAt() == null) return 0;
+                        if (a.getScannedAt() == null) return 1;
+                        if (b.getScannedAt() == null) return -1;
+                        return b.getScannedAt().compareTo(a.getScannedAt());
+                    });
+                    
+                    // Return only the requested limit
+                    return meals.stream().limit(limit).collect(java.util.stream.Collectors.toList());
+                } catch (Exception fallbackError) {
+                    log.error("Fallback query also failed for user: {}", userId, fallbackError);
+                    throw new RuntimeException("Failed to find recent meals", fallbackError);
+                }
+            } else {
+                log.error("Error finding recent meals by user: {}", userId, e);
+                throw new RuntimeException("Failed to find recent meals", e);
+            }
         }
     }
 

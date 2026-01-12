@@ -29,6 +29,9 @@ public interface UserService {
 
     // Check if user exists
     boolean userExists(String systemId, String email);
+    
+    // Check if user has complete medical profile (for insulin calculation)
+    boolean hasCompleteMedicalProfile(String systemId, String email);
 
     // Delete single user (admin only)
     void deleteUser(String adminSystemId, String adminEmail, String targetSystemId, String targetEmail);

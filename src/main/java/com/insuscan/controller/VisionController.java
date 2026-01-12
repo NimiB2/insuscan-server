@@ -17,6 +17,11 @@ import com.insuscan.service.ScanService;
 import com.insuscan.util.MealIdGenerator;
 import com.insuscan.util.NumberUtils;
 import com.insuscan.util.PortionEstimator;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -32,8 +37,11 @@ import java.util.Map;
 @RestController
 @RequestMapping(path = "/vision")
 @CrossOrigin(origins = "*")
+@Tag(name = "Vision Analysis", description = "Image analysis and meal scanning endpoints")
 public class VisionController {
 
+    private static final Logger log = LoggerFactory.getLogger(VisionController.class);
+    
     private final ScanService scanService;
     private final MealService mealService;
     private final ImageAnalysisService imageAnalysisService;
@@ -70,16 +78,26 @@ public class VisionController {
      * - Output: Complete MealBoundary with vision analysis, nutrition, and saves to Firebase
      * - Tries full ScanService workflow first, falls back to simple vision analysis if user doesn't exist
      */
+    @Operation(summary = "Analyze meal image", description = "Uploads an image, analyzes food items, calculates nutrition and insulin dose, then saves to Firebase")
     @PostMapping(
         path = "/analyze",
         consumes = MediaType.MULTIPART_FORM_DATA_VALUE,
         produces = MediaType.APPLICATION_JSON_VALUE
     )
     public ResponseEntity<?> analyzeImage(
+            @Parameter(description = "Image file to analyze (JPEG, PNG, etc.)", required = true)
             @RequestPart("file") MultipartFile file,
+            
+            @Parameter(description = "User ID (legacy parameter, use email instead)", example = "prototype_user")
             @RequestParam(value = "userId", required = false, defaultValue = "prototype_user") String userId,
+            
+            @Parameter(description = "User email for personalized calculations (optional, defaults to test@example.com)", example = "test@example.com")
             @RequestParam(value = "email", required = false, defaultValue = "test@example.com") String email,
+            
+            @Parameter(description = "User's estimated total meal weight in grams (optional, helps with portion estimation)", example = "300")
             @RequestParam(value = "estimatedWeightGrams", required = false) Float estimatedWeightGrams,
+            
+            @Parameter(description = "User's confidence in weight estimate (0.0 to 1.0, optional)", example = "0.8")
             @RequestParam(value = "portionConfidence", required = false) Float portionConfidence
     ) throws IOException {
         
@@ -102,22 +120,26 @@ public class VisionController {
         // Try full ScanService workflow first (requires user to exist)
         try {
             MealBoundary meal = scanService.scanMealWithPortion(request, estimatedWeightGrams, portionConfidence);
+            log.info("Meal scanned successfully for user: {}", email);
             return ResponseEntity.ok(meal);
         } catch (InsuScanNotFoundException e) {
             // User doesn't exist - fall back to simple vision analysis and save basic meal
+            log.warn("User not found: {}, saving meal without user profile", email);
             FoodRecognitionResult visionResult = imageAnalysisService.analyzeImage(base64);
             
             if (!visionResult.isSuccess()) {
                 return ResponseEntity.ok(visionResult);
             }
             
-            // Save basic meal to database
+            // Save basic meal to database (linked to email, even if user doesn't exist yet)
             MealEntity meal = saveBasicMeal(visionResult, email, file.getOriginalFilename());
+            log.info("Saved basic meal for email: {} (mealId: {})", email, meal.getId());
             
             // Convert to MealBoundary for response
             MealBoundary mealBoundary = mealConverter.toBoundary(meal);
             return ResponseEntity.ok(mealBoundary);
         } catch (Exception e) {
+            log.error("Error during meal scan: ", e);
             // If anything else fails, just return vision result
             FoodRecognitionResult visionResult = imageAnalysisService.analyzeImage(base64);
             return ResponseEntity.ok(visionResult);
@@ -129,10 +151,27 @@ public class VisionController {
      */
     @GetMapping(path = "/saved", produces = MediaType.APPLICATION_JSON_VALUE)
     public List<MealBoundary> getSavedAnalyses(
-            @RequestParam(value = "userId", required = false, defaultValue = "prototype_user") String userId,
+            @RequestParam(value = "email", required = false) String email,
+            @RequestParam(value = "userId", required = false) String userId,
             @RequestParam(value = "limit", required = false, defaultValue = "10") int limit
     ) {
-        return mealService.getRecentMeals(systemId, userId, limit);
+        // Use email if provided, otherwise fall back to userId (for backward compatibility)
+        String userEmail = email;
+        
+        if (userEmail == null || userEmail.isEmpty()) {
+            // Legacy support: if userId is provided and looks like an email, use it
+            if (userId != null && userId.contains("@")) {
+                userEmail = userId;
+            } else if (userId != null && !userId.isEmpty()) {
+                // Legacy: userId without @ - construct email for backward compatibility
+                userEmail = userId + "@example.com";
+            } else {
+                // Default fallback
+                userEmail = "test@example.com";
+            }
+        }
+        
+        return mealService.getRecentMeals(systemId, userEmail, limit);
     }
 
     /**

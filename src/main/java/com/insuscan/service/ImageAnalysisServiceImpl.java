@@ -16,6 +16,7 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
 
     private final WebClient webClient;
     private final ObjectMapper objectMapper;
+    private final VisionCacheService visionCache;
 
     @Value("${openai.api.key:}")
     private String openAiApiKey;
@@ -23,17 +24,27 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
     @Value("${openai.model:gpt-4o-mini}")
     private String openAiModel;
 
-    public ImageAnalysisServiceImpl(WebClient.Builder webClientBuilder, ObjectMapper objectMapper) {
+    public ImageAnalysisServiceImpl(WebClient.Builder webClientBuilder, 
+                                   ObjectMapper objectMapper,
+                                   VisionCacheService visionCache) {
         this.webClient = webClientBuilder
                 .baseUrl("https://api.openai.com/v1")
                 .build();
         this.objectMapper = objectMapper;
+        this.visionCache = visionCache;
     }
 
     @Override
     public FoodRecognitionResult analyzeImage(String base64Image) {
         if (!isServiceAvailable()) {
             return FoodRecognitionResult.failure("AI provider is not configured");
+        }
+
+        // Check cache first
+        String imageHash = visionCache.hashImage(base64Image);
+        FoodRecognitionResult cached = visionCache.getCached(imageHash);
+        if (cached != null) {
+            return cached;
         }
 
         try {
@@ -71,7 +82,12 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
             }
 
             List<FoodRecognitionResult.RecognizedFoodItem> foods = parseFoodsFromOpenAi(content);
-            return FoodRecognitionResult.success(foods);
+            FoodRecognitionResult result = FoodRecognitionResult.success(foods);
+            
+            // Cache the result for consistency (same image = same result)
+            visionCache.putCache(imageHash, result);
+            
+            return result;
 
         } catch (RuntimeException e) {
             // Handle rate limiting and API errors
