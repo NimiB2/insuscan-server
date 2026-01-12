@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>InsuScan Vision API Tester</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            padding: 40px;
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+        
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+        }
+        
+        .upload-area {
+            border: 3px dashed #667eea;
+            border-radius: 15px;
+            padding: 40px;
+            text-align: center;
+            background: #f8f9ff;
+            margin-bottom: 20px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .upload-area:hover {
+            border-color: #764ba2;
+            background: #f0f2ff;
+        }
+        
+        .upload-area.dragover {
+            border-color: #764ba2;
+            background: #e8ebff;
+        }
+        
+        .upload-icon {
+            font-size: 48px;
+            margin-bottom: 10px;
+        }
+        
+        input[type="file"] {
+            display: none;
+        }
+        
+        .file-label {
+            display: inline-block;
+            padding: 12px 24px;
+            background: #667eea;
+            color: white;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: background 0.3s;
+        }
+        
+        .file-label:hover {
+            background: #764ba2;
+        }
+        
+        .preview-section {
+            margin-top: 20px;
+            display: none;
+        }
+        
+        .preview-section.active {
+            display: block;
+        }
+        
+        .image-preview {
+            max-width: 100%;
+            max-height: 300px;
+            border-radius: 10px;
+            margin: 20px 0;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 600;
+        }
+        
+        input[type="text"] {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+        
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        button {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+        }
+        
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .loading {
+            display: none;
+            text-align: center;
+            margin: 20px 0;
+        }
+        
+        .loading.active {
+            display: block;
+        }
+        
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .result-section {
+            margin-top: 30px;
+            display: none;
+        }
+        
+        .result-section.active {
+            display: block;
+        }
+        
+        .result-box {
+            background: #f8f9ff;
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 15px;
+        }
+        
+        .success {
+            border-left: 4px solid #4caf50;
+        }
+        
+        .error {
+            border-left: 4px solid #f44336;
+        }
+        
+        .food-item {
+            background: white;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        
+        .food-name {
+            font-weight: 600;
+            color: #333;
+        }
+        
+        .food-confidence {
+            color: #667eea;
+            font-weight: 600;
+        }
+        
+        .status-badge {
+            display: inline-block;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-bottom: 15px;
+        }
+        
+        .status-success {
+            background: #4caf50;
+            color: white;
+        }
+        
+        .status-error {
+            background: #f44336;
+            color: white;
+        }
+        
+        pre {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 15px;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-size: 12px;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🍽️ InsuScan Vision API Tester</h1>
+        <p class="subtitle">Upload a food image to test OpenAI Vision integration</p>
+        
+        <div class="upload-area" id="uploadArea">
+            <div class="upload-icon">📸</div>
+            <p style="margin-bottom: 15px; color: #666;">Drag & drop an image here, or</p>
+            <label for="fileInput" class="file-label">Choose Image File</label>
+            <input type="file" id="fileInput" accept="image/*">
+        </div>
+        
+        <div class="preview-section" id="previewSection">
+            <h3>Selected Image:</h3>
+            <img id="imagePreview" class="image-preview" alt="Preview">
+            
+            <div class="form-group">
+                <label for="userId">User ID (optional):</label>
+                <input type="text" id="userId" placeholder="prototype_user" value="prototype_user">
+            </div>
+            
+            <div class="form-group">
+                <label for="email">Email (required for saving):</label>
+                <input type="text" id="email" placeholder="test@example.com" value="test@example.com">
+            </div>
+            
+            <button id="analyzeBtn">🔍 Analyze Image & Save to Firebase</button>
+        </div>
+        
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p style="margin-top: 10px; color: #666;">Analyzing image with OpenAI Vision...</p>
+        </div>
+        
+        <div class="result-section" id="resultSection">
+            <h3>Analysis Results:</h3>
+            <div class="result-box" id="resultBox">
+                <!-- Results will be displayed here -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const previewSection = document.getElementById('previewSection');
+        const imagePreview = document.getElementById('imagePreview');
+        const analyzeBtn = document.getElementById('analyzeBtn');
+        const loading = document.getElementById('loading');
+        const resultSection = document.getElementById('resultSection');
+        const resultBox = document.getElementById('resultBox');
+        const userIdInput = document.getElementById('userId');
+        const emailInput = document.getElementById('email');
+        
+        let selectedFile = null;
+        
+        // File input change
+        fileInput.addEventListener('change', (e) => {
+            handleFile(e.target.files[0]);
+        });
+        
+        // Drag and drop
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+        
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+        
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            handleFile(e.dataTransfer.files[0]);
+        });
+        
+        uploadArea.addEventListener('click', () => {
+            fileInput.click();
+        });
+        
+        function handleFile(file) {
+            if (!file || !file.type.startsWith('image/')) {
+                alert('Please select an image file');
+                return;
+            }
+            
+            selectedFile = file;
+            
+            // Show preview
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                imagePreview.src = e.target.result;
+                previewSection.classList.add('active');
+            };
+            reader.readAsDataURL(file);
+        }
+        
+        analyzeBtn.addEventListener('click', async () => {
+            if (!selectedFile) {
+                alert('Please select an image first');
+                return;
+            }
+            
+            // Show loading, hide results
+            loading.classList.add('active');
+            resultSection.classList.remove('active');
+            analyzeBtn.disabled = true;
+            
+            try {
+                const formData = new FormData();
+                formData.append('file', selectedFile);
+                
+                const userId = userIdInput.value || 'prototype_user';
+                const email = emailInput.value || 'test@example.com';
+                const url = `http://localhost:9693/vision/analyze?userId=${encodeURIComponent(userId)}&email=${encodeURIComponent(email)}`;
+                
+                const response = await fetch(url, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                // Hide loading, show results
+                loading.classList.remove('active');
+                resultSection.classList.add('active');
+                analyzeBtn.disabled = false;
+                
+                displayResults(data);
+                
+            } catch (error) {
+                loading.classList.remove('active');
+                resultSection.classList.add('active');
+                analyzeBtn.disabled = false;
+                
+                displayError(error.message);
+            }
+        });
+        
+        function displayResults(data) {
+            // Handle MealBoundary response (new format)
+            if (data.mealId || data.foodItems !== undefined) {
+                const foodItems = data.foodItems || [];
+                const mealId = data.mealId ? `${data.mealId.systemId}_${data.mealId.mealId}` : 'N/A';
+                
+                resultBox.className = 'result-box success';
+                resultBox.innerHTML = `
+                    <span class="status-badge status-success">✓ Success - Saved to Firebase!</span>
+                    <div style="margin-top: 15px;">
+                        <strong>Meal ID:</strong> <span style="font-family: monospace; color: #666;">${mealId}</span>
+                    </div>
+                    <h4 style="margin-top: 20px;">Detected Foods (${foodItems.length}):</h4>
+                    ${foodItems.length > 0 
+                        ? foodItems.map(food => `
+                            <div class="food-item">
+                                <span class="food-name">${food.name || 'Unknown'}</span>
+                                <span class="food-confidence">
+                                    ${food.confidence ? (food.confidence * 100).toFixed(1) + '%' : 'N/A'} confidence
+                                    ${food.carbs !== null && food.carbs !== undefined ? ` • ${food.carbs.toFixed(1)}g carbs` : ''}
+                                </span>
+                            </div>
+                        `).join('')
+                        : '<p style="color: #666;">No foods detected</p>'
+                    }
+                    ${data.totalCarbs !== null && data.totalCarbs !== undefined ? `
+                        <div style="margin-top: 15px; padding: 15px; background: #e8f5e9; border-radius: 8px;">
+                            <strong>Total Carbs:</strong> ${data.totalCarbs.toFixed(1)}g
+                        </div>
+                    ` : ''}
+                    <div style="margin-top: 15px; padding: 10px; background: #fff3e0; border-radius: 8px; font-size: 12px; color: #666;">
+                        ✓ Meal saved to Firebase! View it at: <a href="/view-results.html" style="color: #667eea;">View Results</a>
+                    </div>
+                    <details style="margin-top: 15px;">
+                        <summary style="cursor: pointer; color: #667eea; font-weight: 600;">View Raw JSON</summary>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    </details>
+                `;
+            }
+            // Handle FoodRecognitionResult response (fallback for old format)
+            else if (data.success !== undefined) {
+                if (data.success) {
+                    resultBox.className = 'result-box success';
+                    resultBox.innerHTML = `
+                        <span class="status-badge status-success">✓ Success</span>
+                        <h4>Detected Foods (${data.detectedFoods.length}):</h4>
+                        ${data.detectedFoods.length > 0 
+                            ? data.detectedFoods.map(food => `
+                                <div class="food-item">
+                                    <span class="food-name">${food.name}</span>
+                                    <span class="food-confidence">${(food.confidence * 100).toFixed(1)}% confidence</span>
+                                </div>
+                            `).join('')
+                            : '<p style="color: #666;">No foods detected</p>'
+                        }
+                        <details style="margin-top: 15px;">
+                            <summary style="cursor: pointer; color: #667eea; font-weight: 600;">View Raw JSON</summary>
+                            <pre>${JSON.stringify(data, null, 2)}</pre>
+                        </details>
+                    `;
+                } else {
+                    displayError(data.errorMessage || 'Unknown error');
+                }
+            } else {
+                displayError('Unexpected response format');
+            }
+        }
+        
+        function displayError(message) {
+            resultBox.className = 'result-box error';
+            resultBox.innerHTML = `
+                <span class="status-badge status-error">✗ Error</span>
+                <p style="color: #f44336; font-weight: 600;">${message}</p>
+                <details style="margin-top: 15px;">
+                    <summary style="cursor: pointer; color: #667eea; font-weight: 600;">View Raw Response</summary>
+                    <pre>${JSON.stringify({error: message}, null, 2)}</pre>
+                </details>
+            `;
+        }
+    </script>
+</body>
+</html>

@@ -20,6 +20,7 @@ import java.io.InputStream;
 public class FirebaseConfig {
 
     private static final Logger log = LoggerFactory.getLogger(FirebaseConfig.class);
+    private static volatile FirebaseApp firebaseApp;
 
     @Value("${firebase.config.path:firebase-service-account.json}")
     private String firebaseConfigPath;
@@ -29,15 +30,20 @@ public class FirebaseConfig {
 
     @PostConstruct
     public void initialize() {
-        try {
-            if (FirebaseApp.getApps().isEmpty()) {
-                FirebaseOptions options = buildFirebaseOptions();
-                FirebaseApp.initializeApp(options);
-                log.info("Firebase initialized successfully for project: {}", projectId);
+        synchronized (FirebaseConfig.class) {
+            try {
+                if (FirebaseApp.getApps().isEmpty()) {
+                    FirebaseOptions options = buildFirebaseOptions();
+                    firebaseApp = FirebaseApp.initializeApp(options);
+                    log.info("Firebase initialized successfully for project: {}", projectId);
+                } else {
+                    firebaseApp = FirebaseApp.getInstance();
+                    log.info("Firebase app already initialized, using existing instance");
+                }
+            } catch (Exception e) {
+                log.error("Failed to initialize Firebase", e);
+                throw new RuntimeException("Could not initialize Firebase", e);
             }
-        } catch (IOException e) {
-            log.error("Failed to initialize Firebase", e);
-            throw new RuntimeException("Could not initialize Firebase", e);
         }
     }
 
@@ -57,20 +63,44 @@ public class FirebaseConfig {
         
         if (serviceAccount == null) {
             // Try loading from file system
-            serviceAccount = new FileInputStream(firebaseConfigPath);
-        }
-        
-        if (serviceAccount == null) {
-            // Use default credentials (for cloud environments)
-            log.info("No service account file found, using default credentials");
-            return GoogleCredentials.getApplicationDefault();
+            try {
+                serviceAccount = new FileInputStream(firebaseConfigPath);
+            } catch (IOException e) {
+                // File not found, use default credentials (for cloud environments)
+                log.info("No service account file found at {}, using default credentials", firebaseConfigPath);
+                return GoogleCredentials.getApplicationDefault();
+            }
         }
         
         return GoogleCredentials.fromStream(serviceAccount);
     }
 
-    @Bean
+    @Bean(destroyMethod = "")
     public Firestore firestore() {
-        return FirestoreClient.getFirestore();
+        synchronized (FirebaseConfig.class) {
+            // Ensure Firebase app is initialized
+            if (FirebaseApp.getApps().isEmpty()) {
+                try {
+                    FirebaseOptions options = buildFirebaseOptions();
+                    firebaseApp = FirebaseApp.initializeApp(options);
+                    log.info("Firebase initialized in firestore() bean for project: {}", projectId);
+                } catch (IOException e) {
+                    log.error("Failed to initialize Firebase in firestore() bean", e);
+                    throw new RuntimeException("Could not initialize Firebase", e);
+                }
+            } else if (firebaseApp == null) {
+                firebaseApp = FirebaseApp.getInstance();
+            }
+            
+            Firestore firestore = FirestoreClient.getFirestore();
+            
+            // Verify the client is not closed
+            if (firestore == null) {
+                throw new IllegalStateException("Firestore client is null");
+            }
+            
+            log.debug("Firestore client obtained successfully");
+            return firestore;
+        }
     }
 }

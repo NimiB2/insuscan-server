@@ -68,7 +68,7 @@ public class ScanServiceImpl implements ScanService {
         log.info("Starting scan for user: {}", userId.getEmail());
 
         // Step 1: Analyze image
-        VisionAnalysisResult visionResult = analyzeImage(request);
+        FoodRecognitionResult visionResult = analyzeImage(request);
         if (!visionResult.isSuccess()) {
             log.warn("Vision analysis failed: {}", visionResult.getErrorMessage());
             return createFailedMeal(userDocId, request.getImageUrl());
@@ -84,7 +84,7 @@ public class ScanServiceImpl implements ScanService {
             ? estimatedWeightGrams / visionResult.getDetectedFoods().size()
             : DEFAULT_PORTION_WEIGHT / visionResult.getDetectedFoods().size();
 
-        for (VisionAnalysisResult.DetectedFood detected : visionResult.getDetectedFoods()) {
+        for (FoodRecognitionResult.RecognizedFoodItem detected : visionResult.getDetectedFoods()) {
             NutritionInfo nutrition = nutritionDataService.getNutritionInfo(detected.getName());
             
             MealEntity.FoodItem item = new MealEntity.FoodItem();
@@ -150,7 +150,7 @@ public class ScanServiceImpl implements ScanService {
         }
     }
 
-    private VisionAnalysisResult analyzeImage(ScanRequestBoundary request) {
+    private FoodRecognitionResult analyzeImage(ScanRequestBoundary request) {
         if (request.getImageBase64() != null) {
             return imageAnalysisService.analyzeImage(request.getImageBase64());
         } else {
