@@ -23,6 +23,9 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.core.io.Resource;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -188,6 +191,17 @@ public class VisionController {
         
         return mealService.getMealById(systemId, uuid)
                 .orElseThrow(() -> new RuntimeException("Meal not found: " + mealId));
+    }
+    
+    /**
+     * Serve the test vision HTML page
+     */
+    @GetMapping(path = "/test", produces = MediaType.TEXT_HTML_VALUE)
+    public ResponseEntity<Resource> getTestPage() {
+        Resource resource = new ClassPathResource("static/test-vision.html");
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_TYPE, MediaType.TEXT_HTML_VALUE)
+                .body(resource);
     }
     
     private MealEntity saveBasicMeal(FoodRecognitionResult result, String email, String imageName) {
