@@ -34,11 +34,11 @@ public class UserController {
 
     // GET /users/login/{systemId}/{email} - Login
     @GetMapping(
-        path = "/login/{systemId}/{email}",
+        path = "/login/{systemId}/{email:.+}",
         produces = MediaType.APPLICATION_JSON_VALUE)
     public UserBoundary login(
-            @PathVariable String systemId,
-            @PathVariable String email) {
+            @PathVariable("systemId") String systemId,
+            @PathVariable("email") String email) {
         return userService.login(systemId, email)
             .orElseThrow(() -> new InsuScanNotFoundException(
                 "User not found: " + email));
@@ -50,8 +50,8 @@ public class UserController {
         consumes = MediaType.APPLICATION_JSON_VALUE,
         produces = MediaType.APPLICATION_JSON_VALUE)
     public UserBoundary updateUser(
-            @PathVariable String systemId,
-            @PathVariable String email,
+            @PathVariable("systemId") String systemId,
+            @PathVariable("email") String email,
             @RequestBody UserBoundary update) {
         return userService.updateUser(systemId, email, update);
     }
@@ -62,8 +62,8 @@ public class UserController {
         path = "/{systemId}/{email:.+}",
         produces = MediaType.APPLICATION_JSON_VALUE)
     public UserBoundary getUser(
-            @PathVariable String systemId,
-            @PathVariable String email) {
+            @PathVariable("systemId") String systemId,
+            @PathVariable("email") String email) {
         // Log for debugging
         System.out.println("Looking up user - systemId: " + systemId + ", email: " + email);
         String constructedId = systemId + "_" + email;
@@ -140,8 +140,8 @@ public class UserController {
         path = "/{systemId}/{email}/profile-complete",
         produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<Boolean> checkProfileComplete(
-            @PathVariable String systemId,
-            @PathVariable String email) {
+            @PathVariable("systemId") String systemId,
+            @PathVariable("email") String email) {
         boolean complete = userService.hasCompleteMedicalProfile(systemId, email);
         return ResponseEntity.ok(complete);
     }

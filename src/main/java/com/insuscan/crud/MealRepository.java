@@ -73,6 +73,40 @@ public class MealRepository {
             
             return executeQuery(query);
         } catch (Exception e) {
+            // If index error, fall back to query without orderBy and sort in memory
+            if (e.getMessage() != null && e.getMessage().contains("index")) {
+                log.warn("Composite index not found for paginated query, using fallback query (slower). userId={}", userId);
+
+                try {
+                    // Firestore has no server-side offset without ordering; emulate it:
+                    // fetch enough items, sort, then slice.
+                    int offset = Math.max(0, page * size);
+                    int fetchLimit = Math.min(1000, offset + size); // safety cap
+
+                    Query fallbackQuery = firestore.collection(COLLECTION_NAME)
+                            .whereEqualTo("userId", userId)
+                            .limit(fetchLimit);
+
+                    List<MealEntity> meals = executeQuery(fallbackQuery);
+
+                    // Sort by scannedAt descending in memory
+                    meals.sort((a, b) -> {
+                        if (a.getScannedAt() == null && b.getScannedAt() == null) return 0;
+                        if (a.getScannedAt() == null) return 1;
+                        if (b.getScannedAt() == null) return -1;
+                        return b.getScannedAt().compareTo(a.getScannedAt());
+                    });
+
+                    // Slice page
+                    if (offset >= meals.size()) return List.of();
+                    int toIndex = Math.min(meals.size(), offset + size);
+                    return meals.subList(offset, toIndex);
+                } catch (Exception fallbackError) {
+                    log.error("Fallback paginated query also failed for user: {}", userId, fallbackError);
+                    throw new RuntimeException("Failed to find meals (fallback)", fallbackError);
+                }
+            }
+
             log.error("Error finding meals by user: {}", userId, e);
             throw new RuntimeException("Failed to find meals", e);
         }

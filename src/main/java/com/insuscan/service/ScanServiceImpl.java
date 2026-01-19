@@ -86,6 +86,12 @@ public class ScanServiceImpl implements ScanService {
 
         log.info("Vision detected {} food items", visionResult.getDetectedFoods().size());
 
+        // Treat "0 detected foods" as a failed analysis; otherwise we end up saving misleading 0g-carb meals.
+        if (visionResult.getDetectedFoods().isEmpty()) {
+            log.warn("Vision returned 0 detected foods. Saving FAILED meal stub for user: {}", userId.getEmail());
+            return createFailedMeal(userDocId, request.getImageUrl());
+        }
+
         // Step 2: Calculate portion sizes using smart distribution
         List<PortionEstimator.FoodItem> portionItems = new ArrayList<>();
         float totalVisionPortions = 0f;
@@ -255,7 +261,7 @@ public class ScanServiceImpl implements ScanService {
         meal.setImageUrl(imageUrl);
         meal.setFoodItems(new ArrayList<>());
         meal.setTotalCarbs(0f);
-        meal.setStatus(MealStatus.PENDING);
+        meal.setStatus(MealStatus.FAILED);
         // User can manually add food items later
 
         MealEntity saved = mealRepository.save(meal);

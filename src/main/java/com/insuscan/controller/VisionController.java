@@ -182,7 +182,7 @@ public class VisionController {
      * Accepts either full ID (systemId_mealUuid) or just UUID
      */
     @GetMapping(path = "/saved/{mealId}", produces = MediaType.APPLICATION_JSON_VALUE)
-    public MealBoundary getSavedAnalysis(@PathVariable String mealId) {
+    public MealBoundary getSavedAnalysis(@PathVariable("mealId") String mealId) {
         // Extract UUID if full ID format (systemId_uuid)
         String uuid = mealId;
         if (mealId.contains("_")) {

@@ -3,6 +3,8 @@ package com.insuscan.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.insuscan.boundary.FoodRecognitionResult;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -13,6 +15,8 @@ import java.util.Map;
 
 @Service
 public class ImageAnalysisServiceImpl implements ImageAnalysisService {
+
+    private static final Logger log = LoggerFactory.getLogger(ImageAnalysisServiceImpl.class);
 
     private final WebClient webClient;
     private final ObjectMapper objectMapper;
@@ -48,45 +52,25 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
         }
 
         try {
-            Map<String, Object> requestBody = buildOpenAiRequestWithBase64(base64Image);
+            // First pass: strict prompt (higher confidence threshold)
+            List<FoodRecognitionResult.RecognizedFoodItem> foods = analyzeWithPrompt(base64Image, true);
 
-            String response = webClient.post()
-                    .uri("/chat/completions")
-                    .header("Authorization", "Bearer " + openAiApiKey)
-                    .header("Content-Type", "application/json")
-                    .bodyValue(requestBody)
-                    .retrieve()
-                    .onStatus(status -> status.is4xxClientError() || status.is5xxServerError(),
-                            clientResponse -> {
-                                if (clientResponse.statusCode().value() == 429) {
-                                    return clientResponse.bodyToMono(String.class)
-                                            .map(body -> new RuntimeException("Rate limit exceeded. Please wait a moment and try again. " + 
-                                                    (body != null ? body : "")));
-                                }
-                                return clientResponse.bodyToMono(String.class)
-                                        .map(body -> new RuntimeException("OpenAI API error (" + 
-                                                clientResponse.statusCode() + "): " + 
-                                                (body != null ? body : "")));
-                            })
-                    .bodyToMono(String.class)
-                    .block();
-
-            if (response == null || response.isBlank()) {
-                return FoodRecognitionResult.failure("Provider returned empty response");
+            // If no foods detected, retry with a more permissive prompt (helps avoid "0 items" on real photos)
+            if (foods.isEmpty()) {
+                log.warn("OpenAI returned 0 detected foods on strict prompt; retrying with relaxed prompt");
+                foods = analyzeWithPrompt(base64Image, false);
             }
 
-            // Extract the content from OpenAI's chat/completions response
-            String content = extractContentFromResponse(response);
-            if (content == null || content.isBlank()) {
-                return FoodRecognitionResult.failure("Could not extract content from OpenAI response");
+            if (foods.isEmpty()) {
+                // Don’t cache empties; often indicates the model was overly conservative or the image was unclear.
+                return FoodRecognitionResult.failure("No foods detected in image. Try a clearer photo (better lighting, closer crop).");
             }
 
-            List<FoodRecognitionResult.RecognizedFoodItem> foods = parseFoodsFromOpenAi(content);
             FoodRecognitionResult result = FoodRecognitionResult.success(foods);
-            
-            // Cache the result for consistency (same image = same result)
+
+            // Cache only successful, non-empty results for consistency (same image = same result)
             visionCache.putCache(imageHash, result);
-            
+
             return result;
 
         } catch (RuntimeException e) {
@@ -159,8 +143,44 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
         return openAiApiKey != null && !openAiApiKey.isBlank();
     }
 
-    private Map<String, Object> buildOpenAiRequestWithBase64(String base64Image) {
-        String prompt = buildPrompt();
+    private List<FoodRecognitionResult.RecognizedFoodItem> analyzeWithPrompt(String base64Image, boolean strict) throws Exception {
+        Map<String, Object> requestBody = buildOpenAiRequestWithBase64(base64Image, strict);
+
+        String response = webClient.post()
+                .uri("/chat/completions")
+                .header("Authorization", "Bearer " + openAiApiKey)
+                .header("Content-Type", "application/json")
+                .bodyValue(requestBody)
+                .retrieve()
+                .onStatus(status -> status.is4xxClientError() || status.is5xxServerError(),
+                        clientResponse -> {
+                            if (clientResponse.statusCode().value() == 429) {
+                                return clientResponse.bodyToMono(String.class)
+                                        .map(body -> new RuntimeException("Rate limit exceeded. Please wait a moment and try again. " +
+                                                (body != null ? body : "")));
+                            }
+                            return clientResponse.bodyToMono(String.class)
+                                    .map(body -> new RuntimeException("OpenAI API error (" +
+                                            clientResponse.statusCode() + "): " +
+                                            (body != null ? body : "")));
+                        })
+                .bodyToMono(String.class)
+                .block();
+
+        if (response == null || response.isBlank()) {
+            throw new IllegalStateException("Provider returned empty response");
+        }
+
+        String content = extractContentFromResponse(response);
+        if (content == null || content.isBlank()) {
+            throw new IllegalStateException("Could not extract content from OpenAI response");
+        }
+
+        return parseFoodsFromOpenAi(content);
+    }
+
+    private Map<String, Object> buildOpenAiRequestWithBase64(String base64Image, boolean strict) {
+        String prompt = buildPrompt(strict);
 
         Map<String, Object> textContent = Map.of("type", "text", "text", prompt);
         Map<String, Object> imageUrlObj = Map.of("url", "data:image/jpeg;base64," + base64Image);
@@ -176,12 +196,14 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
 
         return Map.of(
                 "model", openAiModel,
-                "messages", List.of(userMessage)
+                "messages", List.of(userMessage),
+                "temperature", 0.2,
+                "max_tokens", 600
         );
     }
 
     private Map<String, Object> buildOpenAiRequestWithUrl(String imageUrl) {
-        String prompt = buildPrompt();
+        String prompt = buildPrompt(true);
 
         Map<String, Object> textContent = Map.of("type", "text", "text", prompt);
         Map<String, Object> imageUrlObj = Map.of("url", imageUrl);
@@ -197,11 +219,39 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
 
         return Map.of(
                 "model", openAiModel,
-                "messages", List.of(userMessage)
+                "messages", List.of(userMessage),
+                "temperature", 0.2,
+                "max_tokens", 600
         );
     }
 
-    private String buildPrompt() {
+    private String buildPrompt(boolean strict) {
+        if (!strict) {
+            return """
+                    You are a food recognition assistant for a diabetes management app.
+
+                    TASK:
+                    Analyze the provided image of a meal and identify the food items you can see.
+
+                    OUTPUT:
+                    Return STRICT JSON only:
+                    {
+                      "items": [
+                        { "name": "string", "confidence": 0.0, "estimatedPortionGrams": 0.0 }
+                      ],
+                      "warnings": [ "string" ]
+                    }
+
+                    IMPORTANT:
+                    - Be practical: do NOT return an empty list unless the image truly has no visible food.
+                    - Include items with confidence >= 0.4 in "items".
+                    - If you are unsure, include your best guess with lower confidence (>= 0.3) and add a warning explaining uncertainty.
+                    - Use specific, common English food names suitable for nutrition databases.
+                    - Estimate portions in grams (10g-1000g).
+                    - Return ONLY valid JSON (no markdown, no extra text).
+                    """;
+        }
+
         return """
                 You are a food recognition assistant for a medical-grade diabetes management system.
                 Your analysis is critical for calculating insulin dosages, so accuracy is essential.

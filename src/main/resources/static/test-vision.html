@@ -330,6 +330,10 @@
     </div>
 
     <script>
+        // Always call the same server that served this page (works on localhost, LAN IP, phone, etc.)
+        const API_ORIGIN = window.location.origin;
+        const apiUrl = (pathWithQuery) => new URL(pathWithQuery, API_ORIGIN).toString();
+
         const uploadArea = document.getElementById('uploadArea');
         const fileInput = document.getElementById('fileInput');
         const previewSection = document.getElementById('previewSection');
@@ -372,7 +376,7 @@
             savedMealsSection.style.display = 'block';
             
             try {
-                const url = `http://localhost:9693/vision/saved?email=${encodeURIComponent(email)}&limit=${limit}`;
+                const url = apiUrl(`/vision/saved?email=${encodeURIComponent(email)}&limit=${limit}`);
                 console.log('Loading saved meals from:', url);
                 
                 const response = await fetch(url);
@@ -481,7 +485,7 @@
             try {
                 // Use query parameter endpoint (more reliable for emails with @ symbol)
                 const encodedEmail = encodeURIComponent(email);
-                const url = `http://localhost:9693/users/by-email?systemId=insuscan&email=${encodedEmail}`;
+                const url = apiUrl(`/users/by-email?systemId=insuscan&email=${encodedEmail}`);
                 console.log('Checking user at:', url);
                 console.log('Original email:', email);
                 console.log('Encoded email:', encodedEmail);
@@ -556,7 +560,7 @@
             createUserLink.style.display = 'none';
             
             try {
-                const url = `http://localhost:9693/users/quick?email=${encodeURIComponent(email)}&insulinRatio=1:10`;
+                const url = apiUrl(`/users/quick?email=${encodeURIComponent(email)}&insulinRatio=1:10`);
                 console.log('Creating user at:', url);
                 
                 const response = await fetch(url, {
@@ -667,7 +671,7 @@
                 formData.append('file', selectedFile);
                 
                 // Build URL with parameters
-                let url = `http://localhost:9693/vision/analyze?email=${encodeURIComponent(email)}`;
+                let url = apiUrl(`/vision/analyze?email=${encodeURIComponent(email)}`);
                 
                 // Add optional parameters if provided
                 if (estimatedWeightInput.value) {
