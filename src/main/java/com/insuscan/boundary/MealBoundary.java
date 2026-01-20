@@ -25,6 +25,17 @@ public class MealBoundary {
     private Float analysisConfidence;
     private Boolean referenceDetected;
     
+ // User state when meal was logged
+    private Integer currentGlucose;
+    private String activityLevel;
+    
+    // Calculation breakdown
+    private Float carbDose;
+    private Float correctionDose;
+    private Float sickAdjustment;
+    private Float stressAdjustment;
+    private Float exerciseAdjustment;
+    
     // Insulin data
     private Float recommendedDose;
     private Float actualDose;
@@ -174,6 +185,29 @@ public class MealBoundary {
         this.completedAt = completedAt;
     }
 
+ // === User State ===
+    public Integer getCurrentGlucose() { return currentGlucose; }
+    public void setCurrentGlucose(Integer currentGlucose) { this.currentGlucose = currentGlucose; }
+
+    public String getActivityLevel() { return activityLevel; }
+    public void setActivityLevel(String activityLevel) { this.activityLevel = activityLevel; }
+
+    // === Calculation Breakdown ===
+    public Float getCarbDose() { return carbDose; }
+    public void setCarbDose(Float carbDose) { this.carbDose = carbDose; }
+
+    public Float getCorrectionDose() { return correctionDose; }
+    public void setCorrectionDose(Float correctionDose) { this.correctionDose = correctionDose; }
+
+    public Float getSickAdjustment() { return sickAdjustment; }
+    public void setSickAdjustment(Float sickAdjustment) { this.sickAdjustment = sickAdjustment; }
+
+    public Float getStressAdjustment() { return stressAdjustment; }
+    public void setStressAdjustment(Float stressAdjustment) { this.stressAdjustment = stressAdjustment; }
+
+    public Float getExerciseAdjustment() { return exerciseAdjustment; }
+    public void setExerciseAdjustment(Float exerciseAdjustment) { this.exerciseAdjustment = exerciseAdjustment; }
+    
     @Override
     public String toString() {
         return "MealBoundary{" +

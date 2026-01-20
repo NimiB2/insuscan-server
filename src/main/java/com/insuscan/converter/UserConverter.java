@@ -44,6 +44,29 @@ public class UserConverter {
         boundary.setSyringeType(entity.getSyringeType());
         boundary.setCustomSyringeLength(entity.getCustomSyringeLength());
 
+     // Personal info
+        boundary.setAge(entity.getAge());
+        boundary.setGender(entity.getGender());
+        boundary.setPregnant(entity.getPregnant());
+        boundary.setDueDate(entity.getDueDate());
+
+        // Medical info
+        boundary.setDiabetesType(entity.getDiabetesType());
+        boundary.setInsulinType(entity.getInsulinType());
+        boundary.setActiveInsulinTime(entity.getActiveInsulinTime());
+
+        // Dose settings
+        boundary.setDoseRounding(entity.getDoseRounding());
+
+        // Adjustment factors
+        boundary.setSickDayAdjustment(entity.getSickDayAdjustment());
+        boundary.setStressAdjustment(entity.getStressAdjustment());
+        boundary.setLightExerciseAdjustment(entity.getLightExerciseAdjustment());
+        boundary.setIntenseExerciseAdjustment(entity.getIntenseExerciseAdjustment());
+
+        // Preferences
+        boundary.setGlucoseUnits(entity.getGlucoseUnits());
+        
         return boundary;
     }
 
@@ -71,6 +94,29 @@ public class UserConverter {
         entity.setSyringeType(boundary.getSyringeType());
         entity.setCustomSyringeLength(boundary.getCustomSyringeLength());
 
+     // Personal info
+        entity.setAge(boundary.getAge());
+        entity.setGender(boundary.getGender());
+        entity.setPregnant(boundary.getPregnant());
+        entity.setDueDate(boundary.getDueDate());
+
+        // Medical info
+        entity.setDiabetesType(boundary.getDiabetesType());
+        entity.setInsulinType(boundary.getInsulinType());
+        entity.setActiveInsulinTime(boundary.getActiveInsulinTime());
+
+        // Dose settings
+        entity.setDoseRounding(boundary.getDoseRounding());
+
+        // Adjustment factors
+        entity.setSickDayAdjustment(boundary.getSickDayAdjustment());
+        entity.setStressAdjustment(boundary.getStressAdjustment());
+        entity.setLightExerciseAdjustment(boundary.getLightExerciseAdjustment());
+        entity.setIntenseExerciseAdjustment(boundary.getIntenseExerciseAdjustment());
+
+        // Preferences
+        entity.setGlucoseUnits(boundary.getGlucoseUnits());
+        
         return entity;
     }
 
@@ -89,6 +135,29 @@ public class UserConverter {
         boundary.setCorrectionFactor(newUser.getCorrectionFactor());
         boundary.setTargetGlucose(newUser.getTargetGlucose());
         boundary.setSyringeType(newUser.getSyringeType());
+        
+        // Personal info
+        boundary.setAge(newUser.getAge());
+        boundary.setGender(newUser.getGender());
+        boundary.setPregnant(newUser.getPregnant());
+        boundary.setDueDate(newUser.getDueDate());
+
+        // Medical info
+        boundary.setDiabetesType(newUser.getDiabetesType());
+        boundary.setInsulinType(newUser.getInsulinType());
+        boundary.setActiveInsulinTime(newUser.getActiveInsulinTime());
+
+        // Dose settings
+        boundary.setDoseRounding(newUser.getDoseRounding());
+
+        // Adjustment factors
+        boundary.setSickDayAdjustment(newUser.getSickDayAdjustment());
+        boundary.setStressAdjustment(newUser.getStressAdjustment());
+        boundary.setLightExerciseAdjustment(newUser.getLightExerciseAdjustment());
+        boundary.setIntenseExerciseAdjustment(newUser.getIntenseExerciseAdjustment());
+
+        // Preferences
+        boundary.setGlucoseUnits(newUser.getGlucoseUnits());
 
         return boundary;
     }

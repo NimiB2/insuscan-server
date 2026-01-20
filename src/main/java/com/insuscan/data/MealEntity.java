@@ -27,6 +27,17 @@ public class MealEntity {
     private Float analysisConfidence;   // 0.0 to 1.0
     private Boolean referenceDetected;  // Was syringe found in image
     
+ // User state when meal was logged
+    private Integer currentGlucose;     // blood sugar at meal time
+    private String activityLevel;       // "normal", "light", "intense"
+    
+    // Detailed calculation breakdown
+    private Float carbDose;             // dose from carbs alone
+    private Float correctionDose;       // dose from glucose correction
+    private Float sickAdjustment;       // adjustment amount (not %)
+    private Float stressAdjustment;     // adjustment amount
+    private Float exerciseAdjustment;   // adjustment amount (negative)
+    
     // Insulin calculation results
     private Float recommendedDose;
     private Float actualDose;           // User can override
@@ -124,6 +135,29 @@ public class MealEntity {
 
     public Date getCompletedAt() { return completedAt; }
     public void setCompletedAt(Date completedAt) { this.completedAt = completedAt; }
+    
+ // === User State ===
+    public Integer getCurrentGlucose() { return currentGlucose; }
+    public void setCurrentGlucose(Integer currentGlucose) { this.currentGlucose = currentGlucose; }
+
+    public String getActivityLevel() { return activityLevel; }
+    public void setActivityLevel(String activityLevel) { this.activityLevel = activityLevel; }
+
+    // === Calculation Breakdown ===
+    public Float getCarbDose() { return carbDose; }
+    public void setCarbDose(Float carbDose) { this.carbDose = carbDose; }
+
+    public Float getCorrectionDose() { return correctionDose; }
+    public void setCorrectionDose(Float correctionDose) { this.correctionDose = correctionDose; }
+
+    public Float getSickAdjustment() { return sickAdjustment; }
+    public void setSickAdjustment(Float sickAdjustment) { this.sickAdjustment = sickAdjustment; }
+
+    public Float getStressAdjustment() { return stressAdjustment; }
+    public void setStressAdjustment(Float stressAdjustment) { this.stressAdjustment = stressAdjustment; }
+
+    public Float getExerciseAdjustment() { return exerciseAdjustment; }
+    public void setExerciseAdjustment(Float exerciseAdjustment) { this.exerciseAdjustment = exerciseAdjustment; }
 
     @Override
     public String toString() {
