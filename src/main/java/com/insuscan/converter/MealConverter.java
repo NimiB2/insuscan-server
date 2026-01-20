@@ -86,6 +86,17 @@ public class MealConverter {
         boundary.setPlateDepthCm(entity.getPlateDepthCm());
         boundary.setAnalysisConfidence(entity.getAnalysisConfidence());
         boundary.setReferenceDetected(entity.getReferenceDetected());
+        
+     // User state at meal time
+        boundary.setCurrentGlucose(entity.getCurrentGlucose());
+        boundary.setActivityLevel(entity.getActivityLevel());
+
+        // Calculation breakdown
+        boundary.setCarbDose(entity.getCarbDose());
+        boundary.setCorrectionDose(entity.getCorrectionDose());
+        boundary.setSickAdjustment(entity.getSickAdjustment());
+        boundary.setStressAdjustment(entity.getStressAdjustment());
+        boundary.setExerciseAdjustment(entity.getExerciseAdjustment());
 
         // Insulin data
         boundary.setRecommendedDose(entity.getRecommendedDose());
@@ -146,6 +157,17 @@ public class MealConverter {
         entity.setPlateDepthCm(boundary.getPlateDepthCm());
         entity.setAnalysisConfidence(boundary.getAnalysisConfidence());
         entity.setReferenceDetected(boundary.getReferenceDetected());
+        
+     // User state at meal time
+        entity.setCurrentGlucose(boundary.getCurrentGlucose());
+        entity.setActivityLevel(boundary.getActivityLevel());
+
+        // Calculation breakdown
+        entity.setCarbDose(boundary.getCarbDose());
+        entity.setCorrectionDose(boundary.getCorrectionDose());
+        entity.setSickAdjustment(boundary.getSickAdjustment());
+        entity.setStressAdjustment(boundary.getStressAdjustment());
+        entity.setExerciseAdjustment(boundary.getExerciseAdjustment());
 
         // Insulin data
         entity.setRecommendedDose(boundary.getRecommendedDose());

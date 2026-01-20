@@ -14,6 +14,29 @@ public class UserEntity {
     private String userName;
     private String avatar;
     
+ // Personal info
+    private Integer age;
+    private String gender;              // "Male", "Female", "Other", "Prefer not to say"
+    private Boolean pregnant;
+    private String dueDate;             // format: "dd/MM/yyyy"
+    
+    // Medical info
+    private String diabetesType;        // "Type 1", "Type 2", "Gestational", "Other"
+    private String insulinType;         // "Rapid", "Short", "Other"
+    private Integer activeInsulinTime;  // DIA in hours (3, 4, 5, 6)
+    
+    // Dose rounding preference
+    private String doseRounding;        // "0.5" or "1"
+    
+    // Adjustment factors (percentages)
+    private Integer sickDayAdjustment;       // e.g., 15 means +15%
+    private Integer stressAdjustment;        // e.g., 10 means +10%
+    private Integer lightExerciseAdjustment; // e.g., -15 means -15%
+    private Integer intenseExerciseAdjustment; // e.g., -30 means -30%
+    
+    // Preferences
+    private String glucoseUnits;        // "mg/dL" or "mmol/L"
+    
     // Medical profile for insulin calculation
     private Float insulinCarbRatio;     // Units of insulin per gram of carbs (e.g., 0.1 = 1:10)
     private Float correctionFactor;     // mg/dL drop per unit of insulin (e.g., 50)
@@ -119,6 +142,50 @@ public class UserEntity {
     public void setUpdatedAt(Date updatedAt) {
         this.updatedAt = updatedAt;
     }
+    
+ // === Personal Info ===
+    public Integer getAge() { return age; }
+    public void setAge(Integer age) { this.age = age; }
+
+    public String getGender() { return gender; }
+    public void setGender(String gender) { this.gender = gender; }
+
+    public Boolean getPregnant() { return pregnant; }
+    public void setPregnant(Boolean pregnant) { this.pregnant = pregnant; }
+
+    public String getDueDate() { return dueDate; }
+    public void setDueDate(String dueDate) { this.dueDate = dueDate; }
+
+    // === Medical Info ===
+    public String getDiabetesType() { return diabetesType; }
+    public void setDiabetesType(String diabetesType) { this.diabetesType = diabetesType; }
+
+    public String getInsulinType() { return insulinType; }
+    public void setInsulinType(String insulinType) { this.insulinType = insulinType; }
+
+    public Integer getActiveInsulinTime() { return activeInsulinTime; }
+    public void setActiveInsulinTime(Integer activeInsulinTime) { this.activeInsulinTime = activeInsulinTime; }
+
+    // === Dose Settings ===
+    public String getDoseRounding() { return doseRounding; }
+    public void setDoseRounding(String doseRounding) { this.doseRounding = doseRounding; }
+
+    // === Adjustment Factors ===
+    public Integer getSickDayAdjustment() { return sickDayAdjustment; }
+    public void setSickDayAdjustment(Integer sickDayAdjustment) { this.sickDayAdjustment = sickDayAdjustment; }
+
+    public Integer getStressAdjustment() { return stressAdjustment; }
+    public void setStressAdjustment(Integer stressAdjustment) { this.stressAdjustment = stressAdjustment; }
+
+    public Integer getLightExerciseAdjustment() { return lightExerciseAdjustment; }
+    public void setLightExerciseAdjustment(Integer lightExerciseAdjustment) { this.lightExerciseAdjustment = lightExerciseAdjustment; }
+
+    public Integer getIntenseExerciseAdjustment() { return intenseExerciseAdjustment; }
+    public void setIntenseExerciseAdjustment(Integer intenseExerciseAdjustment) { this.intenseExerciseAdjustment = intenseExerciseAdjustment; }
+
+    // === Preferences ===
+    public String getGlucoseUnits() { return glucoseUnits; }
+    public void setGlucoseUnits(String glucoseUnits) { this.glucoseUnits = glucoseUnits; }
 
     @Override
     public String toString() {
