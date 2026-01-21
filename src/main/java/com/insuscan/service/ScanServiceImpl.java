@@ -210,13 +210,65 @@ public class ScanServiceImpl implements ScanService {
         // Step 4: Calculate insulin dose
         apiLogger.scanStep(4, "CALCULATING INSULIN DOSE");
         Float recommendedDose = null;
-        if (user != null && totalCarbs > 0) {
-            try {
-                float dose = InsulinCalculator.calculateDoseForUser(totalCarbs, user);
-                recommendedDose = InsulinCalculator.roundDose(dose);
+        boolean profileComplete = false;
+        List<String> missingFields = new ArrayList<>();
+        String insulinMessage = null;
+
+        if (totalCarbs > 0) {
+            String userEmail = userId != null ? userId.getEmail() : null;
+            apiLogger.insulinCalcStart(totalCarbs, userEmail);
+
+            // Build params from user profile - handles null checks
+            InsulinCalculator.CalculationParams params =
+                new InsulinCalculator.CalculationParams.Builder()
+                    .fromUser(user)
+                    .build();
+
+            // Log profile status
+            apiLogger.insulinCalcProfileStatus(params.isProfileComplete(), params.getMissingFields());
+
+            if (params.isProfileComplete()) {
+                // Profile complete - do full calculation
+                apiLogger.insulinCalcParams(
+                    params.getInsulinCarbRatio(),
+                    params.getCorrectionFactor(),
+                    params.getTargetGlucose(),
+                    true
+                );
+
+                // Calculate using the new method
+                InsulinCalculator.InsulinCalculationResult result =
+                    InsulinCalculator.calculateSimple(totalCarbs, params);
+
+                // Log breakdown
+                apiLogger.insulinCalcBreakdown(
+                    result.getCarbDose(),
+                    result.getCorrectionDose(),
+                    result.getBaseDose(),
+                    result.getSickAdjustment(),
+                    result.getStressAdjustment(),
+                    result.getExerciseAdjustment(),
+                    result.getTotalDose()
+                );
+
+                // Log warning if any
+                if (result.hasWarning()) {
+                    apiLogger.insulinCalcWarning(result.getWarning());
+                }
+
+                recommendedDose = result.getRoundedDose();
+                profileComplete = true;
+
+                apiLogger.insulinCalcResult(recommendedDose, true, null);
                 log.info("Calculated recommended insulin dose: {} units", recommendedDose);
-            } catch (Exception e) {
-                log.warn("Could not calculate insulin dose: {}", e.getMessage());
+
+            } else {
+                // Profile incomplete - skip calculation
+                missingFields = params.getMissingFields();
+                insulinMessage = "Complete your medical profile to get insulin recommendations";
+
+                apiLogger.insulinCalcSkipped(missingFields);
+                apiLogger.insulinCalcResult(null, false, insulinMessage);
             }
         }
 
@@ -234,6 +286,11 @@ public class ScanServiceImpl implements ScanService {
         if (estimatedWeightGrams != null) meal.setEstimatedWeight(estimatedWeightGrams);
         if (portionConfidence != null) meal.setAnalysisConfidence(portionConfidence);
 
+        // Set profile status for client
+        meal.setProfileComplete(profileComplete);
+        meal.setMissingProfileFields(missingFields);
+        meal.setInsulinMessage(insulinMessage);
+        
         MealEntity saved = mealRepository.save(meal);
         log.info("Meal saved: {}", meal.getId());
 
