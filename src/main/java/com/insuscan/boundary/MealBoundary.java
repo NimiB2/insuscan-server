@@ -45,6 +45,11 @@ public class MealBoundary {
     private Date scannedAt;
     private Date confirmedAt;
     private Date completedAt;
+    
+    private String note;                    // General note for the meal
+    private boolean profileComplete;        // Client feedback flag
+    private List<String> missingProfileFields; 
+    private String insulinMessage;
 
     public MealBoundary() {}
 
@@ -207,6 +212,40 @@ public class MealBoundary {
 
     public Float getExerciseAdjustment() { return exerciseAdjustment; }
     public void setExerciseAdjustment(Float exerciseAdjustment) { this.exerciseAdjustment = exerciseAdjustment; }
+    
+ // --- New Getters and Setters ---
+
+    public String getNote() {
+        return note;
+    }
+
+    public void setNote(String note) {
+        this.note = note;
+    }
+
+    public boolean isProfileComplete() {
+        return profileComplete;
+    }
+
+    public void setProfileComplete(boolean profileComplete) {
+        this.profileComplete = profileComplete;
+    }
+
+    public List<String> getMissingProfileFields() {
+        return missingProfileFields;
+    }
+
+    public void setMissingProfileFields(List<String> missingProfileFields) {
+        this.missingProfileFields = missingProfileFields;
+    }
+
+    public String getInsulinMessage() {
+        return insulinMessage;
+    }
+
+    public void setInsulinMessage(String insulinMessage) {
+        this.insulinMessage = insulinMessage;
+    }
     
     @Override
     public String toString() {

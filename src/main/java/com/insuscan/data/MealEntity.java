@@ -45,6 +45,11 @@ public class MealEntity {
     private Date scannedAt;
     private Date confirmedAt;
     private Date completedAt;
+    
+    // --- Profile Status (for client feedback) ---
+    private boolean profileComplete;
+    private List<String> missingProfileFields;
+    private String insulinMessage;
 
     public MealEntity() {
         this.scannedAt = new Date();
@@ -170,6 +175,15 @@ public class MealEntity {
     public Date getCompletedAt() { return completedAt; }
     public void setCompletedAt(Date completedAt) { this.completedAt = completedAt; }
 
+    public boolean isProfileComplete() { return profileComplete; }
+    public void setProfileComplete(boolean profileComplete) { this.profileComplete = profileComplete; }
+
+    public List<String> getMissingProfileFields() { return missingProfileFields; }
+    public void setMissingProfileFields(List<String> missingProfileFields) { this.missingProfileFields = missingProfileFields; }
+
+    public String getInsulinMessage() { return insulinMessage; }
+    public void setInsulinMessage(String insulinMessage) { this.insulinMessage = insulinMessage; }
+    
     @Override
     public String toString() {
         return "MealEntity{" +

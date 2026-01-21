@@ -1,5 +1,8 @@
 package com.insuscan.boundary;
 
+import java.util.List;
+
+
 // Request/Response DTO for insulin calculation
 public class InsulinCalculationBoundary {
     // Input
@@ -16,6 +19,21 @@ public class InsulinCalculationBoundary {
     private String insulinCarbRatioUsed;
     private Float correctionFactorUsed;
     private Integer targetGlucoseUsed;
+    
+    private Float sickAdjustment;
+    private Float stressAdjustment;  
+    private Float exerciseAdjustment;
+    private String activityLevel;
+    
+    private Boolean sickModeEnabled;
+    private Boolean stressModeEnabled;
+    
+ // Profile status
+    private boolean profileComplete;
+    private List<String> missingFields;
+
+    // User-friendly message
+    private String message;
     
     // Warnings
     private String warning;             // e.g. "Dose unusually high - please verify"
@@ -102,7 +120,34 @@ public class InsulinCalculationBoundary {
     public void setWarning(String warning) {
         this.warning = warning;
     }
+    
+    public Float getSickAdjustment() { return sickAdjustment; }
+    public void setSickAdjustment(Float sickAdjustment) { this.sickAdjustment = sickAdjustment; }
 
+    public Float getStressAdjustment() { return stressAdjustment; }
+    public void setStressAdjustment(Float stressAdjustment) { this.stressAdjustment = stressAdjustment; }
+
+    public Float getExerciseAdjustment() { return exerciseAdjustment; }
+    public void setExerciseAdjustment(Float exerciseAdjustment) { this.exerciseAdjustment = exerciseAdjustment; }
+
+    public String getActivityLevel() { return activityLevel; }
+    public void setActivityLevel(String activityLevel) { this.activityLevel = activityLevel; }
+
+    public Boolean getSickModeEnabled() { return sickModeEnabled; }
+    public void setSickModeEnabled(Boolean sickModeEnabled) { this.sickModeEnabled = sickModeEnabled; }
+
+    public Boolean getStressModeEnabled() { return stressModeEnabled; }
+    public void setStressModeEnabled(Boolean stressModeEnabled) { this.stressModeEnabled = stressModeEnabled; }
+
+    public boolean isProfileComplete() { return profileComplete; }
+    public void setProfileComplete(boolean profileComplete) { this.profileComplete = profileComplete; }
+
+    public List<String> getMissingFields() { return missingFields; }
+    public void setMissingFields(List<String> missingFields) { this.missingFields = missingFields; }
+
+    public String getMessage() { return message; }
+    public void setMessage(String message) { this.message = message; }
+    
     @Override
     public String toString() {
         return "InsulinCalculationBoundary{" +

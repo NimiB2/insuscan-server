@@ -90,4 +90,36 @@ public class InsulinController {
 
         return ResponseEntity.ok(result);
     }
+    
+    /**
+     * Calculate insulin dose with all adjustments
+     * POST /insulin/calculate/full
+     */
+    @PostMapping(
+        path = "/calculate/full",
+        produces = MediaType.APPLICATION_JSON_VALUE,
+        consumes = MediaType.APPLICATION_JSON_VALUE)
+    @Operation(
+        summary = "Calculate insulin dose with adjustments",
+        description = "Full calculation including sick day, stress, and exercise adjustments")
+    public ResponseEntity<InsulinCalculationBoundary> calculateWithAdjustments(
+            @RequestBody InsulinCalculationBoundary request) {
+        
+        // Extract userId if provided
+        UserIdBoundary userId = request.getUserId();
+        if (userId != null && userId.getSystemId() == null) {
+            userId.setSystemId(systemId);
+        }
+        
+        InsulinCalculationBoundary result = insulinCalculationService.calculateDoseWithAdjustments(
+                request.getTotalCarbs(),
+                request.getCurrentGlucose() != null ? request.getCurrentGlucose().intValue() : null,
+                request.getActivityLevel(),
+                request.getSickModeEnabled(),
+                request.getStressModeEnabled(),
+                userId
+        );
+        
+        return ResponseEntity.ok(result);
+    }
 }

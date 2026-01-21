@@ -202,4 +202,148 @@ public class ApiLogger {
             log.error("[{}] API Key: NOT CONFIGURED!", service);
         }
     }
+    
+ // ===================== INSULIN CALCULATION =====================
+
+    public void insulinCalcStart(Float totalCarbs, Integer currentGlucose, String activityLevel,
+                                  Boolean sickMode, Boolean stressMode, String userEmail) {
+        log.info("");
+        log.info("--------------------------------------------------------------------------------");
+        log.info("[INSULIN] CALCULATION STARTED");
+        log.info("--------------------------------------------------------------------------------");
+        log.info("[INSULIN] User           : {}", userEmail != null ? userEmail : "anonymous");
+        log.info("[INSULIN] Total Carbs    : {}g", totalCarbs);
+        log.info("[INSULIN] Current Glucose: {}", currentGlucose != null ? currentGlucose + " mg/dL" : "not provided");
+        log.info("[INSULIN] Activity Level : {}", activityLevel != null ? activityLevel : "normal");
+        log.info("[INSULIN] Sick Mode      : {}", Boolean.TRUE.equals(sickMode) ? "ON" : "OFF");
+        log.info("[INSULIN] Stress Mode    : {}", Boolean.TRUE.equals(stressMode) ? "ON" : "OFF");
+    }
+    
+    public void insulinCalcStart(float totalCarbs, String userEmail) {
+        log.info("[INSULIN] Starting calculation for {}g carbs (user: {})", 
+            String.format("%.1f", totalCarbs), 
+            userEmail != null ? userEmail : "anonymous");
+    }
+
+
+
+    public void insulinCalcBreakdown(float carbDose, Float correctionDose, float baseDose, 
+                                      float finalDose, float roundedDose) {
+        log.info("[INSULIN] Breakdown: CarbDose={} + Correction={} = Base:{} -> Final:{} -> Rounded:{}",
+            String.format("%.2f", carbDose),
+            correctionDose != null ? String.format("%.2f", correctionDose) : "0.00",
+            String.format("%.2f", baseDose),
+            String.format("%.2f", finalDose),
+            String.format("%.1f", roundedDose));
+    }
+
+    public void insulinCalcWithAdjustments(float baseDose, float sickAdj, float stressAdj, 
+                                            float exerciseAdj, float finalDose) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(String.format("[INSULIN] Adjustments: Base=%.2f", baseDose));
+        
+        if (sickAdj != 0) sb.append(String.format(" + Sick=%.2f", sickAdj));
+        if (stressAdj != 0) sb.append(String.format(" + Stress=%.2f", stressAdj));
+        if (exerciseAdj != 0) sb.append(String.format(" + Exercise=%.2f", exerciseAdj));
+        
+        sb.append(String.format(" = %.2f units", finalDose));
+        log.info("{}", sb.toString());
+    }
+
+    public void insulinCalcResult(float roundedDose, String warning) {
+        if (warning != null) {
+            log.warn("[INSULIN] ⚠️ {}", warning);
+        }
+        log.info("[INSULIN] RESULT: {} units", String.format("%.1f", roundedDose));
+    }
+
+    public void insulinCalcParams(Float icr, Float isf, Integer targetGlucose, boolean fromProfile) {
+        String source = fromProfile ? "USER PROFILE" : "DEFAULTS";
+        log.info("[INSULIN] Parameters from: {}", source);
+        log.info("[INSULIN]   ICR (units/g) : {} (1:{})", 
+            String.format("%.3f", icr), 
+            String.format("%.0f", 1.0f / icr));
+        log.info("[INSULIN]   ISF (mg/dL)   : {}", String.format("%.0f", isf));
+        log.info("[INSULIN]   Target Glucose: {} mg/dL", targetGlucose);
+    }
+    
+    public void insulinCalcProfileStatus(boolean complete, List<String> missingFields) {
+        if (complete) {
+            log.info("[INSULIN] Profile status: COMPLETE ✓");
+        } else {
+            log.warn("[INSULIN] Profile status: INCOMPLETE");
+            log.warn("[INSULIN] Missing fields: {}", missingFields);
+        }
+    }
+
+    public void insulinCalcSkipped(List<String> reasons) {
+        log.warn("[INSULIN] Calculation SKIPPED - profile incomplete");
+        log.warn("[INSULIN] Missing: {}", reasons);
+    }
+
+    public void insulinCalcResult(Float dose, boolean profileComplete, String message) {
+        if (profileComplete && dose != null) {
+            log.info("[INSULIN] RESULT: {} units ✓", String.format("%.1f", dose));
+        } else {
+            log.info("[INSULIN] RESULT: No dose calculated ({})", 
+                message != null ? message : "profile incomplete");
+        }
+    }
+
+    public void insulinCalcAdjustments(Integer sickPct, Integer stressPct, Integer exercisePct, boolean fromProfile) {
+        String source = fromProfile ? "USER PROFILE" : "DEFAULTS";
+        log.info("[INSULIN] Adjustment factors from: {}", source);
+        if (sickPct != null && sickPct > 0) {
+            log.info("[INSULIN]   Sick Day     : +{}%", sickPct);
+        }
+        if (stressPct != null && stressPct > 0) {
+            log.info("[INSULIN]   Stress       : +{}%", stressPct);
+        }
+        if (exercisePct != null && exercisePct > 0) {
+            log.info("[INSULIN]   Exercise     : -{}%", exercisePct);
+        }
+    }
+
+    public void insulinCalcBreakdown(float carbDose, float correctionDose, float baseDose,
+                                      float sickAdj, float stressAdj, float exerciseAdj, float finalDose) {
+        log.info("--------------------------------------------------------------------------------");
+        log.info("[INSULIN] CALCULATION BREAKDOWN");
+        log.info("--------------------------------------------------------------------------------");
+        log.info("[INSULIN]   1. Carb Dose       : {} units  (carbs / ICR)", String.format("%+.1f", carbDose));
+        log.info("[INSULIN]   2. Correction Dose : {} units  ((glucose - target) / ISF)", String.format("%+.1f", correctionDose));
+        log.info("[INSULIN]   ─────────────────────────────────");
+        log.info("[INSULIN]   3. Base Dose       : {} units", String.format("%.1f", baseDose));
+        
+        if (sickAdj != 0) {
+            log.info("[INSULIN]   4. Sick Adjustment : {} units", String.format("%+.1f", sickAdj));
+        }
+        if (stressAdj != 0) {
+            log.info("[INSULIN]   5. Stress Adjust.  : {} units", String.format("%+.1f", stressAdj));
+        }
+        if (exerciseAdj != 0) {
+            log.info("[INSULIN]   6. Exercise Adjust.: {} units", String.format("%+.1f", exerciseAdj));
+        }
+        
+        log.info("[INSULIN]   ═════════════════════════════════");
+        log.info("[INSULIN]   FINAL DOSE         : {} units", String.format("%.1f", finalDose));
+    }
+
+    public void insulinCalcWarning(String warning) {
+        log.warn("[INSULIN] ⚠️ WARNING: {}", warning);
+    }
+
+    public void insulinCalcComplete(float finalDose, float roundedDose, long timeMs) {
+        log.info("--------------------------------------------------------------------------------");
+        log.info("[INSULIN] CALCULATION COMPLETE");
+        log.info("--------------------------------------------------------------------------------");
+        log.info("[INSULIN] Raw Dose     : {} units", String.format("%.2f", finalDose));
+        log.info("[INSULIN] Rounded Dose : {} units", String.format("%.1f", roundedDose));
+        log.info("[INSULIN] Time         : {}ms", timeMs);
+        log.info("--------------------------------------------------------------------------------");
+        log.info("");
+    }
+
+    public void insulinCalcError(String error) {
+        log.error("[INSULIN] ❌ CALCULATION FAILED: {}", error);
+    }
 }
