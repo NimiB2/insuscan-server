@@ -9,6 +9,7 @@ import com.insuscan.data.UserEntity;
 import com.insuscan.enums.MealStatus;
 import com.insuscan.exception.InsuScanInvalidInputException;
 import com.insuscan.exception.InsuScanNotFoundException;
+import com.insuscan.util.ApiLogger;
 import com.insuscan.util.InputValidators;
 import com.insuscan.util.MealIdGenerator;
 import com.insuscan.util.PortionEstimator;
@@ -28,11 +29,13 @@ public class ScanServiceImpl implements ScanService {
 
     private final ImageAnalysisService imageAnalysisService;
     private final NutritionDataService nutritionDataService;
+    private final SemanticMatchingService semanticMatchingService; // <-- NEW JUDGE
     private final MealRepository mealRepository;
     private final UserRepository userRepository;
     private final MealConverter mealConverter;
     private final MealIdGenerator mealIdGenerator;
     private final PortionEstimator portionEstimator;
+    private final ApiLogger apiLogger;
 
     @Value("${spring.application.name}")
     private String systemId;
@@ -42,18 +45,22 @@ public class ScanServiceImpl implements ScanService {
     public ScanServiceImpl(
             ImageAnalysisService imageAnalysisService,
             NutritionDataService nutritionDataService,
+            SemanticMatchingService semanticMatchingService, // <-- Inject Judge
             MealRepository mealRepository,
             UserRepository userRepository,
             MealConverter mealConverter,
             MealIdGenerator mealIdGenerator,
-            PortionEstimator portionEstimator) {
+            PortionEstimator portionEstimator,
+            ApiLogger apiLogger) {
         this.imageAnalysisService = imageAnalysisService;
         this.nutritionDataService = nutritionDataService;
+        this.semanticMatchingService = semanticMatchingService;
         this.mealRepository = mealRepository;
         this.userRepository = userRepository;
         this.mealConverter = mealConverter;
         this.mealIdGenerator = mealIdGenerator;
         this.portionEstimator = portionEstimator;
+        this.apiLogger = apiLogger;
     }
 
     @Override
@@ -70,29 +77,37 @@ public class ScanServiceImpl implements ScanService {
         UserIdBoundary userId = request.getUserId();
         String userDocId = userId.getSystemId() + "_" + userId.getEmail();
 
+        // Start timing and logging
+        long scanStartTime = System.currentTimeMillis();
+        apiLogger.scanStart(
+            userId.getEmail(),
+            request.getImageBase64() != null || request.getImageUrl() != null,
+            estimatedWeightGrams
+        );
+
         // Verify user exists
         UserEntity user = userRepository.findById(userDocId)
             .orElseThrow(() -> new InsuScanNotFoundException(
                 "User not found: " + userId.getEmail()));
 
-        log.info("Starting scan for user: {}", userId.getEmail());
+        log.info("Starting MEDICAL-GRADE scan for user: {}", userId.getEmail());
 
-        // Step 1: Analyze image
+        // Step 1: Analyze image (Medical Vision)
+        apiLogger.scanStep(1, "ANALYZING IMAGE (MEDICAL VISION)");
         FoodRecognitionResult visionResult = analyzeImage(request);
+        
         if (!visionResult.isSuccess()) {
-            log.warn("Vision analysis failed: {}", visionResult.getErrorMessage());
+            apiLogger.scanFailed("VISION", visionResult.getErrorMessage());
             return createFailedMeal(userDocId, request.getImageUrl());
         }
 
-        log.info("Vision detected {} food items", visionResult.getDetectedFoods().size());
-
-        // Treat "0 detected foods" as a failed analysis; otherwise we end up saving misleading 0g-carb meals.
         if (visionResult.getDetectedFoods().isEmpty()) {
-            log.warn("Vision returned 0 detected foods. Saving FAILED meal stub for user: {}", userId.getEmail());
+            apiLogger.scanFailed("VISION", "0 foods detected");
             return createFailedMeal(userDocId, request.getImageUrl());
         }
 
-        // Step 2: Calculate portion sizes using smart distribution
+        // Step 2: Calculate portion sizes (Logic remains same)
+        apiLogger.scanStep(2, "CALCULATING PORTION SIZES");
         List<PortionEstimator.FoodItem> portionItems = new ArrayList<>();
         float totalVisionPortions = 0f;
         
@@ -108,89 +123,105 @@ public class ScanServiceImpl implements ScanService {
             }
         }
 
-        // Determine total weight to distribute
         Float totalWeightToDistribute = estimatedWeightGrams;
         if (totalWeightToDistribute == null) {
-            // If vision provided total, use it; otherwise estimate from food types
-            if (totalVisionPortions > 0) {
-                totalWeightToDistribute = totalVisionPortions;
-                log.info("Using vision-estimated total weight: {}g", totalWeightToDistribute);
-            } else {
-                // Estimate total from food types
-                totalWeightToDistribute = estimateTotalWeightFromFoodTypes(portionItems);
-                log.info("Estimated total weight from food types: {}g", totalWeightToDistribute);
-            }
+            totalWeightToDistribute = (totalVisionPortions > 0) 
+                ? totalVisionPortions 
+                : estimateTotalWeightFromFoodTypes(portionItems);
         }
 
-        // Use smart portion distribution
         Map<String, Float> distributedPortions = portionEstimator.distributePortions(
                 portionItems, totalWeightToDistribute);
 
-        // Step 3: Get nutrition data and calculate carbs
+        // Step 3: Get nutrition data (INTEGRATING THE JUDGE)
+        apiLogger.scanStep(3, "SEMANTIC NUTRITION MATCHING");
         List<MealEntity.FoodItem> foodItems = new ArrayList<>();
         float totalCarbs = 0f;
 
         for (FoodRecognitionResult.RecognizedFoodItem detected : visionResult.getDetectedFoods()) {
-            NutritionInfo nutrition = nutritionDataService.getNutritionInfo(detected.getName());
             
+            // --- NEW LOGIC START ---
+            NutritionInfo finalNutrition = null;
+            
+            // A. Fetch Candidates (Step 2 - Retrieval)
+            List<NutritionInfo> candidates = nutritionDataService.searchCandidates(detected.getBaseIngredient());
+            
+            if (!candidates.isEmpty()) {
+                // B. The Judge Decides (Step 3 - Semantic Matching)
+                String bestFdcId = semanticMatchingService.findBestMatch(detected, candidates);
+                
+                // C. Get Full Data for Winner
+                if (bestFdcId != null) {
+                    finalNutrition = nutritionDataService.getNutritionInfo(bestFdcId); // Fetch by ID specifically
+                } else {
+                    finalNutrition = candidates.get(0); // Fallback to first candidate
+                }
+            } else {
+                // Fallback: If search fails, try old direct lookup or fallback map
+                finalNutrition = nutritionDataService.getNutritionInfo(detected.getName());
+            }
+            // --- NEW LOGIC END ---
+
             MealEntity.FoodItem item = new MealEntity.FoodItem();
             item.setName(detected.getName());
             item.setConfidence(NumberUtils.roundTo2Decimals(detected.getConfidence()));
             
-            // Get portion from smart distribution, or estimate individually
+            // Add safety flags to the DB entity for future reference
+            if (detected.getRiskFlags() != null && !detected.getRiskFlags().isEmpty()) {
+                item.setNote("Risks: " + String.join(", ", detected.getRiskFlags())); 
+            }
+            
             Float itemWeight = distributedPortions.get(detected.getName());
             if (itemWeight == null) {
-                // Fallback: estimate individually
                 itemWeight = portionEstimator.estimatePortion(
                         detected.getName(), 
                         detected.getConfidence(), 
                         detected.getEstimatedPortionGrams());
             }
-            
             item.setQuantity(NumberUtils.roundTo2Decimals(itemWeight));
-            log.debug("Food: {} - Portion: {}g (confidence: {:.2f}, vision: {})", 
-                    detected.getName(), itemWeight, detected.getConfidence(),
-                    detected.getEstimatedPortionGrams() != null ? detected.getEstimatedPortionGrams() + "g" : "none");
 
-            if (nutrition.isFound()) {
-                float itemCarbs = nutrition.calculateCarbs(itemWeight);
+            if (finalNutrition != null && finalNutrition.isFound()) {
+                float itemCarbs = finalNutrition.calculateCarbs(itemWeight);
                 item.setCarbs(NumberUtils.roundTo2Decimals(itemCarbs));
-                item.setUsdaFdcId(nutrition.getFdcId());
+                item.setUsdaFdcId(finalNutrition.getFdcId());
+                
+                String source = "SEMANTIC_JUDGE";
+                if (finalNutrition.getFdcId().startsWith("fallback-")) source = "FALLBACK";
+                
+                apiLogger.carbCalculation(
+                    detected.getName(),
+                    finalNutrition.getCarbsPer100g(),
+                    itemWeight,
+                    itemCarbs,
+                    source
+                );
                 
                 totalCarbs += itemCarbs;
-                log.debug("  -> Carbs: {}g ({}g per 100g)", itemCarbs, nutrition.getCarbsPer100g());
             } else {
                 item.setCarbs(0f);
-                log.warn("No nutrition data found for: {}", detected.getName());
+                apiLogger.carbCalculationFailed(detected.getName(), "No nutrition data found");
             }
 
             foodItems.add(item);
         }
 
-        log.info("Total carbs: {}g", totalCarbs);
+        log.info("Total carbs (Calculated): {}g", totalCarbs);
 
-        // Step 4: Calculate insulin dose if user exists and has profile
+        // Step 4: Calculate insulin dose
+        apiLogger.scanStep(4, "CALCULATING INSULIN DOSE");
         Float recommendedDose = null;
         if (user != null && totalCarbs > 0) {
             try {
                 float dose = InsulinCalculator.calculateDoseForUser(totalCarbs, user);
                 recommendedDose = InsulinCalculator.roundDose(dose);
-                
-                // Check for warnings
-                String warning = InsulinCalculator.getDoseWarning(dose);
-                if (warning != null) {
-                    log.warn("Insulin dose warning for user {}: {}", userId.getEmail(), warning);
-                }
-                
-                log.info("Calculated recommended insulin dose: {} units for {}g carbs", 
-                        recommendedDose, totalCarbs);
+                log.info("Calculated recommended insulin dose: {} units", recommendedDose);
             } catch (Exception e) {
                 log.warn("Could not calculate insulin dose: {}", e.getMessage());
-                // Continue without dose - not critical for meal creation
             }
         }
 
-        // Step 3: Create meal using existing MealEntity structure
+        // Step 5: Save meal
+        apiLogger.scanStep(5, "SAVING MEAL TO DATABASE");
         MealEntity meal = new MealEntity();
         meal.setId(mealIdGenerator.generateMealId(systemId));
         meal.setUserId(userDocId);
@@ -200,25 +231,18 @@ public class ScanServiceImpl implements ScanService {
         meal.setRecommendedDose(recommendedDose);
         meal.setStatus(MealStatus.PENDING);
         
-        // Set portion analysis if provided
-        if (estimatedWeightGrams != null) {
-            meal.setEstimatedWeight(estimatedWeightGrams);
-        }
-        if (portionConfidence != null) {
-            meal.setAnalysisConfidence(portionConfidence);
-        }
-
-        // scannedAt is set in MealEntity constructor
+        if (estimatedWeightGrams != null) meal.setEstimatedWeight(estimatedWeightGrams);
+        if (portionConfidence != null) meal.setAnalysisConfidence(portionConfidence);
 
         MealEntity saved = mealRepository.save(meal);
         log.info("Meal saved: {}", meal.getId());
 
+        long totalTime = System.currentTimeMillis() - scanStartTime;
+        apiLogger.scanComplete(foodItems.size(), totalCarbs, recommendedDose, totalTime);
+
         return mealConverter.toBoundary(saved);
     }
 
-    /**
-     * Estimate total weight from food types when no user/vision estimate available
-     */
     private float estimateTotalWeightFromFoodTypes(List<PortionEstimator.FoodItem> items) {
         float total = 0f;
         for (PortionEstimator.FoodItem item : items) {
@@ -229,18 +253,13 @@ public class ScanServiceImpl implements ScanService {
     }
 
     private void validateScanRequest(ScanRequestBoundary request) {
-        if (request == null) {
-            throw new InsuScanInvalidInputException("Scan request cannot be null");
-        }
-        if (request.getUserId() == null) {
-            throw new InsuScanInvalidInputException("User ID is required");
-        }
+        if (request == null) throw new InsuScanInvalidInputException("Scan request cannot be null");
+        if (request.getUserId() == null) throw new InsuScanInvalidInputException("User ID is required");
         InputValidators.validateSystemId(request.getUserId().getSystemId());
         InputValidators.validateEmail(request.getUserId().getEmail());
 
         if (request.getImageBase64() == null && request.getImageUrl() == null) {
-            throw new InsuScanInvalidInputException(
-                "Either imageBase64 or imageUrl must be provided");
+            throw new InsuScanInvalidInputException("Image data required");
         }
     }
 
@@ -252,7 +271,6 @@ public class ScanServiceImpl implements ScanService {
         }
     }
 
-    // Create meal for failed analysis - still saves the attempt
     private MealBoundary createFailedMeal(String userDocId, String imageUrl) {
         MealEntity meal = new MealEntity();
         String mealUuid = UUID.randomUUID().toString();
@@ -262,8 +280,6 @@ public class ScanServiceImpl implements ScanService {
         meal.setFoodItems(new ArrayList<>());
         meal.setTotalCarbs(0f);
         meal.setStatus(MealStatus.FAILED);
-        // User can manually add food items later
-
         MealEntity saved = mealRepository.save(meal);
         return mealConverter.toBoundary(saved);
     }
