@@ -35,3 +35,4 @@ Thumbs.db
 test-results/
 test-output/
 bin/
+_backup_test/

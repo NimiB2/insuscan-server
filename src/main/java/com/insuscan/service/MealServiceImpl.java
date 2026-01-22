@@ -18,6 +18,8 @@ import com.insuscan.exception.InsuScanUnauthorizedException;
 import com.insuscan.util.InsulinCalculator;
 import com.insuscan.util.InputValidators;
 
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.Date;
 import java.util.List;
 import java.util.Optional;
@@ -264,5 +266,24 @@ public class MealServiceImpl implements MealService {
             throw new InsuScanUnauthorizedException(
                 "User does not have admin privileges: " + email);
         }
+    }
+    
+    @Override
+    public List<MealBoundary> getMealsByDateRange(String systemId, String email,
+                                                   LocalDate from, LocalDate to,
+                                                   int page, int size) {
+        InputValidators.validateSystemId(systemId);
+        InputValidators.validateEmail(email);
+        
+        String userId = systemId + "_" + email;
+        
+        // Convert dates to timestamps
+        Date fromDate = Date.from(from.atStartOfDay(ZoneId.systemDefault()).toInstant());
+        Date toDate = Date.from(to.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant());
+        
+        return mealRepository.findByUserIdAndDateRange(userId, fromDate, toDate, page, size)
+            .stream()
+            .map(mealConverter::toBoundary)
+            .collect(Collectors.toList());
     }
 }

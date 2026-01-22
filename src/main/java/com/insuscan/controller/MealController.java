@@ -1,5 +1,7 @@
 package com.insuscan.controller;
 
+import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.format.annotation.DateTimeFormat.ISO;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 
@@ -8,6 +10,7 @@ import com.insuscan.boundary.MealBoundary;
 import com.insuscan.exception.InsuScanNotFoundException;
 import com.insuscan.service.MealService;
 
+import java.time.LocalDate;
 import java.util.List;
 
 @RestController
@@ -98,6 +101,17 @@ public class MealController {
             @PathVariable("systemId") String systemId,
             @PathVariable("mealId") String mealId) {
         return mealService.completeMeal(systemId, mealId);
+    }
+    
+    @GetMapping(path = "/user/{systemId}/{email}/by-date")
+    public List<MealBoundary> getMealsByDateRange(
+            @PathVariable String systemId,
+            @PathVariable String email,
+            @RequestParam @DateTimeFormat(iso = ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = ISO.DATE) LocalDate to,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return mealService.getMealsByDateRange(systemId, email, from, to, page, size);
     }
 
     // PUT /meals/{systemId}/{mealId}/portion - Update portion analysis
