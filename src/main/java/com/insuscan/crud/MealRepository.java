@@ -380,6 +380,24 @@ public class MealRepository {
         
         return entity;
     }
+    
+    public List<MealEntity> findByUserIdAndDateRange(String userId, Date from, Date to, 
+                                                       int page, int size) {
+        try {
+            Query query = firestore.collection(COLLECTION_NAME)
+                .whereEqualTo("userId", userId)
+                .whereGreaterThanOrEqualTo("scannedAt", from)
+                .whereLessThan("scannedAt", to)
+                .orderBy("scannedAt", Query.Direction.DESCENDING)
+                .offset(page * size)
+                .limit(size);
+            
+            return executeQuery(query);
+        } catch (Exception e) {
+            log.error("Error finding meals by date range", e);
+            throw new RuntimeException("Failed to find meals by date range", e);
+        }
+    }
 
     private MealEntity.FoodItem mapToFoodItem(Map<String, Object> map) {
         MealEntity.FoodItem item = new MealEntity.FoodItem();

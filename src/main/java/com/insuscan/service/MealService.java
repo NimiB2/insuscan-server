@@ -3,6 +3,7 @@ package com.insuscan.service;
 import com.insuscan.boundary.FoodItemBoundary;
 import com.insuscan.boundary.MealBoundary;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
@@ -48,4 +49,8 @@ public interface MealService {
 
     // Get meal count for user
     long getMealCountForUser(String systemId, String email);
+    
+    List<MealBoundary> getMealsByDateRange(String systemId, String email, 
+            LocalDate from, LocalDate to, 
+            int page, int size);
 }

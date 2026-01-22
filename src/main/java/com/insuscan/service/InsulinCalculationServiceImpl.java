@@ -148,10 +148,27 @@ public class InsulinCalculationServiceImpl implements InsulinCalculationService 
         long totalTime = System.currentTimeMillis() - startTime;
         apiLogger.insulinCalcComplete(finalDose, roundedDose, totalTime);
 
-        // Build response (same as before)
+     // Build response
         InsulinCalculationBoundary response = new InsulinCalculationBoundary();
-        // ... rest of the response building code ...
-        
+        response.setTotalCarbs(totalCarbs);
+        response.setCurrentGlucose(currentGlucose != null ? currentGlucose.floatValue() : null);
+        response.setCarbDose(carbDose);
+        response.setCorrectionDose(correctionDose);
+        response.setTotalRecommendedDose(roundedDose);
+
+        // Calculation params used
+        response.setInsulinCarbRatioUsed(ratioDisplay);
+        response.setCorrectionFactorUsed(correctionFactor);
+        response.setTargetGlucoseUsed(targetGlucose);
+
+        // Adjustment breakdown (for UI display)
+        response.setSickAdjustment(sickAdj);
+        response.setStressAdjustment(stressAdj);
+        response.setExerciseAdjustment(exerciseAdj);
+
+        // Warning if any
+        response.setWarning(warning);
+
         return response;
     }
 

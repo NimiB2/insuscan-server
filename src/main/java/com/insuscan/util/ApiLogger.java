@@ -346,4 +346,42 @@ public class ApiLogger {
     public void insulinCalcError(String error) {
         log.error("[INSULIN] ❌ CALCULATION FAILED: {}", error);
     }
+    
+    
+ // ===================== USER PROFILE DEBUG =====================
+
+    public void logUserUpdateIncoming(String email, com.insuscan.boundary.UserBoundary update) {
+        log.info("");
+        log.info("--------------------------------------------------------------------------------");
+        log.info("[USER] 📥 INCOMING PROFILE UPDATE");
+        log.info("--------------------------------------------------------------------------------");
+        log.info("[USER] Email      : {}", email);
+        log.info("[USER] Name       : {}", update.getUserName());
+        log.info("[USER] --- Personal ---");
+        log.info("[USER] Age        : {}", update.getAge());
+        log.info("[USER] Gender     : {}", update.getGender());
+        log.info("[USER] Pregnant   : {}", update.getPregnant());
+        log.info("[USER] --- Medical ---");
+        log.info("[USER] Type       : {}", update.getDiabetesType());
+        log.info("[USER] ICR (Ratio): {}", update.getInsulinCarbRatio());
+        log.info("[USER] ISF        : {}", update.getCorrectionFactor());
+        log.info("[USER] Target     : {}", update.getTargetGlucose());
+        log.info("[USER] Active Ins : {}", update.getActiveInsulinTime());
+        log.info("[USER] --- Settings ---");
+        log.info("[USER] Syringe    : {}", update.getSyringeType());
+        log.info("[USER] Rounding   : {}", update.getDoseRounding());
+        log.info("--------------------------------------------------------------------------------");
+    }
+
+    public void logUserEntityBeforeSave(com.insuscan.data.UserEntity entity) {
+        log.info("[USER] 💾 SAVING TO FIRESTORE (ENTITY STATE)");
+        log.info("[USER] ID         : {}", entity.getId());
+        log.info("[USER] ICR (Float): {}", entity.getInsulinCarbRatio()); // Critical check: String -> Float conversion
+        log.info("[USER] ISF        : {}", entity.getCorrectionFactor());
+        log.info("[USER] Age        : {}", entity.getAge());
+        log.info("[USER] Sick Adj   : {}", entity.getSickDayAdjustment());
+        log.info("[USER] UpdatedAt  : {}", entity.getUpdatedAt());
+        log.info("--------------------------------------------------------------------------------");
+        log.info("");
+    }
 }
