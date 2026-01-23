@@ -10,10 +10,10 @@ import java.util.List;
 public class InsulinCalculator {
 
     // Defaults when user profile is incomplete
-    private static final float DEFAULT_INSULIN_CARB_RATIO = 10f;
-    private static final float DEFAULT_CORRECTION_FACTOR = 50f;
-    private static final int DEFAULT_TARGET_GLUCOSE = 100;
-
+	// Use centralized defaults
+	private static final float DEFAULT_INSULIN_CARB_RATIO = InsulinDefaults.INSULIN_CARB_RATIO;
+	private static final float DEFAULT_CORRECTION_FACTOR = InsulinDefaults.CORRECTION_FACTOR;
+	private static final int DEFAULT_TARGET_GLUCOSE = InsulinDefaults.TARGET_GLUCOSE;
     /**
      * Main calculation - returns full breakdown for display
      */
