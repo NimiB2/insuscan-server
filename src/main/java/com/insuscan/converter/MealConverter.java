@@ -107,7 +107,9 @@ public class MealConverter {
         boundary.setScannedAt(entity.getScannedAt());
         boundary.setConfirmedAt(entity.getConfirmedAt());
         boundary.setCompletedAt(entity.getCompletedAt());
-
+        boundary.setWasSickMode(entity.getWasSickMode());
+        boundary.setWasStressMode(entity.getWasStressMode());
+        
         return boundary;
     }
 
@@ -178,6 +180,9 @@ public class MealConverter {
         entity.setScannedAt(boundary.getScannedAt());
         entity.setConfirmedAt(boundary.getConfirmedAt());
         entity.setCompletedAt(boundary.getCompletedAt());
+        
+        entity.setWasSickMode(boundary.getWasSickMode());
+        entity.setWasStressMode(boundary.getWasStressMode());
 
         return entity;
     }
@@ -217,7 +222,7 @@ public class MealConverter {
     }
 
     // Convert FoodItem boundary to entity
-    private MealEntity.FoodItem foodItemToEntity(FoodItemBoundary boundary) {
+    public MealEntity.FoodItem foodItemToEntity(FoodItemBoundary boundary) {
         if (boundary == null) {
             return null;
         }
@@ -229,7 +234,7 @@ public class MealConverter {
         item.setCarbs(boundary.getCarbs());
         item.setConfidence(boundary.getConfidence());
         item.setUsdaFdcId(boundary.getUsdaFdcId());
-
+        item.setNote(boundary.getNote());
         return item;
     }
 

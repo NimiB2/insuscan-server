@@ -327,6 +327,8 @@ public class MealRepository {
         map.put("scannedAt", entity.getScannedAt());
         map.put("confirmedAt", entity.getConfirmedAt());
         map.put("completedAt", entity.getCompletedAt());
+        map.put("wasSickMode", entity.getWasSickMode());
+        map.put("wasStressMode", entity.getWasStressMode());
         
         return map;
     }
@@ -377,6 +379,8 @@ public class MealRepository {
         entity.setScannedAt(doc.getDate("scannedAt"));
         entity.setConfirmedAt(doc.getDate("confirmedAt"));
         entity.setCompletedAt(doc.getDate("completedAt"));
+        entity.setWasSickMode(doc.getBoolean("wasSickMode"));
+        entity.setWasStressMode(doc.getBoolean("wasStressMode"));
         
         return entity;
     }

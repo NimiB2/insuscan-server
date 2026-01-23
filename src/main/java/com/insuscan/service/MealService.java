@@ -23,7 +23,9 @@ public interface MealService {
     MealBoundary updateFoodItems(String systemId, String mealId, List<FoodItemBoundary> foodItems);
 
     // Confirm meal and calculate insulin dose
-    MealBoundary confirmMeal(String systemId, String mealId, Float actualDose);
+    MealBoundary confirmMeal(String systemId, String mealId, Float actualDose,
+            Integer currentGlucose, String activityLevel,
+            Boolean sickMode, Boolean stressMode);
 
     // Mark meal as completed (after injection)
     MealBoundary completeMeal(String systemId, String mealId);

@@ -15,7 +15,9 @@ import com.insuscan.enums.UserRole;
 import com.insuscan.exception.InsuScanInvalidInputException;
 import com.insuscan.exception.InsuScanNotFoundException;
 import com.insuscan.exception.InsuScanUnauthorizedException;
-import com.insuscan.util.InsulinCalculator;
+import com.insuscan.calculation.InsulinCalculator;
+import com.insuscan.calculation.CalculationParams;
+import com.insuscan.calculation.CalculationResult;
 import com.insuscan.util.InputValidators;
 
 import java.time.LocalDate;
@@ -94,7 +96,7 @@ public class MealServiceImpl implements MealService {
         // Convert food items and set on entity
         if (foodItems != null) {
             List<MealEntity.FoodItem> items = foodItems.stream()
-                .map(this::convertFoodItemToEntity)
+                .map(mealConverter::foodItemToEntity)
                 .collect(Collectors.toList());
             entity.setFoodItems(items);
         }
@@ -107,43 +109,85 @@ public class MealServiceImpl implements MealService {
     }
 
     @Override
-    public MealBoundary confirmMeal(String systemId, String mealId, Float actualDose) {
-        InputValidators.validateSystemId(systemId);
-        InputValidators.validateNotEmpty(mealId, "mealId");
+	public MealBoundary confirmMeal(String systemId, String mealId, Float actualDose,
+                                Integer currentGlucose, String activityLevel,
+                                Boolean sickMode, Boolean stressMode) {
+    InputValidators.validateSystemId(systemId);
+    InputValidators.validateNotEmpty(mealId, "mealId");
 
-        String id = systemId + "_" + mealId;
-        MealEntity meal = mealRepository.findById(id)
-            .orElseThrow(() -> new InsuScanNotFoundException("Meal not found: " + mealId));
+    String id = systemId + "_" + mealId;
+    MealEntity meal = mealRepository.findById(id)
+        .orElseThrow(() -> new InsuScanNotFoundException("Meal not found: " + mealId));
 
-        // Get user for insulin calculation
-        UserEntity user = userRepository.findById(meal.getUserId())
-            .orElseThrow(() -> new InsuScanNotFoundException("User not found for meal"));
+    // Get user profile for calculation params
+    UserEntity user = userRepository.findById(meal.getUserId())
+        .orElseThrow(() -> new InsuScanNotFoundException("User not found for meal"));
 
-        // Calculate recommended dose based on total carbs and user profile
-        Float totalCarbs = meal.getTotalCarbs();
-        if (totalCarbs != null && totalCarbs > 0) {
-            float recommendedDose = InsulinCalculator.calculateDoseForUser(totalCarbs, user);
-            meal.setRecommendedDose(InsulinCalculator.roundDose(recommendedDose));
+    // Store user context at meal time
+    meal.setCurrentGlucose(currentGlucose);
+    meal.setActivityLevel(activityLevel);
+    meal.setWasSickMode(sickMode != null && sickMode);
+    meal.setWasStressMode(stressMode != null && stressMode);
+
+    // Calculate dose using full calculator
+    Float totalCarbs = meal.getTotalCarbs();
+    if (totalCarbs != null && totalCarbs > 0) {
+        
+        // Get adjustment percentages (only if mode is active)
+        Integer sickPercent = (sickMode != null && sickMode) 
+            ? user.getSickDayAdjustment() : 0;
+        Integer stressPercent = (stressMode != null && stressMode) 
+            ? user.getStressAdjustment() : 0;
+
+        InsulinCalculator calculator = new InsulinCalculator();
+        CalculationParams params = new CalculationParams.Builder()
+            .withTotalCarbs(totalCarbs)
+            .withInsulinCarbRatio(user.getInsulinCarbRatio())  // uses new Float overload
+            .withCorrectionFactor(user.getCorrectionFactor())
+            .withTargetGlucose(user.getTargetGlucose())
+            .withCurrentGlucose(currentGlucose)
+            .withActivityLevel(activityLevel)
+            .withSickDayPercent(sickPercent)
+            .withStressPercent(stressPercent)
+            .withLightExercisePercent(user.getLightExerciseAdjustment())
+            .withIntenseExercisePercent(user.getIntenseExerciseAdjustment())
+            .build();
+
+        CalculationResult result = calculator.calculate(params);
+
+        // Store full breakdown for history display
+        meal.setCarbDose(result.getCarbDose());
+        meal.setCorrectionDose(result.getCorrectionDose());
+        meal.setSickAdjustment(result.getSickAdjustment());
+        meal.setStressAdjustment(result.getStressAdjustment());
+        meal.setExerciseAdjustment(result.getExerciseAdjustment());
+        meal.setRecommendedDose(result.getRoundedDose());
+        meal.setProfileComplete(result.isProfileComplete());
+        
+        // Warning message if profile incomplete
+        if (!result.isProfileComplete()) {
+            meal.setInsulinMessage("Profile incomplete - using default values");
         }
-
-        // Set actual dose if provided, otherwise use recommended
-        if (actualDose != null) {
-            if (!InputValidators.isValidInsulinDose(actualDose)) {
-                throw new InsuScanInvalidInputException(
-                    "Invalid insulin dose: " + actualDose + ". Must be between 0 and 100 units.");
-            }
-            meal.setActualDose(actualDose);
-        } else if (meal.getRecommendedDose() != null) {
-            meal.setActualDose(meal.getRecommendedDose());
-        }
-
-        // Update status and timestamp
-        meal.setStatus(MealStatus.CONFIRMED);
-        meal.setConfirmedAt(new Date());
-
-        MealEntity saved = mealRepository.save(meal);
-        return mealConverter.toBoundary(saved);
     }
+
+    // Set actual dose (user override or recommended)
+    if (actualDose != null) {
+        if (!InputValidators.isValidInsulinDose(actualDose)) {
+            throw new InsuScanInvalidInputException(
+                "Invalid insulin dose: " + actualDose + ". Must be between 0 and 100 units.");
+        }
+        meal.setActualDose(actualDose);
+    } else if (meal.getRecommendedDose() != null) {
+        meal.setActualDose(meal.getRecommendedDose());
+    }
+
+    // Update status and timestamp
+    meal.setStatus(MealStatus.CONFIRMED);
+    meal.setConfirmedAt(new Date());
+
+    MealEntity saved = mealRepository.save(meal);
+    return mealConverter.toBoundary(saved);
+}
 
     @Override
     public MealBoundary completeMeal(String systemId, String mealId) {
@@ -241,17 +285,6 @@ public class MealServiceImpl implements MealService {
         return mealRepository.countByUserId(userId);
     }
 
-    // Convert FoodItemBoundary to entity FoodItem
-    private MealEntity.FoodItem convertFoodItemToEntity(FoodItemBoundary boundary) {
-        MealEntity.FoodItem item = new MealEntity.FoodItem();
-        item.setName(boundary.getName());
-        item.setNameHebrew(boundary.getNameHebrew());
-        item.setQuantity(boundary.getQuantity());
-        item.setCarbs(boundary.getCarbs());
-        item.setConfidence(boundary.getConfidence());
-        item.setUsdaFdcId(boundary.getUsdaFdcId());
-        return item;
-    }
 
     // Verify admin access
     private void verifyAdminAccess(String systemId, String email) {

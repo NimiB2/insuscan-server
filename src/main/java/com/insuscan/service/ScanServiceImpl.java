@@ -14,7 +14,8 @@ import com.insuscan.util.InputValidators;
 import com.insuscan.util.MealIdGenerator;
 import com.insuscan.util.PortionEstimator;
 import com.insuscan.util.NumberUtils;
-import com.insuscan.util.InsulinCalculator;
+import com.insuscan.calculation.InsulinCalculator;
+import com.insuscan.calculation.CalculationParams;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -219,10 +220,9 @@ public class ScanServiceImpl implements ScanService {
             apiLogger.insulinCalcStart(totalCarbs, userEmail);
 
             // Build params from user profile - handles null checks
-            InsulinCalculator.CalculationParams params =
-                new InsulinCalculator.CalculationParams.Builder()
-                    .fromUser(user)
-                    .build();
+            CalculationParams params = new CalculationParams.Builder()
+            	    .fromUser(user)
+            	    .build();
 
             // Log profile status
             apiLogger.insulinCalcProfileStatus(params.isProfileComplete(), params.getMissingFields());

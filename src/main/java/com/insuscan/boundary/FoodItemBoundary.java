@@ -8,6 +8,7 @@ public class FoodItemBoundary {
     private Float carbs;            // grams
     private Float confidence;       // 0.0 to 1.0
     private String usdaFdcId;       // USDA FoodData Central ID
+    private String note;
     
     public FoodItemBoundary() {}
 
@@ -58,6 +59,14 @@ public class FoodItemBoundary {
 
     public void setUsdaFdcId(String usdaFdcId) {
         this.usdaFdcId = usdaFdcId;
+    }
+    
+    public String getNote() {
+        return note;
+    }
+
+    public void setNote(String note) {
+        this.note = note;
     }
 
     @Override

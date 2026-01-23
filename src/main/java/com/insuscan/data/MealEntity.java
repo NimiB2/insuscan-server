@@ -50,6 +50,9 @@ public class MealEntity {
     private boolean profileComplete;
     private List<String> missingProfileFields;
     private String insulinMessage;
+    
+    private Boolean wasSickMode;
+    private Boolean wasStressMode;
 
     public MealEntity() {
         this.scannedAt = new Date();
@@ -183,6 +186,12 @@ public class MealEntity {
 
     public String getInsulinMessage() { return insulinMessage; }
     public void setInsulinMessage(String insulinMessage) { this.insulinMessage = insulinMessage; }
+    
+    public Boolean getWasSickMode() { return wasSickMode; }
+    public void setWasSickMode(Boolean wasSickMode) { this.wasSickMode = wasSickMode; }
+
+    public Boolean getWasStressMode() { return wasStressMode; }
+    public void setWasStressMode(Boolean wasStressMode) { this.wasStressMode = wasStressMode; }
     
     @Override
     public String toString() {
