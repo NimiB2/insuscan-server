@@ -5,7 +5,9 @@ import com.insuscan.boundary.UserIdBoundary;
 import com.insuscan.crud.UserRepository;
 import com.insuscan.data.UserEntity;
 import com.insuscan.util.ApiLogger;
-import com.insuscan.util.InsulinCalculator;
+import com.insuscan.calculation.InsulinCalculator;
+import com.insuscan.calculation.InsulinDefaults;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -28,19 +30,15 @@ public class InsulinCalculationServiceImpl implements InsulinCalculationService 
     private String systemId;
 
     // Default values when user profile is missing
-    private static final float DEFAULT_INSULIN_CARB_RATIO = 0.1f;  // 1:10
-    private static final float DEFAULT_CORRECTION_FACTOR = 50f;     // 50 mg/dL per unit
-    private static final int DEFAULT_TARGET_GLUCOSE = 100;          // 100 mg/dL
-    
-    // Default adjustment percentages
-    private static final int DEFAULT_SICK_ADJUSTMENT = 15;          // +15%
-    private static final int DEFAULT_STRESS_ADJUSTMENT = 10;        // +10%
-    private static final int DEFAULT_LIGHT_EXERCISE_ADJ = 15;       // -15%
-    private static final int DEFAULT_INTENSE_EXERCISE_ADJ = 30;     // -30%
-
-    // Safety thresholds
-    private static final int LOW_GLUCOSE_THRESHOLD = 70;            // mg/dL
-    private static final int HIGH_GLUCOSE_THRESHOLD = 250;          // mg/dL
+    private static final float DEFAULT_INSULIN_CARB_RATIO = 1f / InsulinDefaults.INSULIN_CARB_RATIO;
+    private static final float DEFAULT_CORRECTION_FACTOR = InsulinDefaults.CORRECTION_FACTOR;
+    private static final int DEFAULT_TARGET_GLUCOSE = InsulinDefaults.TARGET_GLUCOSE;
+    private static final int DEFAULT_SICK_ADJUSTMENT = InsulinDefaults.SICK_DAY_PERCENT;
+    private static final int DEFAULT_STRESS_ADJUSTMENT = InsulinDefaults.STRESS_PERCENT;
+    private static final int DEFAULT_LIGHT_EXERCISE_ADJ = InsulinDefaults.LIGHT_EXERCISE_PERCENT;
+    private static final int DEFAULT_INTENSE_EXERCISE_ADJ = InsulinDefaults.INTENSE_EXERCISE_PERCENT;
+    private static final int LOW_GLUCOSE_THRESHOLD = InsulinDefaults.LOW_GLUCOSE_THRESHOLD;
+    private static final int HIGH_GLUCOSE_THRESHOLD = InsulinDefaults.HIGH_GLUCOSE_THRESHOLD;
 
     public InsulinCalculationServiceImpl(UserRepository userRepository, ApiLogger apiLogger) {
         this.userRepository = userRepository;

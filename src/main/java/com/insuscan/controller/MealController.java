@@ -89,8 +89,14 @@ public class MealController {
     public MealBoundary confirmMeal(
             @PathVariable("systemId") String systemId,
             @PathVariable("mealId") String mealId,
-            @RequestParam(value = "actualDose", required = false) Float actualDose) {
-        return mealService.confirmMeal(systemId, mealId, actualDose);
+            @RequestParam(value = "actualDose", required = false) Float actualDose,
+            @RequestParam(value = "currentGlucose", required = false) Integer currentGlucose,
+            @RequestParam(value = "activityLevel", required = false) String activityLevel,
+            @RequestParam(value = "sickMode", required = false) Boolean sickMode,
+            @RequestParam(value = "stressMode", required = false) Boolean stressMode) {
+        return mealService.confirmMeal(systemId, mealId, actualDose, 
+                                       currentGlucose, activityLevel, 
+                                       sickMode, stressMode);
     }
 
     // PUT /meals/{systemId}/{mealId}/complete - Mark meal as completed
