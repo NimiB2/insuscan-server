@@ -108,15 +108,15 @@ public class MealController {
             @PathVariable("mealId") String mealId) {
         return mealService.completeMeal(systemId, mealId);
     }
-    
-    @GetMapping(path = "/user/{systemId}/{email}/by-date")
+       
+    @GetMapping(path = "/user/{systemId}/{email:.+}/by-date")
     public List<MealBoundary> getMealsByDateRange(
-            @PathVariable String systemId,
-            @PathVariable String email,
-            @RequestParam @DateTimeFormat(iso = ISO.DATE) LocalDate from,
-            @RequestParam @DateTimeFormat(iso = ISO.DATE) LocalDate to,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
+            @PathVariable("systemId") String systemId,
+            @PathVariable("email") String email,
+            @RequestParam("from") @DateTimeFormat(iso = ISO.DATE) LocalDate from,
+            @RequestParam("to") @DateTimeFormat(iso = ISO.DATE) LocalDate to,
+            @RequestParam(value = "page", defaultValue = "0") int page,
+            @RequestParam(value = "size", defaultValue = "20") int size) {
         return mealService.getMealsByDateRange(systemId, email, from, to, page, size);
     }
 
