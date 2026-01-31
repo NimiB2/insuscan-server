@@ -248,6 +248,7 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
             return """
                     You are a defensive food analysis AI.
                     Identify food items strictly based on visual evidence.
+                    CRITICAL: If the image does not contain any food, return { "items": [] }.
                     Return JSON: { "items": [{ "name": "string", "confidence": 0.5, "estimatedPortionGrams": 100 }] }
                     """;
         }
@@ -255,7 +256,12 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
         // --- MEDICAL GRADE PROMPT ---
         return """
                 You are a Clinical Food Safety AI for a diabetes management system.
-                Your goal is to analyze food not just for identity, but for metabolic impact.
+                Your goal is to analyze food NOT just for identity, but for metabolic impact.
+
+                CRITICAL FIRST STEP: NON-FOOD DETECTION
+                - Is this image a food item or meal?
+                - IF NO (e.g. person, car, landscape, animal, furniture, blank screen):
+                  RETURN IMMEDIATELY: { "items": [], "warnings": ["NON_FOOD_DETECTED"] }
 
                 PROTOCOL:
                 1. EVIDENCE ONLY: Do not guess ingredients you cannot see. If a sauce is visible but unknown, flag it.
