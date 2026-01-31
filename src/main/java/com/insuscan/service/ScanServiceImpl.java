@@ -20,6 +20,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import com.insuscan.exception.NoFoodDetectedException;
 
 import java.util.*;
 
@@ -99,12 +100,12 @@ public class ScanServiceImpl implements ScanService {
         
         if (!visionResult.isSuccess()) {
             apiLogger.scanFailed("VISION", visionResult.getErrorMessage());
-            return createFailedMeal(userDocId, request.getImageUrl());
+            throw new NoFoodDetectedException(visionResult.getErrorMessage());
         }
 
         if (visionResult.getDetectedFoods().isEmpty()) {
-            apiLogger.scanFailed("VISION", "0 foods detected");
-            return createFailedMeal(userDocId, request.getImageUrl());
+            apiLogger.scanFailed("VISION", "No food items detected");
+            throw new NoFoodDetectedException("No food detected in image. Try a clearer photo.");
         }
 
         // Step 2: Calculate portion sizes (Logic remains same)
@@ -328,16 +329,16 @@ public class ScanServiceImpl implements ScanService {
         }
     }
 
-    private MealBoundary createFailedMeal(String userDocId, String imageUrl) {
-        MealEntity meal = new MealEntity();
-        String mealUuid = UUID.randomUUID().toString();
-        meal.setId(systemId + "_" + mealUuid);
-        meal.setUserId(userDocId);
-        meal.setImageUrl(imageUrl);
-        meal.setFoodItems(new ArrayList<>());
-        meal.setTotalCarbs(0f);
-        meal.setStatus(MealStatus.FAILED);
-        MealEntity saved = mealRepository.save(meal);
-        return mealConverter.toBoundary(saved);
-    }
+//    private MealBoundary createFailedMeal(String userDocId, String imageUrl) {
+//        MealEntity meal = new MealEntity();
+//        String mealUuid = UUID.randomUUID().toString();
+//        meal.setId(systemId + "_" + mealUuid);
+//        meal.setUserId(userDocId);
+//        meal.setImageUrl(imageUrl);
+//        meal.setFoodItems(new ArrayList<>());
+//        meal.setTotalCarbs(0f);
+//        meal.setStatus(MealStatus.FAILED);
+//        MealEntity saved = mealRepository.save(meal);
+//        return mealConverter.toBoundary(saved);
+//    }
 }
