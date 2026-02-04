@@ -10,49 +10,52 @@ import java.util.Optional;
 // Meal management service interface
 public interface MealService {
 
-    // Create a new meal entry (from scan)
-    MealBoundary createMeal(String userSystemId, String userEmail, String imageUrl);
+        // Create a new meal entry (from scan)
+        MealBoundary createMeal(String userSystemId, String userEmail, String imageUrl);
 
-    // Get meal by ID
-    Optional<MealBoundary> getMealById(String systemId, String mealId);
+        // Save a full meal object (Client-Initiated Save)
+        MealBoundary saveScannedMeal(String systemId, String email, MealBoundary mealBoundary);
 
-    // Get all meals for a user (with pagination)
-    List<MealBoundary> getMealsByUser(String systemId, String email, int page, int size);
+        // Get meal by ID
+        Optional<MealBoundary> getMealById(String systemId, String mealId);
 
-    // Update meal with detected food items
-    MealBoundary updateFoodItems(String systemId, String mealId, List<FoodItemBoundary> foodItems);
+        // Get all meals for a user (with pagination)
+        List<MealBoundary> getMealsByUser(String systemId, String email, int page, int size);
 
-    // Confirm meal and calculate insulin dose
-    MealBoundary confirmMeal(String systemId, String mealId, Float actualDose,
-            Integer currentGlucose, String activityLevel,
-            Boolean sickMode, Boolean stressMode);
+        // Update meal with detected food items
+        MealBoundary updateFoodItems(String systemId, String mealId, List<FoodItemBoundary> foodItems);
 
-    // Mark meal as completed (after injection)
-    MealBoundary completeMeal(String systemId, String mealId);
+        // Confirm meal and calculate insulin dose
+        MealBoundary confirmMeal(String systemId, String mealId, Float actualDose,
+                        Integer currentGlucose, String activityLevel,
+                        Boolean sickMode, Boolean stressMode);
 
-    // Update portion analysis data
-    MealBoundary updatePortionAnalysis(String systemId, String mealId, 
-                                       Float estimatedWeight, Float volumeCm3,
-                                       Float diameterCm, Float depthCm,
-                                       Float confidence, Boolean refDetected);
+        // Mark meal as completed (after injection)
+        MealBoundary completeMeal(String systemId, String mealId);
 
-    // Delete meal
-    void deleteMeal(String systemId, String mealId);
+        // Update portion analysis data
+        MealBoundary updatePortionAnalysis(String systemId, String mealId,
+                        Float estimatedWeight, Float volumeCm3,
+                        Float diameterCm, Float depthCm,
+                        Float confidence, Boolean refDetected);
 
-    // Delete all meals for a user (admin)
-    void deleteAllMealsForUser(String adminSystemId, String adminEmail, 
-                               String targetSystemId, String targetEmail);
+        // Delete meal
+        void deleteMeal(String systemId, String mealId);
 
-    // Delete all meals (admin only)
-    void deleteAllMeals(String adminSystemId, String adminEmail);
+        // Delete all meals for a user (admin)
+        void deleteAllMealsForUser(String adminSystemId, String adminEmail,
+                        String targetSystemId, String targetEmail);
 
-    // Get recent meals for user (last N)
-    List<MealBoundary> getRecentMeals(String systemId, String email, int count);
+        // Delete all meals (admin only)
+        void deleteAllMeals(String adminSystemId, String adminEmail);
 
-    // Get meal count for user
-    long getMealCountForUser(String systemId, String email);
-    
-    List<MealBoundary> getMealsByDateRange(String systemId, String email, 
-            LocalDate from, LocalDate to, 
-            int page, int size);
+        // Get recent meals for user (last N)
+        List<MealBoundary> getRecentMeals(String systemId, String email, int count);
+
+        // Get meal count for user
+        long getMealCountForUser(String systemId, String email);
+
+        List<MealBoundary> getMealsByDateRange(String systemId, String email,
+                        LocalDate from, LocalDate to,
+                        int page, int size);
 }

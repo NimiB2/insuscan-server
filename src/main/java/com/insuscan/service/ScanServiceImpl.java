@@ -72,8 +72,8 @@ public class ScanServiceImpl implements ScanService {
 
     @Override
     public MealBoundary scanMealWithPortion(ScanRequestBoundary request,
-                                             Float estimatedWeightGrams,
-                                             Float portionConfidence) {
+            Float estimatedWeightGrams,
+            Float portionConfidence) {
         validateScanRequest(request);
 
         UserIdBoundary userId = request.getUserId();
@@ -82,22 +82,21 @@ public class ScanServiceImpl implements ScanService {
         // Start timing and logging
         long scanStartTime = System.currentTimeMillis();
         apiLogger.scanStart(
-            userId.getEmail(),
-            request.getImageBase64() != null || request.getImageUrl() != null,
-            estimatedWeightGrams
-        );
+                userId.getEmail(),
+                request.getImageBase64() != null || request.getImageUrl() != null,
+                estimatedWeightGrams);
 
         // Verify user exists
         UserEntity user = userRepository.findById(userDocId)
-            .orElseThrow(() -> new InsuScanNotFoundException(
-                "User not found: " + userId.getEmail()));
+                .orElseThrow(() -> new InsuScanNotFoundException(
+                        "User not found: " + userId.getEmail()));
 
         log.info("Starting MEDICAL-GRADE scan for user: {}", userId.getEmail());
 
         // Step 1: Analyze image (Medical Vision)
         apiLogger.scanStep(1, "ANALYZING IMAGE (MEDICAL VISION)");
         FoodRecognitionResult visionResult = analyzeImage(request);
-        
+
         if (!visionResult.isSuccess()) {
             apiLogger.scanFailed("VISION", visionResult.getErrorMessage());
             throw new NoFoodDetectedException(visionResult.getErrorMessage());
@@ -112,14 +111,13 @@ public class ScanServiceImpl implements ScanService {
         apiLogger.scanStep(2, "CALCULATING PORTION SIZES");
         List<PortionEstimator.FoodItem> portionItems = new ArrayList<>();
         float totalVisionPortions = 0f;
-        
+
         for (FoodRecognitionResult.RecognizedFoodItem detected : visionResult.getDetectedFoods()) {
             portionItems.add(new PortionEstimator.FoodItem(
                     detected.getName(),
                     detected.getConfidence(),
-                    detected.getEstimatedPortionGrams()
-            ));
-            
+                    detected.getEstimatedPortionGrams()));
+
             if (detected.getEstimatedPortionGrams() != null && detected.getEstimatedPortionGrams() > 0) {
                 totalVisionPortions += detected.getEstimatedPortionGrams();
             }
@@ -127,9 +125,9 @@ public class ScanServiceImpl implements ScanService {
 
         Float totalWeightToDistribute = estimatedWeightGrams;
         if (totalWeightToDistribute == null) {
-            totalWeightToDistribute = (totalVisionPortions > 0) 
-                ? totalVisionPortions 
-                : estimateTotalWeightFromFoodTypes(portionItems);
+            totalWeightToDistribute = (totalVisionPortions > 0)
+                    ? totalVisionPortions
+                    : estimateTotalWeightFromFoodTypes(portionItems);
         }
 
         Map<String, Float> distributedPortions = portionEstimator.distributePortions(
@@ -141,17 +139,17 @@ public class ScanServiceImpl implements ScanService {
         float totalCarbs = 0f;
 
         for (FoodRecognitionResult.RecognizedFoodItem detected : visionResult.getDetectedFoods()) {
-            
+
             // --- NEW LOGIC START ---
             NutritionInfo finalNutrition = null;
-            
+
             // A. Fetch Candidates (Step 2 - Retrieval)
             List<NutritionInfo> candidates = nutritionDataService.searchCandidates(detected.getBaseIngredient());
-            
+
             if (!candidates.isEmpty()) {
                 // B. The Judge Decides (Step 3 - Semantic Matching)
                 String bestFdcId = semanticMatchingService.findBestMatch(detected, candidates);
-                
+
                 // C. Get Full Data for Winner
                 if (bestFdcId != null) {
                     finalNutrition = nutritionDataService.getNutritionInfo(bestFdcId); // Fetch by ID specifically
@@ -167,17 +165,17 @@ public class ScanServiceImpl implements ScanService {
             MealEntity.FoodItem item = new MealEntity.FoodItem();
             item.setName(detected.getName());
             item.setConfidence(NumberUtils.roundTo2Decimals(detected.getConfidence()));
-            
+
             // Add safety flags to the DB entity for future reference
             if (detected.getRiskFlags() != null && !detected.getRiskFlags().isEmpty()) {
-                item.setNote("Risks: " + String.join(", ", detected.getRiskFlags())); 
+                item.setNote("Risks: " + String.join(", ", detected.getRiskFlags()));
             }
-            
+
             Float itemWeight = distributedPortions.get(detected.getName());
             if (itemWeight == null) {
                 itemWeight = portionEstimator.estimatePortion(
-                        detected.getName(), 
-                        detected.getConfidence(), 
+                        detected.getName(),
+                        detected.getConfidence(),
                         detected.getEstimatedPortionGrams());
             }
             item.setQuantity(NumberUtils.roundTo2Decimals(itemWeight));
@@ -186,18 +184,18 @@ public class ScanServiceImpl implements ScanService {
                 float itemCarbs = finalNutrition.calculateCarbs(itemWeight);
                 item.setCarbs(NumberUtils.roundTo2Decimals(itemCarbs));
                 item.setUsdaFdcId(finalNutrition.getFdcId());
-                
+
                 String source = "SEMANTIC_JUDGE";
-                if (finalNutrition.getFdcId().startsWith("fallback-")) source = "FALLBACK";
-                
+                if (finalNutrition.getFdcId().startsWith("fallback-"))
+                    source = "FALLBACK";
+
                 apiLogger.carbCalculation(
-                    detected.getName(),
-                    finalNutrition.getCarbsPer100g(),
-                    itemWeight,
-                    itemCarbs,
-                    source
-                );
-                
+                        detected.getName(),
+                        finalNutrition.getCarbsPer100g(),
+                        itemWeight,
+                        itemCarbs,
+                        source);
+
                 totalCarbs += itemCarbs;
             } else {
                 item.setCarbs(0f);
@@ -222,8 +220,8 @@ public class ScanServiceImpl implements ScanService {
 
             // Build params from user profile - handles null checks
             CalculationParams params = new CalculationParams.Builder()
-            	    .fromUser(user)
-            	    .build();
+                    .fromUser(user)
+                    .build();
 
             // Log profile status
             apiLogger.insulinCalcProfileStatus(params.isProfileComplete(), params.getMissingFields());
@@ -231,26 +229,24 @@ public class ScanServiceImpl implements ScanService {
             if (params.isProfileComplete()) {
                 // Profile complete - do full calculation
                 apiLogger.insulinCalcParams(
-                    params.getInsulinCarbRatio(),
-                    params.getCorrectionFactor(),
-                    params.getTargetGlucose(),
-                    true
-                );
+                        params.getInsulinCarbRatio(),
+                        params.getCorrectionFactor(),
+                        params.getTargetGlucose(),
+                        true);
 
                 // Calculate using the new method
-                InsulinCalculator.InsulinCalculationResult result =
-                    InsulinCalculator.calculateSimple(totalCarbs, params);
+                InsulinCalculator.InsulinCalculationResult result = InsulinCalculator.calculateSimple(totalCarbs,
+                        params);
 
                 // Log breakdown
                 apiLogger.insulinCalcBreakdown(
-                    result.getCarbDose(),
-                    result.getCorrectionDose(),
-                    result.getBaseDose(),
-                    result.getSickAdjustment(),
-                    result.getStressAdjustment(),
-                    result.getExerciseAdjustment(),
-                    result.getTotalDose()
-                );
+                        result.getCarbDose(),
+                        result.getCorrectionDose(),
+                        result.getBaseDose(),
+                        result.getSickAdjustment(),
+                        result.getStressAdjustment(),
+                        result.getExerciseAdjustment(),
+                        result.getTotalDose());
 
                 // Log warning if any
                 if (result.hasWarning()) {
@@ -273,8 +269,8 @@ public class ScanServiceImpl implements ScanService {
             }
         }
 
-        // Step 5: Save meal
-        apiLogger.scanStep(5, "SAVING MEAL TO DATABASE");
+        // Step 5: Return result WITHOUT saving (Stateless Analysis)
+        apiLogger.scanStep(5, "PREPARING RESULT (NO DB SAVE)");
         MealEntity meal = new MealEntity();
         meal.setId(mealIdGenerator.generateMealId(systemId));
         meal.setUserId(userDocId);
@@ -282,23 +278,28 @@ public class ScanServiceImpl implements ScanService {
         meal.setFoodItems(foodItems);
         meal.setTotalCarbs(NumberUtils.roundTo2Decimals(totalCarbs));
         meal.setRecommendedDose(recommendedDose);
-        meal.setStatus(MealStatus.PENDING);
-        
-        if (estimatedWeightGrams != null) meal.setEstimatedWeight(estimatedWeightGrams);
-        if (portionConfidence != null) meal.setAnalysisConfidence(portionConfidence);
+        meal.setStatus(MealStatus.PENDING); // Status is Pending until client saves
+
+        if (estimatedWeightGrams != null)
+            meal.setEstimatedWeight(estimatedWeightGrams);
+        if (portionConfidence != null)
+            meal.setAnalysisConfidence(portionConfidence);
 
         // Set profile status for client
         meal.setProfileComplete(profileComplete);
         meal.setMissingProfileFields(missingFields);
         meal.setInsulinMessage(insulinMessage);
-        
-        MealEntity saved = mealRepository.save(meal);
-        log.info("Meal saved: {}", meal.getId());
+
+        // Per user request, we do NOT save to DB here. The client must call
+        // /save-scanned later.
+        // MealEntity saved = mealRepository.save(meal);
+        // log.info("Meal saved: {}", meal.getId());
 
         long totalTime = System.currentTimeMillis() - scanStartTime;
         apiLogger.scanComplete(foodItems.size(), totalCarbs, recommendedDose, totalTime);
 
-        return mealConverter.toBoundary(saved);
+        // Convert the transient entity to boundary
+        return mealConverter.toBoundary(meal);
     }
 
     private float estimateTotalWeightFromFoodTypes(List<PortionEstimator.FoodItem> items) {
@@ -311,8 +312,10 @@ public class ScanServiceImpl implements ScanService {
     }
 
     private void validateScanRequest(ScanRequestBoundary request) {
-        if (request == null) throw new InsuScanInvalidInputException("Scan request cannot be null");
-        if (request.getUserId() == null) throw new InsuScanInvalidInputException("User ID is required");
+        if (request == null)
+            throw new InsuScanInvalidInputException("Scan request cannot be null");
+        if (request.getUserId() == null)
+            throw new InsuScanInvalidInputException("User ID is required");
         InputValidators.validateSystemId(request.getUserId().getSystemId());
         InputValidators.validateEmail(request.getUserId().getEmail());
 
@@ -329,16 +332,16 @@ public class ScanServiceImpl implements ScanService {
         }
     }
 
-//    private MealBoundary createFailedMeal(String userDocId, String imageUrl) {
-//        MealEntity meal = new MealEntity();
-//        String mealUuid = UUID.randomUUID().toString();
-//        meal.setId(systemId + "_" + mealUuid);
-//        meal.setUserId(userDocId);
-//        meal.setImageUrl(imageUrl);
-//        meal.setFoodItems(new ArrayList<>());
-//        meal.setTotalCarbs(0f);
-//        meal.setStatus(MealStatus.FAILED);
-//        MealEntity saved = mealRepository.save(meal);
-//        return mealConverter.toBoundary(saved);
-//    }
+    // private MealBoundary createFailedMeal(String userDocId, String imageUrl) {
+    // MealEntity meal = new MealEntity();
+    // String mealUuid = UUID.randomUUID().toString();
+    // meal.setId(systemId + "_" + mealUuid);
+    // meal.setUserId(userDocId);
+    // meal.setImageUrl(imageUrl);
+    // meal.setFoodItems(new ArrayList<>());
+    // meal.setTotalCarbs(0f);
+    // meal.setStatus(MealStatus.FAILED);
+    // MealEntity saved = mealRepository.save(meal);
+    // return mealConverter.toBoundary(saved);
+    // }
 }
