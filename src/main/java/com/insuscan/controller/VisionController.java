@@ -44,7 +44,7 @@ import java.util.Map;
 public class VisionController {
 
     private static final Logger log = LoggerFactory.getLogger(VisionController.class);
-    
+
     private final ScanService scanService;
     private final MealService mealService;
     private final ImageAnalysisService imageAnalysisService;
@@ -57,14 +57,14 @@ public class VisionController {
     @Value("${spring.application.name}")
     private String systemId;
 
-    public VisionController(ScanService scanService, 
-                           MealService mealService,
-                           ImageAnalysisService imageAnalysisService,
-                           MealRepository mealRepository,
-                           MealConverter mealConverter,
-                           MealIdGenerator mealIdGenerator,
-                           PortionEstimator portionEstimator,
-                           NutritionDataService nutritionDataService) {
+    public VisionController(ScanService scanService,
+            MealService mealService,
+            ImageAnalysisService imageAnalysisService,
+            MealRepository mealRepository,
+            MealConverter mealConverter,
+            MealIdGenerator mealIdGenerator,
+            PortionEstimator portionEstimator,
+            NutritionDataService nutritionDataService) {
         this.scanService = scanService;
         this.mealService = mealService;
         this.imageAnalysisService = imageAnalysisService;
@@ -78,32 +78,27 @@ public class VisionController {
     /**
      * Prototype endpoint:
      * - Input: image file (multipart/form-data)
-     * - Output: Complete MealBoundary with vision analysis, nutrition, and saves to Firebase
-     * - Tries full ScanService workflow first, falls back to simple vision analysis if user doesn't exist
+     * - Output: Complete MealBoundary with vision analysis, nutrition, and saves to
+     * Firebase
+     * - Tries full ScanService workflow first, falls back to simple vision analysis
+     * if user doesn't exist
      */
     @Operation(summary = "Analyze meal image", description = "Uploads an image, analyzes food items, calculates nutrition and insulin dose, then saves to Firebase")
-    @PostMapping(
-        path = "/analyze",
-        consumes = MediaType.MULTIPART_FORM_DATA_VALUE,
-        produces = MediaType.APPLICATION_JSON_VALUE
-    )
+    @PostMapping(path = "/analyze", consumes = MediaType.MULTIPART_FORM_DATA_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<?> analyzeImage(
-            @Parameter(description = "Image file to analyze (JPEG, PNG, etc.)", required = true)
-            @RequestPart("file") MultipartFile file,
-            
-            @Parameter(description = "User ID (legacy parameter, use email instead)", example = "prototype_user")
-            @RequestParam(value = "userId", required = false, defaultValue = "prototype_user") String userId,
-            
-            @Parameter(description = "User email for personalized calculations (optional, defaults to test@example.com)", example = "test@example.com")
-            @RequestParam(value = "email", required = false, defaultValue = "test@example.com") String email,
-            
-            @Parameter(description = "User's estimated total meal weight in grams (optional, helps with portion estimation)", example = "300")
-            @RequestParam(value = "estimatedWeightGrams", required = false) Float estimatedWeightGrams,
-            
-            @Parameter(description = "User's confidence in weight estimate (0.0 to 1.0, optional)", example = "0.8")
-            @RequestParam(value = "portionConfidence", required = false) Float portionConfidence
-    ) throws IOException {
-        
+            @Parameter(description = "Image file to analyze (JPEG, PNG, etc.)", required = true) @RequestPart("file") MultipartFile file,
+
+            @Parameter(description = "User ID (legacy parameter, use email instead)", example = "prototype_user") @RequestParam(value = "userId", required = false, defaultValue = "prototype_user") String userId,
+
+            @Parameter(description = "User email for personalized calculations (optional, defaults to test@example.com)", example = "test@example.com") @RequestParam(value = "email", required = false, defaultValue = "test@example.com") String email,
+
+            @Parameter(description = "User's estimated total meal weight in grams (optional)", example = "300") @RequestParam(value = "estimatedWeightGrams", required = false) Float estimatedWeightGrams,
+
+            @Parameter(description = "Calculated volume in cm3 (optional, for density-based calculation)", example = "150") @RequestParam(value = "volumeCm3", required = false) Float volumeCm3,
+
+            @Parameter(description = "User's confidence in weight estimate (0.0 to 1.0, optional)", example = "0.8") @RequestParam(value = "portionConfidence", required = false) Float portionConfidence)
+            throws IOException {
+
         if (file == null || file.isEmpty()) {
             return ResponseEntity.badRequest().body("No image file provided");
         }
@@ -114,7 +109,7 @@ public class VisionController {
         // Build scan request
         ScanRequestBoundary request = new ScanRequestBoundary();
         request.setImageBase64(base64);
-        
+
         UserIdBoundary userIdBoundary = new UserIdBoundary();
         userIdBoundary.setSystemId(systemId);
         userIdBoundary.setEmail(email);
@@ -129,15 +124,16 @@ public class VisionController {
             // User doesn't exist - fall back to simple vision analysis and save basic meal
             log.warn("User not found: {}, saving meal without user profile", email);
             FoodRecognitionResult visionResult = imageAnalysisService.analyzeImage(base64);
-            
+
             if (!visionResult.isSuccess()) {
                 return ResponseEntity.ok(visionResult);
             }
-            
+
             // Save basic meal to database (linked to email, even if user doesn't exist yet)
-            MealEntity meal = saveBasicMeal(visionResult, email, file.getOriginalFilename());
+            MealEntity meal = saveBasicMeal(visionResult, email, file.getOriginalFilename(), estimatedWeightGrams,
+                    volumeCm3);
             log.info("Saved basic meal for email: {} (mealId: {})", email, meal.getId());
-            
+
             // Convert to MealBoundary for response
             MealBoundary mealBoundary = mealConverter.toBoundary(meal);
             return ResponseEntity.ok(mealBoundary);
@@ -156,11 +152,11 @@ public class VisionController {
     public List<MealBoundary> getSavedAnalyses(
             @RequestParam(value = "email", required = false) String email,
             @RequestParam(value = "userId", required = false) String userId,
-            @RequestParam(value = "limit", required = false, defaultValue = "10") int limit
-    ) {
-        // Use email if provided, otherwise fall back to userId (for backward compatibility)
+            @RequestParam(value = "limit", required = false, defaultValue = "10") int limit) {
+        // Use email if provided, otherwise fall back to userId (for backward
+        // compatibility)
         String userEmail = email;
-        
+
         if (userEmail == null || userEmail.isEmpty()) {
             // Legacy support: if userId is provided and looks like an email, use it
             if (userId != null && userId.contains("@")) {
@@ -173,7 +169,7 @@ public class VisionController {
                 userEmail = "test@example.com";
             }
         }
-        
+
         return mealService.getRecentMeals(systemId, userEmail, limit);
     }
 
@@ -188,11 +184,11 @@ public class VisionController {
         if (mealId.contains("_")) {
             uuid = mealId.substring(mealId.lastIndexOf("_") + 1);
         }
-        
+
         return mealService.getMealById(systemId, uuid)
                 .orElseThrow(() -> new RuntimeException("Meal not found: " + mealId));
     }
-    
+
     /**
      * Serve the test vision HTML page
      */
@@ -203,70 +199,92 @@ public class VisionController {
                 .header(HttpHeaders.CONTENT_TYPE, MediaType.TEXT_HTML_VALUE)
                 .body(resource);
     }
-    
-    private MealEntity saveBasicMeal(FoodRecognitionResult result, String email, String imageName) {
+
+    // Updated to accept estimatedWeight
+    private MealEntity saveBasicMeal(FoodRecognitionResult result, String email, String imageName,
+            Float estimatedWeight, Float volumeCm3) {
         MealEntity meal = new MealEntity();
         meal.setId(mealIdGenerator.generateMealId(systemId));
         meal.setUserId(systemId + "_" + email);
         meal.setImageUrl("uploaded://" + imageName);
-        
+
         // Use smart portion estimation and nutrition lookup (same as ScanService)
         List<PortionEstimator.FoodItem> portionItems = new ArrayList<>();
         float totalVisionPortions = 0f;
-        
+
         for (FoodRecognitionResult.RecognizedFoodItem detected : result.getDetectedFoods()) {
             portionItems.add(new PortionEstimator.FoodItem(
                     detected.getName(),
                     detected.getConfidence(),
-                    detected.getEstimatedPortionGrams()
-            ));
-            
+                    detected.getEstimatedPortionGrams()));
+
             if (detected.getEstimatedPortionGrams() != null && detected.getEstimatedPortionGrams() > 0) {
                 totalVisionPortions += detected.getEstimatedPortionGrams();
             }
         }
-        
+
         // Determine total weight to distribute
-        Float totalWeightToDistribute = null;
-        if (totalVisionPortions > 0) {
-            totalWeightToDistribute = totalVisionPortions;
-        } else {
-            // Estimate from food types
-            for (PortionEstimator.FoodItem item : portionItems) {
-                float portion = portionEstimator.estimatePortion(item.name, item.confidence, item.visionEstimate);
-                if (totalWeightToDistribute == null) totalWeightToDistribute = 0f;
-                totalWeightToDistribute += portion;
+        Float totalWeightToDistribute = estimatedWeight;
+
+        // PRIORITY 1: Physics-based calculation (Volume * Density)
+        // If we have volume and detection results, we can be very precise.
+        if (volumeCm3 != null && volumeCm3 > 0 && !portionItems.isEmpty()) {
+            // Assume the volume applies to the primary food detected (or distributed)
+            // For now, simple approach: Find primary food and use its density
+            // Or if multiple foods, use weighted average density?
+            // Let's use the first/most confident food's density for the whole volume
+            // (common case: Bowl of Rice)
+
+            String primaryFood = portionItems.get(0).name;
+            float calculatedWeight = portionEstimator.calculateWeight(primaryFood, volumeCm3);
+            log.info("Physics Calc: Food={}, Vol={}cm3 -> Weight={}g", primaryFood, volumeCm3, calculatedWeight);
+            totalWeightToDistribute = calculatedWeight;
+        }
+
+        // PRIORITY 2: Client provided weight estimate (fallback)
+        if (totalWeightToDistribute == null) {
+            // Fallback if client didn't send weight
+            if (totalVisionPortions > 0) {
+                totalWeightToDistribute = totalVisionPortions;
+            } else {
+                // Estimate from food types
+                for (PortionEstimator.FoodItem item : portionItems) {
+                    float portion = portionEstimator.estimatePortion(item.name, item.confidence, item.visionEstimate);
+                    if (totalWeightToDistribute == null)
+                        totalWeightToDistribute = 0f;
+                    totalWeightToDistribute += portion;
+                }
             }
         }
-        
+
         // Use smart portion distribution
         Map<String, Float> distributedPortions = portionEstimator.distributePortions(
                 portionItems, totalWeightToDistribute != null ? totalWeightToDistribute : 200f);
-        
+
         // Convert vision results to food items with nutrition data
         List<MealEntity.FoodItem> foodItems = new ArrayList<>();
         float totalCarbs = 0f;
-        
+
         for (FoodRecognitionResult.RecognizedFoodItem detected : result.getDetectedFoods()) {
             // Get nutrition data
             NutritionInfo nutrition = nutritionDataService.getNutritionInfo(detected.getName());
-            
+
             MealEntity.FoodItem item = new MealEntity.FoodItem();
             item.setName(detected.getName());
             item.setConfidence(NumberUtils.roundTo2Decimals(detected.getConfidence()));
-            
+
             // Get portion from smart distribution
             Float itemWeight = distributedPortions.get(detected.getName());
             if (itemWeight == null) {
                 // Fallback: estimate individually
                 itemWeight = portionEstimator.estimatePortion(
-                        detected.getName(), 
-                        detected.getConfidence(), 
+                        detected.getName(),
+                        detected.getConfidence(),
                         detected.getEstimatedPortionGrams());
             }
-            
+
             item.setQuantity(NumberUtils.roundTo2Decimals(itemWeight));
-            
+
             // Calculate carbs if nutrition data found
             if (nutrition.isFound()) {
                 float itemCarbs = nutrition.calculateCarbs(itemWeight);
@@ -276,16 +294,15 @@ public class VisionController {
             } else {
                 item.setCarbs(0f);
             }
-            
+
             foodItems.add(item);
         }
-        
+
         meal.setFoodItems(foodItems);
         meal.setTotalCarbs(NumberUtils.roundTo2Decimals(totalCarbs));
         meal.setStatus(MealStatus.PENDING);
-        
+
         return mealRepository.save(meal);
     }
-    
-}
 
+}

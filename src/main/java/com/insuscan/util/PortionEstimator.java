@@ -5,22 +5,23 @@ import org.springframework.stereotype.Component;
 import java.util.*;
 
 /**
- * Estimates portion sizes based on food type, confidence scores, and typical serving sizes.
+ * Estimates portion sizes based on food type, confidence scores, and typical
+ * serving sizes.
  */
 @Component
 public class PortionEstimator {
 
     // Typical portion sizes in grams for different food categories
     private static final Map<String, PortionRange> FOOD_PORTION_RANGES = initPortionRanges();
-    
+
     // Food category mapping
     private static final Map<String, String> FOOD_CATEGORIES = initFoodCategories();
 
     /**
      * Estimate portion size for a food item based on type and confidence
      * 
-     * @param foodName Normalized food name
-     * @param confidence Detection confidence (0.0 to 1.0)
+     * @param foodName       Normalized food name
+     * @param confidence     Detection confidence (0.0 to 1.0)
      * @param visionEstimate Optional vision-provided estimate
      * @return Estimated portion in grams
      */
@@ -28,11 +29,12 @@ public class PortionEstimator {
         // If vision provided estimate, use it (with confidence adjustment)
         if (visionEstimate != null && visionEstimate > 0) {
             // Adjust vision estimate based on confidence
-            // Higher confidence = trust vision more, lower confidence = adjust toward typical
+            // Higher confidence = trust vision more, lower confidence = adjust toward
+            // typical
             float adjustedEstimate = adjustVisionEstimate(visionEstimate, confidence, foodName);
             return adjustedEstimate;
         }
-        
+
         // Otherwise, estimate based on food type and confidence
         return estimateFromFoodType(foodName, confidence);
     }
@@ -42,9 +44,9 @@ public class PortionEstimator {
      */
     private float adjustVisionEstimate(float visionEstimate, float confidence, String foodName) {
         String category = getFoodCategory(foodName);
-        PortionRange typicalRange = FOOD_PORTION_RANGES.getOrDefault(category, 
+        PortionRange typicalRange = FOOD_PORTION_RANGES.getOrDefault(category,
                 FOOD_PORTION_RANGES.get("other"));
-        
+
         // If confidence is high (>= 0.8), trust vision estimate more
         if (confidence >= 0.8) {
             // Still validate it's within reasonable range
@@ -54,14 +56,14 @@ public class PortionEstimator {
             // If outside reasonable range, adjust toward typical
             return Math.max(typicalRange.min, Math.min(typicalRange.max, visionEstimate));
         }
-        
+
         // Medium confidence (0.6-0.8): blend vision with typical
         if (confidence >= 0.6) {
             float typicalPortion = (typicalRange.min + typicalRange.max) / 2f;
             float blendFactor = (confidence - 0.6f) / 0.2f; // 0.0 to 1.0
             return visionEstimate * blendFactor + typicalPortion * (1 - blendFactor);
         }
-        
+
         // Low confidence (< 0.6): use typical portion
         return (typicalRange.min + typicalRange.max) / 2f;
     }
@@ -71,15 +73,15 @@ public class PortionEstimator {
      */
     private float estimateFromFoodType(String foodName, float confidence) {
         String category = getFoodCategory(foodName);
-        PortionRange range = FOOD_PORTION_RANGES.getOrDefault(category, 
+        PortionRange range = FOOD_PORTION_RANGES.getOrDefault(category,
                 FOOD_PORTION_RANGES.get("other"));
-        
+
         // Use confidence to determine where in the range
         // Higher confidence = use upper range (more food visible)
         // Lower confidence = use lower range (less certain)
         float rangeSize = range.max - range.min;
         float offset = rangeSize * confidence;
-        
+
         return range.min + offset;
     }
 
@@ -88,28 +90,29 @@ public class PortionEstimator {
      */
     private String getFoodCategory(String foodName) {
         String nameLower = foodName.toLowerCase();
-        
+
         // Check direct mapping
         if (FOOD_CATEGORIES.containsKey(nameLower)) {
             return FOOD_CATEGORIES.get(nameLower);
         }
-        
+
         // Check partial matches
         for (Map.Entry<String, String> entry : FOOD_CATEGORIES.entrySet()) {
             if (nameLower.contains(entry.getKey()) || entry.getKey().contains(nameLower)) {
                 return entry.getValue();
             }
         }
-        
+
         return "other";
     }
 
     /**
      * Distribute total weight among food items based on confidence and type
-     * Uses deterministic approach: prioritizes food-type typical portions over vision estimates
+     * Uses deterministic approach: prioritizes food-type typical portions over
+     * vision estimates
      * to ensure consistency across multiple scans of the same image.
      * 
-     * @param foods List of food items with names and confidences
+     * @param foods       List of food items with names and confidences
      * @param totalWeight Total weight to distribute
      * @return Map of food name to portion weight
      */
@@ -117,43 +120,45 @@ public class PortionEstimator {
         if (foods.isEmpty()) {
             return new HashMap<>();
         }
-        
+
         // Calculate weights for each food based on confidence and typical portion
         // Use typical portions as primary factor for consistency
         List<PortionWeight> weights = new ArrayList<>();
         float totalWeightScore = 0f;
-        
+
         for (FoodItem food : foods) {
             String category = getFoodCategory(food.name);
-            PortionRange range = FOOD_PORTION_RANGES.getOrDefault(category, 
+            PortionRange range = FOOD_PORTION_RANGES.getOrDefault(category,
                     FOOD_PORTION_RANGES.get("other"));
-            
+
             // Use typical portion as base (more deterministic than vision estimates)
             // Confidence only slightly adjusts the portion
             float typicalPortion = (range.min + range.max) / 2f;
-            
+
             // Weight = typical portion * (0.8 + 0.2 * confidence)
-            // This ensures consistency: typical portion is 80% of weight, confidence adds up to 20%
+            // This ensures consistency: typical portion is 80% of weight, confidence adds
+            // up to 20%
             float confidenceFactor = 0.8f + (0.2f * food.confidence);
             float weightScore = typicalPortion * confidenceFactor;
-            
+
             weights.add(new PortionWeight(food.name, weightScore, food.visionEstimate));
             totalWeightScore += weightScore;
         }
-        
+
         // Distribute total weight proportionally
         Map<String, Float> portions = new HashMap<>();
         if (totalWeightScore > 0) {
             for (PortionWeight pw : weights) {
                 float portion = (pw.weightScore / totalWeightScore) * totalWeight;
-                
-                // If vision provided estimate, blend it (but give more weight to typical portion)
+
+                // If vision provided estimate, blend it (but give more weight to typical
+                // portion)
                 // This reduces variance from non-deterministic vision API
                 if (pw.visionEstimate != null && pw.visionEstimate > 0) {
                     // 70% typical-based portion, 30% vision estimate
                     portion = (portion * 0.7f) + (pw.visionEstimate * 0.3f);
                 }
-                
+
                 portions.put(pw.foodName, portion);
             }
         } else {
@@ -163,7 +168,7 @@ public class PortionEstimator {
                 portions.put(food.name, equalPortion);
             }
         }
-        
+
         return portions;
     }
 
@@ -172,30 +177,30 @@ public class PortionEstimator {
         public final String name;
         public final float confidence;
         public final Float visionEstimate;
-        
+
         public FoodItem(String name, float confidence, Float visionEstimate) {
             this.name = name;
             this.confidence = confidence;
             this.visionEstimate = visionEstimate;
         }
     }
-    
+
     private static class PortionWeight {
         final String foodName;
         final float weightScore;
         final Float visionEstimate;
-        
+
         PortionWeight(String foodName, float weightScore, Float visionEstimate) {
             this.foodName = foodName;
             this.weightScore = weightScore;
             this.visionEstimate = visionEstimate;
         }
     }
-    
+
     private static class PortionRange {
         final float min;
         final float max;
-        
+
         PortionRange(float min, float max) {
             this.min = min;
             this.max = max;
@@ -204,44 +209,92 @@ public class PortionEstimator {
 
     private static Map<String, PortionRange> initPortionRanges() {
         Map<String, PortionRange> ranges = new HashMap<>();
-        
+
         // Grains & Starches (larger portions)
         ranges.put("grain", new PortionRange(100f, 200f));
         ranges.put("pasta", new PortionRange(120f, 250f));
         ranges.put("rice", new PortionRange(100f, 200f));
         ranges.put("bread", new PortionRange(30f, 100f));
         ranges.put("potato", new PortionRange(150f, 300f));
-        
+
         // Proteins (medium portions)
         ranges.put("protein", new PortionRange(100f, 200f));
         ranges.put("chicken", new PortionRange(100f, 200f));
         ranges.put("beef", new PortionRange(100f, 200f));
         ranges.put("fish", new PortionRange(100f, 200f));
         ranges.put("pork", new PortionRange(100f, 200f));
-        
+
         // Vegetables (smaller portions)
         ranges.put("vegetable", new PortionRange(50f, 150f));
         ranges.put("salad", new PortionRange(50f, 150f));
-        
+
         // Fruits (small to medium)
         ranges.put("fruit", new PortionRange(80f, 200f));
-        
+
         // Dairy & Cheese (small portions)
         ranges.put("cheese", new PortionRange(20f, 80f));
         ranges.put("dairy", new PortionRange(50f, 150f));
-        
+
         // Sauces (small portions)
         ranges.put("sauce", new PortionRange(30f, 120f));
-        
+
         // Default/Other
         ranges.put("other", new PortionRange(50f, 150f));
-        
+
         return ranges;
+    }
+
+    // NEW: Food Density Map (g/cm³) for accurate physics-based estimation
+    private static Map<String, Float> initFoodDensities() {
+        Map<String, Float> densities = new HashMap<>();
+
+        // Grains (Fluffy/Cooked)
+        densities.put("rice", 0.55f); // Adjusted for fluffy rice (Target 70g)
+        densities.put("pasta", 0.60f);
+        densities.put("bread", 0.25f); // Very light
+        densities.put("potato", 0.70f);
+
+        // Proteins (Dense)
+        densities.put("meat", 1.05f); // Water density + protein
+        densities.put("beef", 1.05f);
+        densities.put("chicken", 0.95f);
+        densities.put("fish", 0.90f);
+        densities.put("egg", 0.95f);
+
+        // Vegetables (High water/air content)
+        densities.put("vegetable", 0.45f); // Leafy/cooked mix
+        densities.put("salad", 0.30f); // Very airy
+
+        // Fruits
+        densities.put("fruit", 0.60f);
+
+        // Liquids/Sauces
+        densities.put("sauce", 1.10f);
+        densities.put("soup", 1.00f);
+
+        // Default
+        densities.put("other", 0.75f);
+
+        return densities;
+    }
+
+    private static final Map<String, Float> FOOD_DENSITIES = initFoodDensities();
+
+    /**
+     * Calculate weight based on volume and food type density.
+     */
+    public float calculateWeight(String foodName, float volumeCm3) {
+        String category = getFoodCategory(foodName);
+        // Look for specific density first, then category
+        float density = FOOD_DENSITIES.getOrDefault(foodName.toLowerCase(),
+                FOOD_DENSITIES.getOrDefault(category, 0.75f));
+
+        return volumeCm3 * density;
     }
 
     private static Map<String, String> initFoodCategories() {
         Map<String, String> categories = new HashMap<>();
-        
+
         // Grains
         categories.put("pasta", "pasta");
         categories.put("spaghetti", "pasta");
@@ -257,7 +310,7 @@ public class PortionEstimator {
         categories.put("potatoes", "potato");
         categories.put("fries", "potato");
         categories.put("french fries", "potato");
-        
+
         // Proteins
         categories.put("chicken", "chicken");
         categories.put("chicken breast", "chicken");
@@ -274,7 +327,7 @@ public class PortionEstimator {
         categories.put("egg", "protein");
         categories.put("eggs", "protein");
         categories.put("tofu", "protein");
-        
+
         // Vegetables
         categories.put("vegetables", "vegetable");
         categories.put("salad", "salad");
@@ -284,14 +337,14 @@ public class PortionEstimator {
         categories.put("broccoli", "vegetable");
         categories.put("spinach", "vegetable");
         categories.put("onion", "vegetable");
-        
+
         // Fruits
         categories.put("apple", "fruit");
         categories.put("banana", "fruit");
         categories.put("orange", "fruit");
         categories.put("strawberry", "fruit");
         categories.put("grapes", "fruit");
-        
+
         // Dairy
         categories.put("cheese", "cheese");
         categories.put("cheddar", "cheese");
@@ -299,13 +352,13 @@ public class PortionEstimator {
         categories.put("parmesan", "cheese");
         categories.put("milk", "dairy");
         categories.put("yogurt", "dairy");
-        
+
         // Sauces
         categories.put("sauce", "sauce");
         categories.put("marinara", "sauce");
         categories.put("tomato sauce", "sauce");
         categories.put("alfredo", "sauce");
-        
+
         return categories;
     }
 }
