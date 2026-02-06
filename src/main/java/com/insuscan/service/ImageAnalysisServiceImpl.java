@@ -218,7 +218,7 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
                 "model", openAiModel,
                 "messages", List.of(userMessage),
                 "temperature", 0.2,
-                "max_tokens", 600
+                "max_tokens", 1200
         );
     }
 
@@ -238,7 +238,7 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
                 "model", openAiModel,
                 "messages", List.of(userMessage),
                 "temperature", 0.2,
-                "max_tokens", 600
+                "max_tokens", 1200
         );
     }
 
@@ -249,6 +249,7 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
                     You are a defensive food analysis AI.
                     Identify food items strictly based on visual evidence.
                     CRITICAL: If the image does not contain any food, return { "items": [] }.
+                    IMPORTANT: List each food SEPARATELY. A plate with rice and chicken = 2 items, not 1.
                     Return JSON: { "items": [{ "name": "string", "confidence": 0.5, "estimatedPortionGrams": 100 }] }
                     """;
         }
@@ -267,6 +268,7 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
                 1. EVIDENCE ONLY: Do not guess ingredients you cannot see. If a sauce is visible but unknown, flag it.
                 2. STATE ANALYSIS: Distinguish between RAW, BOILED, ROASTED, and FRIED. This critically affects Glycemic Index.
                 3. BASE INGREDIENT: Separate the full description (e.g. 'Mashed Potatoes with Gravy') from the search term (e.g. 'Potato').
+        		4. ITEM SEPARATION: Break the plate into INDIVIDUAL food items. "Rice with chicken and salad" must become THREE items: "Rice", "Chicken", "Salad". Never group a whole plate as one entry.
 
                 OUTPUT FORMAT (Strict JSON):
                 {

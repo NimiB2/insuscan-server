@@ -21,6 +21,10 @@ repositories {
     mavenCentral()
 }
 
+configurations.configureEach {
+    exclude group: 'commons-logging', module: 'commons-logging'
+}
+
 dependencies {
     // Spring Web for RESTful API
     implementation 'org.springframework.boot:spring-boot-starter-web'
