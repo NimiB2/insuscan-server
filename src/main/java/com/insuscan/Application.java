@@ -20,29 +20,29 @@ public class Application {
         SpringApplication.run(Application.class, args);
     }
     
-    @Bean
-    public CommandLineRunner checkKey() {
-        return args -> {
-            System.out.println("=======================================");
-
-            // OpenAI
-            if (openAiKey != null && !openAiKey.isEmpty()) {
-                System.out.println("✅ OpenAI Key loaded successfully!");
-                System.out.println("Starts with: " + openAiKey.substring(0, Math.min(5, openAiKey.length())) + "...");
-            } else {
-                System.out.println("❌ ERROR: OpenAI Key is missing!");
-            }
-
-            // USDA
-            if (usdaApiKey != null && !usdaApiKey.isEmpty()) {
-                System.out.println("✅ USDA Key loaded successfully!");
-                System.out.println("Starts with: " + usdaApiKey.substring(0, Math.min(5, usdaApiKey.length())) + "...");
-            } else {
-                System.out.println("❌ ERROR: USDA Key is missing!");
-            }
-
-            System.out.println("=======================================");
-        };
-    }
+//    @Bean
+//    public CommandLineRunner checkKey() {
+//        return args -> {
+//            System.out.println("=======================================");
+//
+//            // OpenAI
+//            if (openAiKey != null && !openAiKey.isEmpty()) {
+//                System.out.println("✅ OpenAI Key loaded successfully!");
+//                System.out.println("Starts with: " + openAiKey.substring(0, Math.min(5, openAiKey.length())) + "...");
+//            } else {
+//                System.out.println("❌ ERROR: OpenAI Key is missing!");
+//            }
+//
+//            // USDA
+//            if (usdaApiKey != null && !usdaApiKey.isEmpty()) {
+//                System.out.println("✅ USDA Key loaded successfully!");
+//                System.out.println("Starts with: " + usdaApiKey.substring(0, Math.min(5, usdaApiKey.length())) + "...");
+//            } else {
+//                System.out.println("❌ ERROR: USDA Key is missing!");
+//            }
+//
+//            System.out.println("=======================================");
+//        };
+//    }
 
 }
