@@ -249,7 +249,7 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
                     You are a defensive food analysis AI.
                     Identify food items strictly based on visual evidence.
                     CRITICAL: If the image does not contain any food, return { "items": [] }.
-                    IMPORTANT: List each food SEPARATELY. A plate with rice and chicken = 2 items, not 1.
+                    IMPORTANT: List each food SEPARATELY. A plate with rice and chicken = 2 items, not 1. Do not include a combined "Main Dish" item.
                     Return JSON: { "items": [{ "name": "string", "confidence": 0.5, "estimatedPortionGrams": 100 }] }
                     """;
         }
@@ -268,7 +268,12 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
                 1. EVIDENCE ONLY: Do not guess ingredients you cannot see. If a sauce is visible but unknown, flag it.
                 2. STATE ANALYSIS: Distinguish between RAW, BOILED, ROASTED, and FRIED. This critically affects Glycemic Index.
                 3. BASE INGREDIENT: Separate the full description (e.g. 'Mashed Potatoes with Gravy') from the search term (e.g. 'Potato').
-        		4. ITEM SEPARATION: Break the plate into INDIVIDUAL food items. "Rice with chicken and salad" must become THREE items: "Rice", "Chicken", "Salad". Never group a whole plate as one entry.
+        		4. ITEM SEPARATION: Break the plate into INDIVIDUAL food items. "Rice with chicken and salad" must become THREE items: "Rice", "Chicken", "Salad". 
+
+                CRITICAL NEGATIVE CONSTRAINTS:
+                - Do NOT create a "Main Dish" or "Summary" item that combines others.
+                - Do NOT list "Chicken and Rice" if you have already listed "Chicken" and "Rice" separately.
+                - Each food pixel in the image should belong to EXACTLY ONE item in your list. Do not double count.
 
                 OUTPUT FORMAT (Strict JSON):
                 {
