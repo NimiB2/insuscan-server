@@ -84,6 +84,11 @@ public class MealServiceImpl implements MealService {
 
         // Log the final User ID being saved
         System.out.println("DEBUG SAVE: Saving meal for user: " + entity.getUserId() + " (Email: " + cleanEmail + ")");
+        System.out.println("DEBUG SAVE: Carb Dose: " + entity.getCarbDose());
+        System.out.println("DEBUG SAVE: Correction Dose: " + entity.getCorrectionDose());
+        System.out.println("DEBUG SAVE: Exercise Adjustment: " + entity.getExerciseAdjustment());
+        System.out.println("DEBUG SAVE: Sick Adjustment: " + entity.getSickAdjustment());
+        System.out.println("DEBUG SAVE: Stress Adjustment: " + entity.getStressAdjustment());
 
         // Set final status
         entity.setStatus(MealStatus.CONFIRMED); // Saved = Confirmed
@@ -95,6 +100,11 @@ public class MealServiceImpl implements MealService {
         }
 
         MealEntity saved = mealRepository.save(entity);
+        
+        // Debug what was actually saved
+        System.out.println("DEBUG AFTER SAVE: Carb Dose: " + saved.getCarbDose());
+        System.out.println("DEBUG AFTER SAVE: Correction Dose: " + saved.getCorrectionDose());
+        
         return mealConverter.toBoundary(saved);
     }
 
