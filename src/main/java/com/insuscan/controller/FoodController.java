@@ -81,7 +81,7 @@ public class FoodController {
             
             // Convert to ScoredFoodResult with default scores
             List<ScoredFoodResult> results = standardResults.stream()
-                    .map(r -> new ScoredFoodResult(r, 50, "Standard search (AI unavailable)"))
+                    .map(r -> new ScoredFoodResult(r, 50, "Standard search (AI unavailable)", null))
                     .collect(Collectors.toList());
             
             return new AiSearchResponse(results, null, false);
@@ -126,7 +126,7 @@ public class FoodController {
                     request.getQuery(), request.getLimit());
             
             List<ScoredFoodResult> results = fallbackResults.stream()
-                    .map(r -> new ScoredFoodResult(r, 50, "Fallback search (AI error)"))
+                    .map(r -> new ScoredFoodResult(r, 50, "Fallback search (AI error)", null))
                     .collect(Collectors.toList());
             
             return new AiSearchResponse(results, null, false);
