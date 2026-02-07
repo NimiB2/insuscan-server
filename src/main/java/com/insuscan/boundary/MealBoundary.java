@@ -10,7 +10,6 @@ import java.util.List;
  * and insulin calculations.
  */
 public class MealBoundary {
-
     // ============================================================================================
     // 1. Identity & Media
     // ============================================================================================
@@ -49,8 +48,10 @@ public class MealBoundary {
     // ============================================================================================
     private Float carbDose; // Base dose for carbohydrates
     private Float correctionDose; // Dose for high glucose correction
+	private String glucoseUnits;
 
-    // Adjustment Values (The actual calculated amount added/subtracted)
+
+	// Adjustment Values (The actual calculated amount added/subtracted)
     private Float sickAdjustment; // e.g. +1.5 units
     private Float stressAdjustment; // e.g. +0.5 units
     private Float exerciseAdjustment; // e.g. -1.0 units
@@ -261,6 +262,15 @@ public class MealBoundary {
     public void setActualDose(Float actualDose) {
         this.actualDose = actualDose;
     }
+
+    public String getGlucoseUnits() {
+		return glucoseUnits;
+	}
+
+	public void setGlucoseUnits(String glucoseUnits) {
+		this.glucoseUnits = glucoseUnits;
+	}
+
 
     // --- 7. Status & Metadata ---
     public MealStatus getStatus() {

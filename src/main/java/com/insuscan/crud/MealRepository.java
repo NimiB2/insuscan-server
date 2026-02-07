@@ -330,6 +330,22 @@ public class MealRepository {
         map.put("wasSickMode", entity.getWasSickMode());
         map.put("wasStressMode", entity.getWasStressMode());
         
+        map.put("carbDose", entity.getCarbDose());
+        map.put("correctionDose", entity.getCorrectionDose());
+        map.put("sickAdjustment", entity.getSickAdjustment());
+        map.put("stressAdjustment", entity.getStressAdjustment());
+        map.put("exerciseAdjustment", entity.getExerciseAdjustment());
+
+        // user context at meal time
+        map.put("currentGlucose", entity.getCurrentGlucose());
+        map.put("activityLevel", entity.getActivityLevel());
+
+        // profile status and messages
+        map.put("profileComplete", entity.isProfileComplete());
+        map.put("missingProfileFields", entity.getMissingProfileFields());
+        map.put("insulinMessage", entity.getInsulinMessage());
+        map.put("note", entity.getNote());
+        
         return map;
     }
 
@@ -381,6 +397,24 @@ public class MealRepository {
         entity.setCompletedAt(doc.getDate("completedAt"));
         entity.setWasSickMode(doc.getBoolean("wasSickMode"));
         entity.setWasStressMode(doc.getBoolean("wasStressMode"));
+        
+     // calculation breakdown
+        entity.setCarbDose(getFloat(doc, "carbDose"));
+        entity.setCorrectionDose(getFloat(doc, "correctionDose"));
+        entity.setSickAdjustment(getFloat(doc, "sickAdjustment"));
+        entity.setStressAdjustment(getFloat(doc, "stressAdjustment"));
+        entity.setExerciseAdjustment(getFloat(doc, "exerciseAdjustment"));
+
+        // user context
+        entity.setCurrentGlucose(doc.getLong("currentGlucose") != null
+                ? doc.getLong("currentGlucose").intValue() : null);
+        entity.setActivityLevel(doc.getString("activityLevel"));
+
+        // profile status
+        Boolean profileComplete = doc.getBoolean("profileComplete");
+        entity.setProfileComplete(profileComplete != null && profileComplete);
+        entity.setInsulinMessage(doc.getString("insulinMessage"));
+        entity.setNote(doc.getString("note"));
         
         return entity;
     }
