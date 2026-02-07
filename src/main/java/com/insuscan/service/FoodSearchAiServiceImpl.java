@@ -99,9 +99,9 @@ public class FoodSearchAiServiceImpl implements FoodSearchAiService {
     @Override
     public List<ScoredFoodResult> rankAndScoreResults(String originalQuery, List<NutritionInfo> results) {
         if (!isServiceAvailable() || results == null || results.isEmpty()) {
-            // Fallback: return results with default scores
+            // Fallback: return results with default scores and original name as displayName
             return results.stream()
-                    .map(r -> new ScoredFoodResult(r, 50, "Standard search"))
+                    .map(r -> new ScoredFoodResult(r, 50, "Standard search", r.getFoodName()))
                     .collect(Collectors.toList());
         }
         
@@ -141,9 +141,9 @@ public class FoodSearchAiServiceImpl implements FoodSearchAiService {
             apiLogger.openaiError(e.getMessage(), e.getClass().getSimpleName());
             log.error("[AI-SEARCH] Result ranking failed: {}", e.getMessage());
             
-            // Fallback: return results with default scores
+            // Fallback: return results with default scores and original name
             return results.stream()
-                    .map(r -> new ScoredFoodResult(r, 50, "AI ranking unavailable"))
+                    .map(r -> new ScoredFoodResult(r, 50, "AI ranking unavailable", r.getFoodName()))
                     .collect(Collectors.toList());
         }
     }
@@ -193,7 +193,7 @@ public class FoodSearchAiServiceImpl implements FoodSearchAiService {
         }
         
         return String.format("""
-                You are a Food Search Result Ranker for a diabetes management system.
+                You are a Food Search Result Ranker for a diabetes management app.
                 
                 USER QUERY: "%s"
                 
@@ -201,24 +201,39 @@ public class FoodSearchAiServiceImpl implements FoodSearchAiService {
                 %s
                 
                 TASK:
-                For each result, assign a relevance score (0-100) and provide a brief match reason.
+                For each result:
+                1. Assign a relevance score (0-100)
+                2. Provide a brief match reason
+                3. Create a clean DISPLAY NAME for the UI (see rules below)
+                
+                DISPLAY NAME RULES:
+                - Remove descriptors like "cooked", "raw", "commercially prepared", "Chinese restaurant"
+                - Use Title Case (e.g., "White Rice" not "white rice, cooked")
+                - Keep it short and readable (2-4 words max)
+                - Examples:
+                  "Rice, white, cooked, Chinese restaurant" -> "White Rice"
+                  "Bread, whole wheat, commercially prepared" -> "Whole Wheat Bread"
+                  "Chicken breast, boneless, skinless, grilled" -> "Grilled Chicken Breast"
                 
                 SCORING RULES:
-                - Exact name match: 95-100
-                - Contains all keywords: 80-94
+                - Exact match for basic home-cooked food: 95-100
+                - Generic/plain version: 90-100
+                - Contains all keywords, basic form: 80-94
                 - Contains some keywords: 60-79
-                - Related but different form (e.g., flour vs whole): 40-59
-                - Processed/prepared version when user wants basic: 20-39
-                - Completely different item: 0-19
                 
-                FILTERING:
-                - Items scoring below 40 should be filtered out
+                PENALTIES:
+                - Restaurant-specific ("Chinese restaurant", "fast food"): -30 to -40 points
+                - Brand-specific products: -20 to -30 points
+                - Heavily processed ("fried", "sweetened"): -15 to -25 points
+                - Baby food: -30 points
                 
-                OUTPUT (Strict JSON array):
+                FILTERING: Items below 50 points should be excluded.
+                
+                OUTPUT (Strict JSON):
                 {
                   "rankings": [
-                    {"fdcId": "169756", "score": 95, "reason": "Exact match for plain white rice"},
-                    {"fdcId": "168878", "score": 85, "reason": "Contains keywords, cooked variation"}
+                    {"fdcId": "169756", "score": 95, "displayName": "White Rice", "reason": "Exact match"},
+                    {"fdcId": "168878", "score": 85, "displayName": "Long Grain Rice", "reason": "Similar variant"}
                   ]
                 }
                 """, originalQuery, resultsText.toString());
@@ -277,10 +292,11 @@ public class FoodSearchAiServiceImpl implements FoodSearchAiService {
                 String fdcId = ranking.get("fdcId").asText();
                 int score = ranking.get("score").asInt();
                 String reason = ranking.has("reason") ? ranking.get("reason").asText() : "Relevant match";
+                String displayName = ranking.has("displayName") ? ranking.get("displayName").asText() : null;
                 
                 NutritionInfo original = resultsMap.get(fdcId);
-                if (original != null && score >= 40) { // Filter out low-scoring results
-                    scoredResults.add(new ScoredFoodResult(original, score, reason));
+                if (original != null && score >= 50) { // Filter out low-scoring results
+                    scoredResults.add(new ScoredFoodResult(original, score, reason, displayName));
                 }
             }
             

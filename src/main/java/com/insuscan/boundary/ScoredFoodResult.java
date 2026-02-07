@@ -4,13 +4,14 @@ public class ScoredFoodResult extends NutritionInfo {
     
     private Integer relevanceScore;
     private String matchReason;
+    private String displayName;  // Clean, formatted name for UI display
     
     // Constructors
     public ScoredFoodResult() {
         super();
     }
     
-    public ScoredFoodResult(NutritionInfo nutritionInfo, Integer relevanceScore, String matchReason) {
+    public ScoredFoodResult(NutritionInfo nutritionInfo, Integer relevanceScore, String matchReason, String displayName) {
         // Copy fields from NutritionInfo
         this.setFound(nutritionInfo.isFound());
         this.setFdcId(nutritionInfo.getFdcId());
@@ -22,6 +23,7 @@ public class ScoredFoodResult extends NutritionInfo {
         // Set scoring fields
         this.relevanceScore = relevanceScore;
         this.matchReason = matchReason;
+        this.displayName = displayName != null ? displayName : nutritionInfo.getFoodName();
     }
     
     // Getters and Setters
@@ -40,4 +42,13 @@ public class ScoredFoodResult extends NutritionInfo {
     public void setMatchReason(String matchReason) {
         this.matchReason = matchReason;
     }
+    
+    public String getDisplayName() {
+        return displayName != null ? displayName : getFoodName();
+    }
+    
+    public void setDisplayName(String displayName) {
+        this.displayName = displayName;
+    }
 }
+
