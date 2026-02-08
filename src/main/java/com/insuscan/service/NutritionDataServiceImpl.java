@@ -210,7 +210,9 @@ public class NutritionDataServiceImpl implements NutritionDataService {
         
         // 2. Fetch 25 candidates (The "Wide Net" strategy)
         apiLogger.usdaApiCall("Candidate Search: " + cleanQuery);
-        return searchFoodsInternal(cleanQuery, 20);
+        return searchFoodsInternal(cleanQuery, 20).stream()
+                .sorted(Comparator.comparing(NutritionInfo::getFdcId)) // ENVFORCE DETERMINISM
+                .toList();
     }
 
     @Override
