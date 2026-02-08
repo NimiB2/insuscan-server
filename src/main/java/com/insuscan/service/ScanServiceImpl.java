@@ -16,6 +16,7 @@ import com.insuscan.util.PortionEstimator;
 import com.insuscan.util.NumberUtils;
 import com.insuscan.calculation.InsulinCalculator;
 import com.insuscan.calculation.CalculationParams;
+import com.insuscan.calculation.CalculationResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -221,6 +222,7 @@ public class ScanServiceImpl implements ScanService {
             // Build params from user profile - handles null checks
             CalculationParams params = new CalculationParams.Builder()
                     .fromUser(user)
+                    .withTotalCarbs(totalCarbs)
                     .build();
 
             // Log profile status
@@ -234,22 +236,24 @@ public class ScanServiceImpl implements ScanService {
                         params.getTargetGlucose(),
                         true);
 
-                // Calculate using the new method
-                InsulinCalculator.InsulinCalculationResult result = InsulinCalculator.calculateSimple(totalCarbs,
-                        params);
+                // Calculate using the new instance-based method
+                // Note: InsulinCalculator is effectively stateless, we can instantiate it here.
+                InsulinCalculator calculator = new InsulinCalculator();
+                CalculationResult result = calculator.calculate(params);
 
                 // Log breakdown
                 apiLogger.insulinCalcBreakdown(
                         result.getCarbDose(),
                         result.getCorrectionDose(),
-                        result.getBaseDose(),
+                        // Base dose is derived sum
+                        (result.getCarbDose() + result.getCorrectionDose()),
                         result.getSickAdjustment(),
                         result.getStressAdjustment(),
                         result.getExerciseAdjustment(),
                         result.getTotalDose());
 
                 // Log warning if any
-                if (result.hasWarning()) {
+                if (result.getWarning() != null && !result.getWarning().isEmpty()) {
                     apiLogger.insulinCalcWarning(result.getWarning());
                 }
 

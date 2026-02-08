@@ -51,6 +51,7 @@ public class MealEntity {
     private List<String> missingProfileFields;
     private String insulinMessage;
     
+    private Float activeInsulin;        // IOB subtracted from dose
     private Boolean wasSickMode;
     private Boolean wasStressMode;
 
@@ -192,6 +193,9 @@ public class MealEntity {
 
     public Boolean getWasStressMode() { return wasStressMode; }
     public void setWasStressMode(Boolean wasStressMode) { this.wasStressMode = wasStressMode; }
+
+    public Float getActiveInsulin() { return activeInsulin; }
+    public void setActiveInsulin(Float activeInsulin) { this.activeInsulin = activeInsulin; }
     
     @Override
     public String toString() {

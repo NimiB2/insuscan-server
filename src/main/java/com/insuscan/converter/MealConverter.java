@@ -95,6 +95,7 @@ public class MealConverter {
         boundary.setSickAdjustment(entity.getSickAdjustment());
         boundary.setStressAdjustment(entity.getStressAdjustment());
         boundary.setExerciseAdjustment(entity.getExerciseAdjustment());
+        boundary.setActiveInsulin(entity.getActiveInsulin());
 
         // Insulin data
         boundary.setRecommendedDose(entity.getRecommendedDose());
@@ -169,6 +170,7 @@ public class MealConverter {
         entity.setSickAdjustment(boundary.getSickAdjustment());
         entity.setStressAdjustment(boundary.getStressAdjustment());
         entity.setExerciseAdjustment(boundary.getExerciseAdjustment());
+        entity.setActiveInsulin(boundary.getActiveInsulin());
 
         // Insulin data
         entity.setRecommendedDose(boundary.getRecommendedDose());

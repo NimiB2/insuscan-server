@@ -6,6 +6,8 @@ import com.insuscan.crud.UserRepository;
 import com.insuscan.data.UserEntity;
 import com.insuscan.util.ApiLogger;
 import com.insuscan.calculation.InsulinCalculator;
+import com.insuscan.calculation.CalculationParams;
+import com.insuscan.calculation.CalculationResult;
 import com.insuscan.calculation.InsulinDefaults;
 
 import org.slf4j.Logger;
@@ -14,8 +16,14 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 /**
- * Insulin calculation service implementation.
- * Supports carb dosing, glucose correction, and lifestyle adjustments.
+ * Service implementation for Insulin Dose Calculation.
+ * <p>
+ * This service acts as an orchestrator/facade. It:
+ * 1. Validates inputs
+ * 2. Loads User Profile data
+ * 3. Builds a context object (CalculationParams)
+ * 4. Delegates the medical math to {@link InsulinCalculator} ("The Golden Logic")
+ * 5. Returns the structured result
  */
 @Service
 public class InsulinCalculationServiceImpl implements InsulinCalculationService {
@@ -25,20 +33,8 @@ public class InsulinCalculationServiceImpl implements InsulinCalculationService 
     private final UserRepository userRepository;
     private final ApiLogger apiLogger;
 
-    
     @Value("${spring.application.name}")
     private String systemId;
-
-    // Default values when user profile is missing
-    private static final float DEFAULT_INSULIN_CARB_RATIO = 1f / InsulinDefaults.INSULIN_CARB_RATIO;
-    private static final float DEFAULT_CORRECTION_FACTOR = InsulinDefaults.CORRECTION_FACTOR;
-    private static final int DEFAULT_TARGET_GLUCOSE = InsulinDefaults.TARGET_GLUCOSE;
-    private static final int DEFAULT_SICK_ADJUSTMENT = InsulinDefaults.SICK_DAY_PERCENT;
-    private static final int DEFAULT_STRESS_ADJUSTMENT = InsulinDefaults.STRESS_PERCENT;
-    private static final int DEFAULT_LIGHT_EXERCISE_ADJ = InsulinDefaults.LIGHT_EXERCISE_PERCENT;
-    private static final int DEFAULT_INTENSE_EXERCISE_ADJ = InsulinDefaults.INTENSE_EXERCISE_PERCENT;
-    private static final int LOW_GLUCOSE_THRESHOLD = InsulinDefaults.LOW_GLUCOSE_THRESHOLD;
-    private static final int HIGH_GLUCOSE_THRESHOLD = InsulinDefaults.HIGH_GLUCOSE_THRESHOLD;
 
     public InsulinCalculationServiceImpl(UserRepository userRepository, ApiLogger apiLogger) {
         this.userRepository = userRepository;
@@ -66,133 +62,105 @@ public class InsulinCalculationServiceImpl implements InsulinCalculationService 
         
         long startTime = System.currentTimeMillis();
         
-        // Validate inputs
+        // 1. Validate inputs
         if (totalCarbs == null || totalCarbs < 0) {
-            apiLogger.insulinCalcError("Total carbs must be provided and >= 0");
-            throw new IllegalArgumentException("Total carbs must be provided and >= 0");
+            String msg = "Total carbs must be provided and >= 0";
+            apiLogger.insulinCalcError(msg);
+            throw new IllegalArgumentException(msg);
         }
 
-        // Log start
+        // 2. Log start
         String userEmail = userId != null ? userId.getEmail() : null;
         apiLogger.insulinCalcStart(totalCarbs, currentGlucose, activityLevel, 
                                    sickModeEnabled, stressModeEnabled, userEmail);
 
-        // Load user profile
+        // 3. Load user profile
         UserEntity user = loadUserProfile(userId);
-        boolean hasProfile = user != null;
         
-        // Get calculation parameters
-        Float insulinCarbRatio = getInsulinCarbRatio(user);
-        Float correctionFactor = getCorrectionFactor(user);
-        Integer targetGlucose = getTargetGlucose(user);
+        // 4. Build Calculation Params (Context)
+        //    This merges User Profile settings + Request specific data (Carbs, Glucose, Activity)
+        CalculationParams.Builder builder = new CalculationParams.Builder()
+                .fromUser(user)
+                .withTotalCarbs(totalCarbs)
+                .withCurrentGlucose(currentGlucose)
+                .withActivityLevel(activityLevel);
+
+        // Apply temporary mode overrides if enabled
+        if (Boolean.TRUE.equals(sickModeEnabled)) {
+            int sickPct = (user != null && user.getSickDayAdjustment() != null) 
+                    ? user.getSickDayAdjustment() : InsulinDefaults.SICK_DAY_PERCENT;
+            builder.withSickDayPercent(sickPct);
+        }
         
-        // Log parameters
-        apiLogger.insulinCalcParams(insulinCarbRatio, correctionFactor, targetGlucose, hasProfile);
+        if (Boolean.TRUE.equals(stressModeEnabled)) {
+            int stressPct = (user != null && user.getStressAdjustment() != null) 
+                    ? user.getStressAdjustment() : InsulinDefaults.STRESS_PERCENT;
+            builder.withStressPercent(stressPct);
+        }
         
-        // Log adjustment factors if any mode is enabled
-        if (Boolean.TRUE.equals(sickModeEnabled) || Boolean.TRUE.equals(stressModeEnabled) 
-            || (activityLevel != null && !"normal".equals(activityLevel))) {
-            
-            Integer sickPct = Boolean.TRUE.equals(sickModeEnabled) ? 
-                (user != null && user.getSickDayAdjustment() != null ? user.getSickDayAdjustment() : DEFAULT_SICK_ADJUSTMENT) : null;
-            Integer stressPct = Boolean.TRUE.equals(stressModeEnabled) ? 
-                (user != null && user.getStressAdjustment() != null ? user.getStressAdjustment() : DEFAULT_STRESS_ADJUSTMENT) : null;
-            Integer exercisePct = getExercisePercent(activityLevel, user);
-            
-            apiLogger.insulinCalcAdjustments(sickPct, stressPct, exercisePct, hasProfile);
+        CalculationParams params = builder.build();
+
+        // 5. Execute Calculation (Delegated to Domain Logic)
+        InsulinCalculator calculator = new InsulinCalculator();
+        CalculationResult result = calculator.calculate(params);
+
+        // 6. Log Complete Breakdown
+        apiLogger.insulinCalcBreakdown(
+            result.getCarbDose(), 
+            result.getCorrectionDose(), 
+            result.getBaseDose(), 
+            result.getSickAdjustment(), 
+            result.getStressAdjustment(), 
+            result.getExerciseAdjustment(), 
+            result.getTotalDose()
+        );
+        
+        if (result.getWarning() != null && !result.getWarning().isEmpty()) {
+            apiLogger.insulinCalcWarning(result.getWarning());
         }
 
-        // Build ratio display string
-        String ratioDisplay = buildRatioDisplay(insulinCarbRatio, hasProfile);
-
-        // Step 1: Calculate carb dose
-        float carbDose = InsulinCalculator.calculateCarbDose(totalCarbs, insulinCarbRatio);
-        
-        // Step 2: Calculate correction dose
-        float correctionDose = 0f;
-        if (currentGlucose != null && currentGlucose > 0) {
-            correctionDose = InsulinCalculator.calculateCorrectionDose(
-                currentGlucose, targetGlucose, correctionFactor);
-        }
-        
-        // Step 3: Calculate base dose
-        float baseDose = carbDose + correctionDose;
-        
-        // Step 4: Apply adjustments
-        float sickAdj = calculateSickAdjustment(baseDose, sickModeEnabled, user);
-        float stressAdj = calculateStressAdjustment(baseDose, stressModeEnabled, user);
-        float exerciseAdj = calculateExerciseAdjustment(baseDose, activityLevel, user);
-        
-        // Step 5: Calculate final dose
-        float finalDose = baseDose + sickAdj + stressAdj + exerciseAdj;
-        if (finalDose < 0) {
-            finalDose = 0f;
-        }
-        
-        // Log the breakdown
-        apiLogger.insulinCalcBreakdown(carbDose, correctionDose, baseDose, 
-                                        sickAdj, stressAdj, exerciseAdj, finalDose);
-        
-        // Round to practical value
-        float roundedDose = InsulinCalculator.roundDose(finalDose);
-        
-        // Generate warnings
-        String warning = buildWarnings(currentGlucose, finalDose);
-        if (warning != null) {
-            apiLogger.insulinCalcWarning(warning);
-        }
-
-        // Log completion
         long totalTime = System.currentTimeMillis() - startTime;
-        apiLogger.insulinCalcComplete(finalDose, roundedDose, totalTime);
+        apiLogger.insulinCalcComplete(result.getTotalDose(), result.getRoundedDose(), totalTime);
 
-     // Build response
+        // 7. Map to Response Boundary
+        return mapToBoundary(params, result);
+    }
+
+    private InsulinCalculationBoundary mapToBoundary(CalculationParams params, CalculationResult result) {
         InsulinCalculationBoundary response = new InsulinCalculationBoundary();
-        response.setTotalCarbs(totalCarbs);
-        response.setCurrentGlucose(currentGlucose != null ? currentGlucose.floatValue() : null);
-        response.setCarbDose(carbDose);
-        response.setCorrectionDose(correctionDose);
-        response.setTotalRecommendedDose(roundedDose);
-
-        // Calculation params used
+        
+        // Inputs
+        response.setTotalCarbs(params.getTotalCarbs());
+        response.setCurrentGlucose(params.getCurrentGlucose() != null ? params.getCurrentGlucose().floatValue() : null);
+        
+        // Profile Used
+        String ratioDisplay = params.getInsulinCarbRatio() != null 
+                ? String.format("1:%.0f", params.getInsulinCarbRatio()) 
+                : "Default";
         response.setInsulinCarbRatioUsed(ratioDisplay);
-        response.setCorrectionFactorUsed(correctionFactor);
-        response.setTargetGlucoseUsed(targetGlucose);
+        response.setCorrectionFactorUsed(params.getCorrectionFactor());
+        response.setTargetGlucoseUsed(params.getTargetGlucose());
 
-        // Adjustment breakdown (for UI display)
-        response.setSickAdjustment(sickAdj);
-        response.setStressAdjustment(stressAdj);
-        response.setExerciseAdjustment(exerciseAdj);
-
-        // Warning if any
-        response.setWarning(warning);
-
+        // Results
+        response.setCarbDose(result.getCarbDose());
+        response.setCorrectionDose(result.getCorrectionDose());
+        
+        // Adjustments
+        response.setSickAdjustment(result.getSickAdjustment());
+        response.setStressAdjustment(result.getStressAdjustment());
+        response.setExerciseAdjustment(result.getExerciseAdjustment());
+        
+        // Final
+        response.setTotalRecommendedDose(result.getRoundedDose());
+        response.setWarning(result.getWarning());
+        
         return response;
     }
-
-    // Helper method for getting exercise percent
-    private Integer getExercisePercent(String activityLevel, UserEntity user) {
-        if (activityLevel == null || "normal".equalsIgnoreCase(activityLevel)) {
-            return null;
-        }
-        
-        if ("light".equalsIgnoreCase(activityLevel)) {
-            return user != null && user.getLightExerciseAdjustment() != null ? 
-                user.getLightExerciseAdjustment() : DEFAULT_LIGHT_EXERCISE_ADJ;
-        } else if ("intense".equalsIgnoreCase(activityLevel)) {
-            return user != null && user.getIntenseExerciseAdjustment() != null ? 
-                user.getIntenseExerciseAdjustment() : DEFAULT_INTENSE_EXERCISE_ADJ;
-        }
-        return null;
-    }
-
-    // ===== Helper Methods =====
 
     private UserEntity loadUserProfile(UserIdBoundary userId) {
         if (userId == null || userId.getEmail() == null) {
             return null;
         }
-        
         try {
             String userDocId = (userId.getSystemId() != null ? userId.getSystemId() : systemId) 
                     + "_" + userId.getEmail();
@@ -201,109 +169,5 @@ public class InsulinCalculationServiceImpl implements InsulinCalculationService 
             log.warn("Failed to load user profile: {}", e.getMessage());
             return null;
         }
-    }
-
-    private Float getInsulinCarbRatio(UserEntity user) {
-        if (user != null && user.getInsulinCarbRatio() != null) {
-            return user.getInsulinCarbRatio();
-        }
-        return DEFAULT_INSULIN_CARB_RATIO;
-    }
-
-    private Float getCorrectionFactor(UserEntity user) {
-        if (user != null && user.getCorrectionFactor() != null) {
-            return user.getCorrectionFactor();
-        }
-        return DEFAULT_CORRECTION_FACTOR;
-    }
-
-    private Integer getTargetGlucose(UserEntity user) {
-        if (user != null && user.getTargetGlucose() != null) {
-            return user.getTargetGlucose();
-        }
-        return DEFAULT_TARGET_GLUCOSE;
-    }
-
-    private String buildRatioDisplay(Float ratio, boolean fromProfile) {
-        float icr = 1.0f / ratio;  // Convert back to readable format
-        String source = fromProfile ? "user profile" : "default";
-        return String.format("1:%.0f (%s)", icr, source);
-    }
-
-    private float calculateSickAdjustment(float baseDose, Boolean enabled, UserEntity user) {
-        if (!Boolean.TRUE.equals(enabled)) {
-            return 0f;
-        }
-        
-        int percent = DEFAULT_SICK_ADJUSTMENT;
-        if (user != null && user.getSickDayAdjustment() != null) {
-            percent = user.getSickDayAdjustment();
-        }
-        
-        return baseDose * (percent / 100f);
-    }
-
-    private float calculateStressAdjustment(float baseDose, Boolean enabled, UserEntity user) {
-        if (!Boolean.TRUE.equals(enabled)) {
-            return 0f;
-        }
-        
-        int percent = DEFAULT_STRESS_ADJUSTMENT;
-        if (user != null && user.getStressAdjustment() != null) {
-            percent = user.getStressAdjustment();
-        }
-        
-        return baseDose * (percent / 100f);
-    }
-
-    private float calculateExerciseAdjustment(float baseDose, String activityLevel, UserEntity user) {
-        if (activityLevel == null || "normal".equalsIgnoreCase(activityLevel)) {
-            return 0f;
-        }
-        
-        int percent = 0;
-        
-        if ("light".equalsIgnoreCase(activityLevel)) {
-            percent = DEFAULT_LIGHT_EXERCISE_ADJ;
-            if (user != null && user.getLightExerciseAdjustment() != null) {
-                percent = user.getLightExerciseAdjustment();
-            }
-        } else if ("intense".equalsIgnoreCase(activityLevel)) {
-            percent = DEFAULT_INTENSE_EXERCISE_ADJ;
-            if (user != null && user.getIntenseExerciseAdjustment() != null) {
-                percent = user.getIntenseExerciseAdjustment();
-            }
-        }
-        
-        // Exercise reduces dose, so return negative
-        return -(baseDose * (percent / 100f));
-    }
-
-    private String buildWarnings(Integer currentGlucose, float finalDose) {
-        StringBuilder warnings = new StringBuilder();
-        
-        // Low glucose warning - critical!
-        if (currentGlucose != null && currentGlucose < LOW_GLUCOSE_THRESHOLD) {
-            warnings.append("⚠️ LOW GLUCOSE! Treat hypoglycemia before eating. ");
-        }
-        
-        // High glucose warning
-        if (currentGlucose != null && currentGlucose > HIGH_GLUCOSE_THRESHOLD) {
-            warnings.append("⚠️ High glucose detected. Consider checking ketones. ");
-        }
-        
-        // High dose warning
-        if (InsulinCalculator.isHighDose(finalDose)) {
-            warnings.append("⚠️ Dose is unusually high (")
-                    .append(InsulinCalculator.roundDose(finalDose))
-                    .append(" units). Please verify before injection. ");
-        }
-        
-        // Low dose warning
-        if (InsulinCalculator.isBelowMinimum(finalDose)) {
-            warnings.append("Note: Dose is below 0.5 units. Consider skipping or rounding. ");
-        }
-        
-        return warnings.length() > 0 ? warnings.toString().trim() : null;
     }
 }

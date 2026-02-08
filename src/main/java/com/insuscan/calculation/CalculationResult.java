@@ -45,6 +45,7 @@ public class CalculationResult {
     // Getters
     public float getCarbDose() { return carbDose; }
     public float getCorrectionDose() { return correctionDose; }
+    public float getBaseDose() { return carbDose + correctionDose; }
     public float getSickAdjustment() { return sickAdjustment; }
     public float getStressAdjustment() { return stressAdjustment; }
     public float getExerciseAdjustment() { return exerciseAdjustment; }
