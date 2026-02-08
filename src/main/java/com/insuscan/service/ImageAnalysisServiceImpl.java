@@ -217,7 +217,7 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
         return Map.of(
                 "model", openAiModel,
                 "messages", List.of(userMessage),
-                "temperature", 0.2,
+                "temperature", 0.0,
                 "max_tokens", 1200
         );
     }
@@ -237,7 +237,7 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
         return Map.of(
                 "model", openAiModel,
                 "messages", List.of(userMessage),
-                "temperature", 0.2,
+                "temperature", 0.0,
                 "max_tokens", 1200
         );
     }
