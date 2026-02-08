@@ -52,6 +52,7 @@ public class MealBoundary {
 
 
 	// Adjustment Values (The actual calculated amount added/subtracted)
+    private Float activeInsulin; // Active Insulin (IOB) subtracted
     private Float sickAdjustment; // e.g. +1.5 units
     private Float stressAdjustment; // e.g. +0.5 units
     private Float exerciseAdjustment; // e.g. -1.0 units
@@ -244,6 +245,14 @@ public class MealBoundary {
 
     public void setExerciseAdjustment(Float exerciseAdjustment) {
         this.exerciseAdjustment = exerciseAdjustment;
+    }
+
+    public Float getActiveInsulin() {
+        return activeInsulin;
+    }
+
+    public void setActiveInsulin(Float activeInsulin) {
+        this.activeInsulin = activeInsulin;
     }
 
     // --- 6. Final Dosage ---

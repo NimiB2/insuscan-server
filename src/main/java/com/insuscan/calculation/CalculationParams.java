@@ -9,6 +9,10 @@ import java.util.List;
 public class CalculationParams {
     
     // User profile settings
+    /**
+     * Insulin-to-Carb Ratio in Grams per Unit (e.g. 10 means 1 unit covers 10g carbs).
+     * DO NOT pass the inverted ratio (0.1).
+     */
     private final Float insulinCarbRatio;
     private final Float correctionFactor;
     private final Integer targetGlucose;
@@ -38,13 +42,25 @@ public class CalculationParams {
     }
 
     // Handles both "1:10" string format and direct float value
+    // Also normalizes "Units per Gram" (e.g. 0.1) to "Grams per Unit" (e.g. 10)
     private Float parseRatio(String ratioStr) {
         if (ratioStr == null) return null;
         try {
+            float val;
             if (ratioStr.contains(":")) {
-                return Float.parseFloat(ratioStr.split(":")[1]);
+                val = Float.parseFloat(ratioStr.split(":")[1]);
+            } else {
+                val = Float.parseFloat(ratioStr);
             }
-            return Float.parseFloat(ratioStr);
+            
+            // Safety Heuristic: Normalizing Legacy Data
+            // If value is < 1.0 (e.g. 0.1), it likely represents "Units per Gram".
+            // We want "Grams per Unit" (e.g. 10).
+            // Example: 0.1 => 1/0.1 = 10.
+            if (val > 0 && val < 1.0f) {
+                return 1.0f / val;
+            }
+            return val;
         } catch (Exception e) {
             return null;
         }

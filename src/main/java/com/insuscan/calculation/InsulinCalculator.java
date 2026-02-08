@@ -4,160 +4,155 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Calculates insulin doses based on carbs, glucose, and user profile.
- * Supports temporary adjustments for sick days, stress, and exercise.
+ * Core logic for Insulin Dose Calculation.
+ * <p>
+ * This class implements the "Golden Logic" for medical insulin calculation using the standard
+ * formulas agreed upon for the InsuScan platform.
+ * <p>
+ * <b>Formula:</b>
+ * <pre>
+ * 1. Carb Dose = Total Carbs (g) / Insulin-to-Carb Ratio (g/unit)
+ * 2. Correction Dose = (Current Glucose - Target Glucose) / ISF
+ *    (Only calculated if Current Glucose is provided. Can be negative to reduce meal dose)
+ * 3. Base Dose = Carb Dose + Correction Dose
+ * 4. Adjustments = Base Dose * (Sick% + Stress% - Exercise%)
+ * 5. Total Dose = Base Dose + Adjustments (Floored at 0)
+ * </pre>
  */
 public class InsulinCalculator {
 
-    // Defaults when user profile is incomplete
-	// Use centralized defaults
-	private static final float DEFAULT_INSULIN_CARB_RATIO = InsulinDefaults.INSULIN_CARB_RATIO;
-	private static final float DEFAULT_CORRECTION_FACTOR = InsulinDefaults.CORRECTION_FACTOR;
-	private static final int DEFAULT_TARGET_GLUCOSE = InsulinDefaults.TARGET_GLUCOSE;
+    // Default fallback values (used only if profile is incomplete/missing)
+    private static final float DEFAULT_INSULIN_CARB_RATIO = InsulinDefaults.INSULIN_CARB_RATIO;
+    private static final float DEFAULT_CORRECTION_FACTOR = InsulinDefaults.CORRECTION_FACTOR;
+    private static final int DEFAULT_TARGET_GLUCOSE = InsulinDefaults.TARGET_GLUCOSE;
+
     /**
-     * Main calculation - returns full breakdown for display
+     * Calculates the recommended insulin dose based on the provided parameters.
+     *
+     * @param params The calculation parameters (user profile, meal carbs, context).
+     * @return A detailed result object containing the dose breakdown.
      */
     public CalculationResult calculate(CalculationParams params) {
         
-        // 1. Get profile values or use defaults
-        float ratio = getValueOrDefault(params.getInsulinCarbRatio(), DEFAULT_INSULIN_CARB_RATIO);
+        // 1. Validate & Extract Profile Parameters
+        //    We use "Grams per Unit" standard (e.g., 10g/unit).
+        float icr = getValueOrDefault(params.getInsulinCarbRatio(), DEFAULT_INSULIN_CARB_RATIO);
         float isf = getValueOrDefault(params.getCorrectionFactor(), DEFAULT_CORRECTION_FACTOR);
-        int target = getValueOrDefault(params.getTargetGlucose(), DEFAULT_TARGET_GLUCOSE);
+        int targetGlucose = getValueOrDefault(params.getTargetGlucose(), DEFAULT_TARGET_GLUCOSE);
+        
         float totalCarbs = params.getTotalCarbs() != null ? params.getTotalCarbs() : 0f;
 
-        // 2. Base carb dose: carbs / ratio
-        float carbDose = totalCarbs / ratio;
-
-        // 3. Correction dose: (current - target) / ISF
-        float correctionDose = 0f;
-        if (params.getCurrentGlucose() != null && params.getCurrentGlucose() > target) {
-            correctionDose = (params.getCurrentGlucose() - target) / isf;
+        // 2. Calculate Carb Dose (Meal Bolus)
+        //    Formula: Carbs / Ratio
+        float carbDose = 0f;
+        if (icr > 0) {
+            carbDose = totalCarbs / icr;
         }
 
-        // 4. Calculate adjustments on raw total
-        float rawTotal = carbDose + correctionDose;
+        // 3. Calculate Correction Dose
+        //    Formula: (Current - Target) / ISF
+        //    Note: Allowed to be negative (to handle below-target glucose).
+        float correctionDose = 0f;
+        Integer currentGlucose = params.getCurrentGlucose();
         
-        float sickAdj = calculatePercentAdjustment(rawTotal, params.getSickDayPercent());
-        float stressAdj = calculatePercentAdjustment(rawTotal, params.getStressPercent());
-        float exerciseAdj = calculateExerciseAdjustment(rawTotal, params);
+        if (currentGlucose != null && isf > 0) {
+            correctionDose = (currentGlucose - targetGlucose) / isf;
+        }
 
-        // 5. Final sum (exercise reduces dose)
-        float finalTotal = rawTotal + sickAdj + stressAdj - exerciseAdj;
-        if (finalTotal < 0) finalTotal = 0;
+        // 4. Calculate Base Dose
+        //    This is the sum of the meal requirement and the correction.
+        float baseDose = carbDose + correctionDose;
 
-        // 6. Round to nearest 0.5
-        float roundedDose = roundDose(finalTotal);
-
-        // 7. Check profile completeness
-        List<String> missing = new ArrayList<>();
-        if (params.getInsulinCarbRatio() == null) missing.add("Insulin:Carb Ratio");
-        if (params.getCorrectionFactor() == null) missing.add("Correction Factor");
-        if (params.getTargetGlucose() == null) missing.add("Target Glucose");
+        // 5. Apply Temporary Adjustments (Sick / Stress / Exercise)
+        //    Adjustments are applied to the ENTIRE base dose (meal + correction).
+        float sickAdj = calculateAdjustment(baseDose, params.getSickDayPercent());
+        float stressAdj = calculateAdjustment(baseDose, params.getStressPercent());
         
-        boolean profileComplete = missing.isEmpty();
+        // Exercise Handling:
+        // - Prioritize specific Radio Button selection (Light/Intense)
+        // - Fallback to global "Exercise Mode" if defined in params (handled by Builder/Caller)
+        float exerciseAdj = calculateExerciseAdjustment(baseDose, params);
+
+        // 6. Calculate Final Total
+        //    Sick/Stress ADD to dose. Exercise SUBTRACTS from dose.
+        float finalTotal = baseDose + sickAdj + stressAdj - exerciseAdj;
+
+        // Safety Floor: Dose cannot be negative.
+        if (finalTotal < 0) {
+            finalTotal = 0f;
+        }
+
+        // 7. No Step Rounding (User requested precise result)
+        // We round to 2 decimal places for display/storage sanity, but do not force 0.5 increments.
+        float roundedDose = (float) (Math.round(finalTotal * 100.0) / 100.0);
+
+        // 8. Generate Status/Warning
+        List<String> missingFields = params.getMissingFields();
+        boolean profileComplete = params.isProfileComplete();
         String warning = profileComplete ? "" : "Profile incomplete - using defaults";
 
+        // Return detailed result
         return new CalculationResult(
-            carbDose, correctionDose,
-            sickAdj, stressAdj, exerciseAdj,
-            finalTotal, roundedDose,
-            warning, profileComplete, missing
+            carbDose, 
+            correctionDose,
+            sickAdj, 
+            stressAdj, 
+            exerciseAdj,
+            finalTotal, 
+            roundedDose, // Now represents the precise dose (max 2 decimals)
+            warning, 
+            profileComplete, 
+            missingFields
         );
     }
 
     /**
-     * Rounds dose to nearest 0.5 unit
+     * Helper to calculate a percentage adjustment.
+     * @param base The base amount to adjust.
+     * @param percent The percentage (0-100).
+     * @return The absolute amount to add/subtract.
      */
-    public static float roundDose(float dose) {
-        return Math.round(dose * 2) / 2.0f;
-    }
-
-    // Helper: get value or default if null/invalid
-    private float getValueOrDefault(Float value, float defaultVal) {
-        return (value != null && value > 0) ? value : defaultVal;
-    }
-
-    private int getValueOrDefault(Integer value, int defaultVal) {
-        return (value != null && value > 0) ? value : defaultVal;
-    }
-
-    // Helper: calculate percentage adjustment
-    private float calculatePercentAdjustment(float base, int percent) {
+    private float calculateAdjustment(float base, int percent) {
         if (percent <= 0) return 0f;
         return base * (percent / 100f);
     }
 
-    // Helper: calculate exercise adjustment based on activity level
+    /**
+     * Determines the exercise reduction amount.
+     * Assumes params.getActivityLevel() is normalized ("light", "intense", "normal").
+     */
     private float calculateExerciseAdjustment(float base, CalculationParams params) {
         if (params.getActivityLevel() == null) return 0f;
         
         String level = params.getActivityLevel().toLowerCase();
-        if (level.equals("light") && params.getLightExercisePercent() > 0) {
-            return base * (params.getLightExercisePercent() / 100f);
+        float reductionPercent = 0f;
+
+        if (level.equals("light")) {
+            reductionPercent = params.getLightExercisePercent();
+        } else if (level.equals("intense")) {
+            reductionPercent = params.getIntenseExercisePercent();
         }
-        if (level.equals("intense") && params.getIntenseExercisePercent() > 0) {
-            return base * (params.getIntenseExercisePercent() / 100f);
+        
+        // Make sure we have a valid positive percentage
+        if (reductionPercent > 0) {
+            return base * (reductionPercent / 100f);
         }
+        
         return 0f;
     }
-    
-    public static float calculateCarbDose(float totalCarbs, float insulinCarbRatio) {
-        if (insulinCarbRatio <= 0) return 0f;
-        return totalCarbs * insulinCarbRatio;
+
+    /**
+     * Rounds a float value to 2 decimal places.
+     */
+    private float roundToTwoDecimals(float value) {
+        return (float) (Math.round(value * 100.0) / 100.0);
     }
 
-    public static float calculateCorrectionDose(int currentGlucose, int targetGlucose, float correctionFactor) {
-        if (currentGlucose <= targetGlucose || correctionFactor <= 0) return 0f;
-        return (currentGlucose - targetGlucose) / correctionFactor;
+    private float getValueOrDefault(Float value, float defaultValue) {
+        return (value != null && value > 0) ? value : defaultValue;
     }
 
-    public static boolean isHighDose(float dose) {
-        return dose > 15f;  // threshold for warning
-    }
-
-    public static boolean isBelowMinimum(float dose) {
-        return dose > 0 && dose < 0.5f;
-    }
-    
-    public static class InsulinCalculationResult extends CalculationResult {
-        public InsulinCalculationResult(float carbDose, float correctionDose,
-                                        float sickAdjustment, float stressAdjustment, 
-                                        float exerciseAdjustment, float totalDose, 
-                                        float roundedDose, String warning, 
-                                        boolean profileComplete, List<String> missingFields) {
-            super(carbDose, correctionDose, sickAdjustment, stressAdjustment,
-                  exerciseAdjustment, totalDose, roundedDose, warning, 
-                  profileComplete, missingFields);
-        }
-        
-        public float getBaseDose() { return getCarbDose() + getCorrectionDose(); }
-        public boolean hasWarning() { return getWarning() != null && !getWarning().isEmpty(); }
-    }
-
-    // Simple calculation for scan service
-    public static InsulinCalculationResult calculateSimple(float totalCarbs, CalculationParams params) {
-        InsulinCalculator calculator = new InsulinCalculator();
-        CalculationResult result = calculator.calculate(
-            new CalculationParams.Builder()
-                .withTotalCarbs(totalCarbs)
-                .withInsulinCarbRatio(params.getInsulinCarbRatio())
-                .withCorrectionFactor(params.getCorrectionFactor())
-                .withTargetGlucose(params.getTargetGlucose())
-                .withCurrentGlucose(params.getCurrentGlucose())
-                .withActivityLevel(params.getActivityLevel())
-                .withSickDayPercent(params.getSickDayPercent())
-                .withStressPercent(params.getStressPercent())
-                .withLightExercisePercent(params.getLightExercisePercent())
-                .withIntenseExercisePercent(params.getIntenseExercisePercent())
-                .build()
-        );
-        
-        return new InsulinCalculationResult(
-            result.getCarbDose(), result.getCorrectionDose(),
-            result.getSickAdjustment(), result.getStressAdjustment(),
-            result.getExerciseAdjustment(), result.getTotalDose(),
-            result.getRoundedDose(), result.getWarning(),
-            result.isProfileComplete(), result.getMissingFields()
-        );
+    private int getValueOrDefault(Integer value, int defaultValue) {
+        return (value != null && value > 0) ? value : defaultValue;
     }
 }
