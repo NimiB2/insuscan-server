@@ -31,9 +31,9 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
     private String openAiModel;
 
     public ImageAnalysisServiceImpl(WebClient.Builder webClientBuilder,
-                                   ObjectMapper objectMapper,
-                                   VisionCacheService visionCache,
-                                   ApiLogger apiLogger) {
+            ObjectMapper objectMapper,
+            VisionCacheService visionCache,
+            ApiLogger apiLogger) {
         this.webClient = webClientBuilder
                 .baseUrl("https://api.openai.com/v1")
                 .build();
@@ -43,10 +43,11 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
     }
 
     @Override
-    public FoodRecognitionResult analyzeImage(String base64Image) {
+    public FoodRecognitionResult analyzeImage(String base64Image, String referenceObjectType) {
         // Log API key status
-        String keyPreview = (openAiApiKey != null && openAiApiKey.length() > 5) 
-            ? openAiApiKey.substring(0, 5) : "N/A";
+        String keyPreview = (openAiApiKey != null && openAiApiKey.length() > 5)
+                ? openAiApiKey.substring(0, 5)
+                : "N/A";
         apiLogger.apiKeyStatus("OPENAI", isServiceAvailable(), keyPreview);
 
         if (!isServiceAvailable()) {
@@ -67,13 +68,14 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
         long totalStartTime = System.currentTimeMillis();
 
         try {
-            // First pass: strict prompt
-            List<FoodRecognitionResult.RecognizedFoodItem> foods = analyzeWithPrompt(base64Image, true);
+            // First pass: strict prompt with reference type
+            List<FoodRecognitionResult.RecognizedFoodItem> foods = analyzeWithPrompt(base64Image, true,
+                    referenceObjectType);
 
             // Retry with relaxed prompt if needed
             if (foods.isEmpty()) {
                 apiLogger.openaiRetry("Strict prompt returned 0 foods");
-                foods = analyzeWithPrompt(base64Image, false);
+                foods = analyzeWithPrompt(base64Image, false, referenceObjectType);
             }
 
             long totalTime = System.currentTimeMillis() - totalStartTime;
@@ -105,9 +107,9 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
     }
 
     @Override
-    public FoodRecognitionResult analyzeImageFromUrl(String imageUrl) {
-        apiLogger.apiKeyStatus("OPENAI", isServiceAvailable(), 
-            openAiApiKey != null && openAiApiKey.length() > 5 ? openAiApiKey.substring(0, 5) : "N/A");
+    public FoodRecognitionResult analyzeImageFromUrl(String imageUrl, String referenceObjectType) {
+        apiLogger.apiKeyStatus("OPENAI", isServiceAvailable(),
+                openAiApiKey != null && openAiApiKey.length() > 5 ? openAiApiKey.substring(0, 5) : "N/A");
 
         if (!isServiceAvailable()) {
             return FoodRecognitionResult.failure("AI provider is not configured");
@@ -117,7 +119,7 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
         long startTime = System.currentTimeMillis();
 
         try {
-            Map<String, Object> requestBody = buildOpenAiRequestWithUrl(imageUrl);
+            Map<String, Object> requestBody = buildOpenAiRequestWithUrl(imageUrl, referenceObjectType);
 
             String response = webClient.post()
                     .uri("/chat/completions")
@@ -161,8 +163,10 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
         return openAiApiKey != null && !openAiApiKey.isBlank();
     }
 
-    private List<FoodRecognitionResult.RecognizedFoodItem> analyzeWithPrompt(String base64Image, boolean strict) throws Exception {
-        Map<String, Object> requestBody = buildOpenAiRequestWithBase64(base64Image, strict);
+    private List<FoodRecognitionResult.RecognizedFoodItem> analyzeWithPrompt(String base64Image, boolean strict,
+            String referenceObjectType)
+            throws Exception {
+        Map<String, Object> requestBody = buildOpenAiRequestWithBase64(base64Image, strict, referenceObjectType);
 
         log.debug("[OPENAI] Sending {} prompt request...", strict ? "STRICT" : "RELAXED");
         long startTime = System.currentTimeMillis();
@@ -202,8 +206,9 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
         return parseFoodsFromOpenAi(content);
     }
 
-    private Map<String, Object> buildOpenAiRequestWithBase64(String base64Image, boolean strict) {
-        String prompt = buildPrompt(strict);
+    private Map<String, Object> buildOpenAiRequestWithBase64(String base64Image, boolean strict,
+            String referenceObjectType) {
+        String prompt = buildPrompt(strict, referenceObjectType);
 
         Map<String, Object> textContent = Map.of("type", "text", "text", prompt);
         Map<String, Object> imageUrlObj = Map.of("url", "data:image/jpeg;base64," + base64Image);
@@ -211,19 +216,17 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
 
         Map<String, Object> userMessage = Map.of(
                 "role", "user",
-                "content", List.of(textContent, imageContent)
-        );
+                "content", List.of(textContent, imageContent));
 
         return Map.of(
                 "model", openAiModel,
                 "messages", List.of(userMessage),
                 "temperature", 0.0,
-                "max_tokens", 1200
-        );
+                "max_tokens", 1200);
     }
 
-    private Map<String, Object> buildOpenAiRequestWithUrl(String imageUrl) {
-        String prompt = buildPrompt(true);
+    private Map<String, Object> buildOpenAiRequestWithUrl(String imageUrl, String referenceObjectType) {
+        String prompt = buildPrompt(true, referenceObjectType);
 
         Map<String, Object> textContent = Map.of("type", "text", "text", prompt);
         Map<String, Object> imageUrlObj = Map.of("url", imageUrl);
@@ -231,70 +234,91 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
 
         Map<String, Object> userMessage = Map.of(
                 "role", "user",
-                "content", List.of(textContent, imageContent)
-        );
+                "content", List.of(textContent, imageContent));
 
         return Map.of(
                 "model", openAiModel,
                 "messages", List.of(userMessage),
                 "temperature", 0.0,
-                "max_tokens", 1200
-        );
+                "max_tokens", 1200);
     }
 
-    private String buildPrompt(boolean strict) {
+    private String buildPrompt(boolean strict, String referenceObjectType) {
+        // Determine instructions based on selected reference type
+        boolean isCard = referenceObjectType != null && (referenceObjectType.toLowerCase().contains("card")
+                || referenceObjectType.toLowerCase().contains("id"));
+
         // If strict is false (fallback mode), use a simpler prompt but still safe
         if (!strict) {
+            String fallbackRef = isCard
+                    ? "Look for a CREDIT CARD / ID CARD dimensions 8.56cm x 5.4cm."
+                    : "Look for an Insulin Pen or standard cutlery.";
+
             return """
                     You are a defensive food analysis AI.
                     Identify food items strictly based on visual evidence.
                     CRITICAL: If the image does not contain any food, return { "items": [] }.
                     IMPORTANT: List each food SEPARATELY. A plate with rice and chicken = 2 items, not 1. Do not include a combined "Main Dish" item.
+                    Reference Object Strategy: %s
                     Return JSON: { "items": [{ "name": "string", "confidence": 0.5, "estimatedPortionGrams": 100 }] }
-                    """;
+                    """
+                    .formatted(fallbackRef);
         }
 
         // --- MEDICAL GRADE PROMPT ---
+        String referenceInstruction;
+        if (isCard) {
+            referenceInstruction = "- REFERENCE OBJECT: Look for a CREDIT CARD / ID CARD. Dimensions: Width 8.56cm (or Height 5.4cm). Use this known size to accurately estimate food volume.";
+        } else {
+            referenceInstruction = "- REFERENCE OBJECT: Look for an insulin pen (typical length 12-15cm). IF FOUND, use it as a scale.";
+        }
+
         return """
-                You are a Clinical Food Safety AI for a diabetes management system.
-                Your goal is to analyze food NOT just for identity, but for metabolic impact.
+                      You are a Clinical Food Safety AI for a diabetes management system.
+                      Your goal is to analyze food NOT just for identity, but for metabolic impact.
 
-                CRITICAL FIRST STEP: NON-FOOD DETECTION
-                - Is this image a food item or meal?
-                - IF NO (e.g. person, car, landscape, animal, furniture, blank screen):
-                  RETURN IMMEDIATELY: { "items": [], "warnings": ["NON_FOOD_DETECTED"] }
+                      CRITICAL FIRST STEP: NON-FOOD DETECTION
+                      - Is this image a food item or meal?
+                      - IF NO (e.g. person, car, landscape, animal, furniture, blank screen):
+                        RETURN IMMEDIATELY: { "items": [], "warnings": ["NON_FOOD_DETECTED"] }
 
-                PROTOCOL:
-                1. EVIDENCE ONLY: Do not guess ingredients you cannot see. If a sauce is visible but unknown, flag it.
-                2. STATE ANALYSIS: Distinguish between RAW, BOILED, ROASTED, and FRIED. This critically affects Glycemic Index.
-                3. BASE INGREDIENT: Separate the full description (e.g. 'Mashed Potatoes with Gravy') from the search term (e.g. 'Potato').
-        		4. ITEM SEPARATION: Break the plate into INDIVIDUAL food items. "Rice with chicken and salad" must become THREE items: "Rice", "Chicken", "Salad". 
+                      PROTOCOL:
+                      1. EVIDENCE ONLY: Do not guess ingredients you cannot see. If a sauce is visible but unknown, flag it.
+                      2. STATE ANALYSIS: Distinguish between RAW, BOILED, ROASTED, and FRIED. This critically affects Glycemic Index.
+                      3. BASE INGREDIENT: Separate the full description (e.g. 'Mashed Potatoes with Gravy') from the search term (e.g. 'Potato').
+                4. ITEM SEPARATION: Break the plate into INDIVIDUAL food items. "Rice with chicken and salad" must become THREE items: "Rice", "Chicken", "Salad".
 
-                CRITICAL NEGATIVE CONSTRAINTS:
-                - Do NOT create a "Main Dish" or "Summary" item that combines others.
-                - Do NOT list "Chicken and Rice" if you have already listed "Chicken" and "Rice" separately.
-                - Each food pixel in the image should belong to EXACTLY ONE item in your list. Do not double count.
+                      PORTION ESTIMATION (CRITICAL):
+                      %s
+                      - FALLBACK (NO REFERENCE): If no reference object is visible, perform a "best-effort" estimation assuming a standard dinner plate size (approx 26cm diameter).
+                      - DO NOT FAIL simply because a reference object is missing. Always provide an estimated weight (grams) based on visual volume.
 
-                OUTPUT FORMAT (Strict JSON):
-                {
-                  "items": [
-                    {
-                      "visual_name": "Roasted Potato Wedges",   // Full descriptive name
-                      "base_ingredient": "Potato",              // The core keyword for DB search (Singular)
-                      "confidence": 0.95,
-                      "estimated_grams": 150,
-                      "visual_state": "ROASTED",                // Enum: RAW, BOILED, FRIED, ROASTED, PROCESSED, UNKNOWN
-                      "risk_flags": ["HIGH_FAT", "POSSIBLE_SUGAR_GLAZE", "SAUCE_DETECTED"], // List potential risks
-                      "requires_user_validation": false         // Set TRUE if the item is ambiguous or high-risk
-                    }
-                  ],
-                  "warnings": []
-                }
+                      CRITICAL NEGATIVE CONSTRAINTS:
+                      - Do NOT create a "Main Dish" or "Summary" item that combines others.
+                      - Do NOT list "Chicken and Rice" if you have already listed "Chicken" and "Rice" separately.
+                      - Each food pixel in the image should belong to EXACTLY ONE item in your list. Do not double count.
 
-                RULES:
-                - If packaging text is visible, prioritize it over visual appearance.
-                - If the food is blurry or unidentifiable, return an empty list. Do not hallucinate.
-                """;
+                      OUTPUT FORMAT (Strict JSON):
+                      {
+                        "items": [
+                          {
+                            "visual_name": "Roasted Potato Wedges",   // Full descriptive name
+                            "base_ingredient": "Potato",              // The core keyword for DB search (Singular)
+                            "confidence": 0.95,
+                            "estimated_grams": 150,
+                            "visual_state": "ROASTED",                // Enum: RAW, BOILED, FRIED, ROASTED, PROCESSED, UNKNOWN
+                            "risk_flags": ["HIGH_FAT", "POSSIBLE_SUGAR_GLAZE", "SAUCE_DETECTED"], // List potential risks
+                            "requires_user_validation": false         // Set TRUE if the item is ambiguous or high-risk
+                          }
+                        ],
+                        "warnings": []
+                      }
+
+                      RULES:
+                      - If packaging text is visible, prioritize it over visual appearance.
+                      - If the food is blurry or unidentifiable, return an empty list. Do not hallucinate.
+                      """
+                .formatted(referenceInstruction);
     }
 
     private List<FoodRecognitionResult.RecognizedFoodItem> parseFoodsFromOpenAi(String rawResponse) throws Exception {
@@ -307,21 +331,25 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
         if (items != null && items.isArray()) {
             for (JsonNode item : items) {
                 // 1. Basic Fields extraction
-                String visualName = item.has("visual_name") ? item.get("visual_name").asText() : 
-                                   (item.has("name") ? item.get("name").asText() : "unknown");
+                String visualName = item.has("visual_name") ? item.get("visual_name").asText()
+                        : (item.has("name") ? item.get("name").asText() : "unknown");
 
-                if (visualName.isEmpty() || "unknown".equalsIgnoreCase(visualName)) continue;
+                if (visualName.isEmpty() || "unknown".equalsIgnoreCase(visualName))
+                    continue;
 
                 float conf = item.has("confidence") ? (float) item.get("confidence").asDouble() : 0.0f;
-                
+
                 Float weight = null;
-                if (item.has("estimated_grams")) weight = (float) item.get("estimated_grams").asDouble();
-                else if (item.has("estimatedPortionGrams")) weight = (float) item.get("estimatedPortionGrams").asDouble();
+                if (item.has("estimated_grams"))
+                    weight = (float) item.get("estimated_grams").asDouble();
+                else if (item.has("estimatedPortionGrams"))
+                    weight = (float) item.get("estimatedPortionGrams").asDouble();
 
                 // 2. New Medical Fields extraction
                 String baseIngredient = item.has("base_ingredient") ? item.get("base_ingredient").asText() : visualName;
                 String state = item.has("visual_state") ? item.get("visual_state").asText() : "UNKNOWN";
-                boolean needsValidation = item.has("requires_user_validation") && item.get("requires_user_validation").asBoolean();
+                boolean needsValidation = item.has("requires_user_validation")
+                        && item.get("requires_user_validation").asBoolean();
 
                 List<String> risks = new ArrayList<>();
                 if (item.has("risk_flags") && item.get("risk_flags").isArray()) {
@@ -331,9 +359,9 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
                 }
 
                 // 3. Construct the Object
-                FoodRecognitionResult.RecognizedFoodItem recognizedItem = 
-                    new FoodRecognitionResult.RecognizedFoodItem(visualName, conf, weight);
-                
+                FoodRecognitionResult.RecognizedFoodItem recognizedItem = new FoodRecognitionResult.RecognizedFoodItem(
+                        visualName, conf, weight);
+
                 // Set the new fields
                 recognizedItem.setBaseIngredient(baseIngredient);
                 recognizedItem.setVisualState(state);

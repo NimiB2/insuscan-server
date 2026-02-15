@@ -2,15 +2,17 @@ package com.insuscan.boundary;
 
 // Request DTO for scanning a meal image
 public class ScanRequestBoundary {
-    private String imageBase64;     // Base64 encoded image
-    private String imageUrl;        // Or URL to image
+    private String imageBase64; // Base64 encoded image
+    private String imageUrl; // Or URL to image
     private UserIdBoundary userId;
-    
-    // Optional portion analysis hints
-    private Float syringeLengthCm;  // Override user profile syringe
-    private Float plateDepthHint;   // User-provided depth estimate
 
-    public ScanRequestBoundary() {}
+    // Optional portion analysis hints
+    private Float syringeLengthCm; // Override user profile syringe
+    private Float plateDepthHint; // User-provided depth estimate
+    private String referenceObjectType; // E.g., "Pen", "Card", "Unknown"
+
+    public ScanRequestBoundary() {
+    }
 
     // Getters and Setters
     public String getImageBase64() {
@@ -53,11 +55,20 @@ public class ScanRequestBoundary {
         this.plateDepthHint = plateDepthHint;
     }
 
+    public String getReferenceObjectType() {
+        return referenceObjectType;
+    }
+
+    public void setReferenceObjectType(String referenceObjectType) {
+        this.referenceObjectType = referenceObjectType;
+    }
+
     @Override
     public String toString() {
         return "ScanRequestBoundary{" +
                 "userId=" + userId +
                 ", hasImage=" + (imageBase64 != null || imageUrl != null) +
+                ", refType=" + referenceObjectType +
                 '}';
     }
 }

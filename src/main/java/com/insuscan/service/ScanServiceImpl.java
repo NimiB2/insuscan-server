@@ -330,9 +330,9 @@ public class ScanServiceImpl implements ScanService {
 
     private FoodRecognitionResult analyzeImage(ScanRequestBoundary request) {
         if (request.getImageBase64() != null) {
-            return imageAnalysisService.analyzeImage(request.getImageBase64());
+            return imageAnalysisService.analyzeImage(request.getImageBase64(), request.getReferenceObjectType());
         } else {
-            return imageAnalysisService.analyzeImageFromUrl(request.getImageUrl());
+            return imageAnalysisService.analyzeImageFromUrl(request.getImageUrl(), request.getReferenceObjectType());
         }
     }
 

@@ -96,6 +96,8 @@ public class VisionController {
 
             @Parameter(description = "Calculated volume in cm3 (optional, for density-based calculation)", example = "150") @RequestParam(value = "volumeCm3", required = false) Float volumeCm3,
 
+            @Parameter(description = "Reference Object Type (e.g. 'Pen', 'Card')", example = "Card") @RequestParam(value = "referenceObjectType", required = false) String referenceObjectType,
+
             @Parameter(description = "User's confidence in weight estimate (0.0 to 1.0, optional)", example = "0.8") @RequestParam(value = "portionConfidence", required = false) Float portionConfidence)
             throws IOException {
 
@@ -109,6 +111,7 @@ public class VisionController {
         // Build scan request
         ScanRequestBoundary request = new ScanRequestBoundary();
         request.setImageBase64(base64);
+        request.setReferenceObjectType(referenceObjectType);
 
         UserIdBoundary userIdBoundary = new UserIdBoundary();
         userIdBoundary.setSystemId(systemId);
@@ -123,7 +126,7 @@ public class VisionController {
         } catch (InsuScanNotFoundException e) {
             // User doesn't exist - fall back to simple vision analysis and save basic meal
             log.warn("User not found: {}, saving meal without user profile", email);
-            FoodRecognitionResult visionResult = imageAnalysisService.analyzeImage(base64);
+            FoodRecognitionResult visionResult = imageAnalysisService.analyzeImage(base64, referenceObjectType);
 
             if (!visionResult.isSuccess()) {
                 return ResponseEntity.ok(visionResult);
@@ -140,7 +143,7 @@ public class VisionController {
         } catch (Exception e) {
             log.error("Error during meal scan: ", e);
             // If anything else fails, just return vision result
-            FoodRecognitionResult visionResult = imageAnalysisService.analyzeImage(base64);
+            FoodRecognitionResult visionResult = imageAnalysisService.analyzeImage(base64, referenceObjectType);
             return ResponseEntity.ok(visionResult);
         }
     }
