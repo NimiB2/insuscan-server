@@ -32,6 +32,7 @@ public class MealBoundary {
     private Float plateDepthCm; // Detected depth
     private Float analysisConfidence; // Overall algorithm confidence (0.0 - 1.0)
     private Boolean referenceDetected; // Was a reference object (e.g. syringe) found?
+    private String referenceObjectType; // Selected type: INSULIN_SYRINGE, SYRINGE_KNIFE, CARD, NONE
 
     // ============================================================================================
     // 4. User Context & State
@@ -48,10 +49,9 @@ public class MealBoundary {
     // ============================================================================================
     private Float carbDose; // Base dose for carbohydrates
     private Float correctionDose; // Dose for high glucose correction
-	private String glucoseUnits;
+    private String glucoseUnits;
 
-
-	// Adjustment Values (The actual calculated amount added/subtracted)
+    // Adjustment Values (The actual calculated amount added/subtracted)
     private Float activeInsulin; // Active Insulin (IOB) subtracted
     private Float sickAdjustment; // e.g. +1.5 units
     private Float stressAdjustment; // e.g. +0.5 units
@@ -173,6 +173,14 @@ public class MealBoundary {
         this.referenceDetected = referenceDetected;
     }
 
+    public String getReferenceObjectType() {
+        return referenceObjectType;
+    }
+
+    public void setReferenceObjectType(String referenceObjectType) {
+        this.referenceObjectType = referenceObjectType;
+    }
+
     // --- 4. User Context ---
     public Integer getCurrentGlucose() {
         return currentGlucose;
@@ -273,13 +281,12 @@ public class MealBoundary {
     }
 
     public String getGlucoseUnits() {
-		return glucoseUnits;
-	}
+        return glucoseUnits;
+    }
 
-	public void setGlucoseUnits(String glucoseUnits) {
-		this.glucoseUnits = glucoseUnits;
-	}
-
+    public void setGlucoseUnits(String glucoseUnits) {
+        this.glucoseUnits = glucoseUnits;
+    }
 
     // --- 7. Status & Metadata ---
     public MealStatus getStatus() {

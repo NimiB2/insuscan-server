@@ -134,7 +134,7 @@ public class VisionController {
 
             // Save basic meal to database (linked to email, even if user doesn't exist yet)
             MealEntity meal = saveBasicMeal(visionResult, email, file.getOriginalFilename(), estimatedWeightGrams,
-                    volumeCm3);
+                    volumeCm3, referenceObjectType);
             log.info("Saved basic meal for email: {} (mealId: {})", email, meal.getId());
 
             // Convert to MealBoundary for response
@@ -203,9 +203,9 @@ public class VisionController {
                 .body(resource);
     }
 
-    // Updated to accept estimatedWeight
+    // Updated to accept estimatedWeight and referenceObjectType
     private MealEntity saveBasicMeal(FoodRecognitionResult result, String email, String imageName,
-            Float estimatedWeight, Float volumeCm3) {
+            Float estimatedWeight, Float volumeCm3, String referenceObjectType) {
         MealEntity meal = new MealEntity();
         meal.setId(mealIdGenerator.generateMealId(systemId));
         meal.setUserId(systemId + "_" + email);
@@ -304,6 +304,7 @@ public class VisionController {
         meal.setFoodItems(foodItems);
         meal.setTotalCarbs(NumberUtils.roundTo2Decimals(totalCarbs));
         meal.setStatus(MealStatus.PENDING);
+        meal.setReferenceObjectType(referenceObjectType);
 
         return mealRepository.save(meal);
     }
