@@ -84,6 +84,7 @@ public class MealConverter {
         boundary.setPlateDepthCm(entity.getPlateDepthCm());
         boundary.setAnalysisConfidence(entity.getAnalysisConfidence());
         boundary.setReferenceDetected(entity.getReferenceDetected());
+        boundary.setReferenceObjectType(entity.getReferenceObjectType());
 
         // User state at meal time
         boundary.setCurrentGlucose(entity.getCurrentGlucose());
@@ -159,6 +160,7 @@ public class MealConverter {
         entity.setPlateDepthCm(boundary.getPlateDepthCm());
         entity.setAnalysisConfidence(boundary.getAnalysisConfidence());
         entity.setReferenceDetected(boundary.getReferenceDetected());
+        entity.setReferenceObjectType(boundary.getReferenceObjectType());
 
         // User state at meal time
         entity.setCurrentGlucose(boundary.getCurrentGlucose());

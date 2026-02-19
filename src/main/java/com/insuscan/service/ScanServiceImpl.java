@@ -289,6 +289,9 @@ public class ScanServiceImpl implements ScanService {
         if (portionConfidence != null)
             meal.setAnalysisConfidence(portionConfidence);
 
+        // Persist the user's selected reference object type
+        meal.setReferenceObjectType(request.getReferenceObjectType());
+
         // Set profile status for client
         meal.setProfileComplete(profileComplete);
         meal.setMissingProfileFields(missingFields);
