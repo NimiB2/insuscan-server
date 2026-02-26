@@ -98,7 +98,14 @@ public class VisionController {
 
             @Parameter(description = "Reference Object Type (e.g. 'Pen', 'Card')", example = "Card") @RequestParam(value = "referenceObjectType", required = false) String referenceObjectType,
 
-            @Parameter(description = "User's confidence in weight estimate (0.0 to 1.0, optional)", example = "0.8") @RequestParam(value = "portionConfidence", required = false) Float portionConfidence)
+            @Parameter(description = "User's confidence in weight estimate (0.0 to 1.0, optional)", example = "0.8") @RequestParam(value = "portionConfidence", required = false) Float portionConfidence,
+
+            // ── v2 Advanced Pipeline params ──
+            @Parameter(description = "Plate diameter in cm from OpenCV calibration") @RequestParam(value = "plateDiameterCm", required = false) Float plateDiameterCm,
+            @Parameter(description = "Plate/bowl depth in cm") @RequestParam(value = "plateDepthCm", required = false) Float plateDepthCm,
+            @Parameter(description = "Container type: FLAT_PLATE, REGULAR_BOWL, DEEP_BOWL") @RequestParam(value = "containerType", required = false) String containerType,
+            @Parameter(description = "Pixel-to-cm ratio from reference object") @RequestParam(value = "pixelToCmRatio", required = false) Float pixelToCmRatio,
+            @Parameter(description = "JSON-encoded per-food region measurements") @RequestParam(value = "foodRegionsJson", required = false) String foodRegionsJson)
             throws IOException {
 
         if (file == null || file.isEmpty()) {
@@ -112,6 +119,13 @@ public class VisionController {
         ScanRequestBoundary request = new ScanRequestBoundary();
         request.setImageBase64(base64);
         request.setReferenceObjectType(referenceObjectType);
+
+        // v2 pipeline fields
+        request.setPlateDiameterCm(plateDiameterCm);
+        request.setPlateDepthCm(plateDepthCm);
+        request.setContainerType(containerType);
+        request.setPixelToCmRatio(pixelToCmRatio);
+        request.setFoodRegionsJson(foodRegionsJson);
 
         UserIdBoundary userIdBoundary = new UserIdBoundary();
         userIdBoundary.setSystemId(systemId);

@@ -31,8 +31,8 @@ public class SemanticMatchingServiceImpl implements SemanticMatchingService {
     private String openAiModel;
 
     public SemanticMatchingServiceImpl(WebClient.Builder webClientBuilder,
-                                       ObjectMapper objectMapper,
-                                       ApiLogger apiLogger) {
+            ObjectMapper objectMapper,
+            ApiLogger apiLogger) {
         this.webClient = webClientBuilder
                 .baseUrl("https://api.openai.com/v1")
                 .build();
@@ -71,9 +71,10 @@ public class SemanticMatchingServiceImpl implements SemanticMatchingService {
 
             // 3. Parse the Verdict
             String bestFdcId = parseJudgeVerdict(response);
-            
+
             long elapsed = System.currentTimeMillis() - startTime;
-            log.info("[JUDGE] Verdict: Selected ID {} for target '{}' (in {}ms)", bestFdcId, visualTarget.getName(), elapsed);
+            log.info("[JUDGE] Verdict: Selected ID {} for target '{}' (in {}ms)", bestFdcId, visualTarget.getName(),
+                    elapsed);
 
             return bestFdcId;
 
@@ -93,38 +94,39 @@ public class SemanticMatchingServiceImpl implements SemanticMatchingService {
         String risks = target.getRiskFlags() != null ? String.join(", ", target.getRiskFlags()) : "NONE";
         String state = target.getVisualState() != null ? target.getVisualState() : "UNKNOWN";
 
-        return String.format("""
-                You are a Clinical Nutrition Data Matcher.
-                
-                TARGET (Visual Analysis):
-                - Item: %s
-                - State: %s (Critical for Glycemic Index)
-                - Risk Flags: [%s]
-                - Base Ingredient: %s
-                
-                CANDIDATE LIST (From USDA Database):
-                %s
-                
-                TASK:
-                Select the SINGLE fdcId from the list that represents the most scientifically accurate nutritional match for the TARGET.
-                
-                LOGIC RULES:
-                1. FORM CHECK: If target is a whole vegetable/fruit, DISCARD 'Flour', 'Powder', 'Baby Food', 'Bread'.
-                2. STATE MATCH: If target state is '%s', prioritize items with descriptions like 'Roasted', 'Baked', 'Cooked'. Avoid 'Raw' unless no cooked option exists.
-                3. FAT CHECK: If Risk Flags contain 'HIGH_FAT' or 'OIL', prefer items mentioning 'oil', 'fat added', or preparation methods involving fat.
-                4. SAFETY FALLBACK: If uncertain, choose the 'Plain/Raw' version rather than a processed product (like chips/bread).
-                
-                OUTPUT:
-                Return STRICT JSON ONLY:
-                { "best_match_id": "12345", "reason": "Matches roasted state and whole form" }
-                """,
+        return String.format(
+                """
+                        You are a Clinical Nutrition Data Matcher.
+
+                        TARGET (Visual Analysis):
+                        - Item: %s
+                        - State: %s (Critical for Glycemic Index)
+                        - Risk Flags: [%s]
+                        - Base Ingredient: %s
+
+                        CANDIDATE LIST (From USDA Database):
+                        %s
+
+                        TASK:
+                        Select the SINGLE fdcId from the list that represents the most scientifically accurate nutritional match for the TARGET.
+
+                        LOGIC RULES:
+                        1. FORM CHECK: If target is a whole vegetable/fruit, DISCARD 'Flour', 'Powder', 'Baby Food', 'Bread'.
+                        2. INGREDIENT MATCH: Prioritize the 'Base Ingredient'. If the target is 'Rice', prefer matches that ARE rice (grains), NOT rice-based products like 'Rice Noodles', 'Rice Paper', or 'Rice Flour'.
+                        3. STATE MATCH: If target state is '%s', prioritize items with descriptions like 'Roasted', 'Baked', 'Cooked'. Avoid 'Raw' unless no cooked option exists.
+                        4. FAT CHECK: If Risk Flags contain 'HIGH_FAT' or 'OIL', prefer items mentioning 'oil', 'fat added', or preparation methods involving fat.
+                        5. SAFETY FALLBACK: If uncertain, choose the 'Plain/Raw' version rather than a processed product (like chips/bread).
+
+                        OUTPUT:
+                        Return STRICT JSON ONLY:
+                        { "best_match_id": "12345", "reason": "Matches roasted state and whole form" }
+                        """,
                 target.getName(),
                 state,
                 risks,
                 target.getBaseIngredient(),
                 candidatesList,
-                state
-        );
+                state);
     }
 
     private Map<String, Object> buildRequestBody(String prompt) {
@@ -132,8 +134,7 @@ public class SemanticMatchingServiceImpl implements SemanticMatchingService {
                 "model", openAiModel,
                 "messages", List.of(
                         Map.of("role", "system", "content", "You are a JSON-only data matching engine."),
-                        Map.of("role", "user", "content", prompt)
-                ),
+                        Map.of("role", "user", "content", prompt)),
                 "temperature", 0.0 // Zero temperature for maximum logic/determinism
         );
     }
@@ -144,7 +145,7 @@ public class SemanticMatchingServiceImpl implements SemanticMatchingService {
             JsonNode choices = root.get("choices");
             if (choices != null && !choices.isEmpty()) {
                 String content = choices.get(0).get("message").get("content").asText();
-                
+
                 // Extract JSON from content (handle potential markdown)
                 int start = content.indexOf('{');
                 int end = content.lastIndexOf('}');

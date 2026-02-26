@@ -108,8 +108,13 @@ public class ScanServiceImpl implements ScanService {
             throw new NoFoodDetectedException("No food detected in image. Try a clearer photo.");
         }
 
-        // Step 2: Calculate portion sizes (Logic remains same)
-        apiLogger.scanStep(2, "CALCULATING PORTION SIZES");
+        // Step 2: Calculate portion sizes
+        apiLogger.scanStep(2, "CALCULATING PORTION SIZES (v2 PIPELINE)");
+
+        // ── Parse food regions from client (if available) ──
+        List<Map<String, Object>> foodRegions = parseFoodRegions(request.getFoodRegionsJson());
+        boolean hasPhysicsData = !foodRegions.isEmpty();
+
         List<PortionEstimator.FoodItem> portionItems = new ArrayList<>();
         float totalVisionPortions = 0f;
 
@@ -125,23 +130,85 @@ public class ScanServiceImpl implements ScanService {
         }
 
         Float totalWeightToDistribute = estimatedWeightGrams;
+
+        // PRIORITY 1: Physics from client per-food regions (most accurate)
+        // → Handled below in per-item loop
+
+        // PRIORITY 2: Plate/Bowl geometry from client measurements + GPT fill
+        // estimation
+        if (totalWeightToDistribute == null
+                && request.getPlateDiameterCm() != null && request.getPlateDiameterCm() > 0) {
+
+            float radiusCm = request.getPlateDiameterCm() / 2.0f;
+            float depthCm = (request.getPlateDepthCm() != null && request.getPlateDepthCm() > 0)
+                    ? request.getPlateDepthCm()
+                    : 1.5f; // default shallow plate
+
+            // Determine container type (GPT > client > infer from depth)
+            String containerType = (visionResult.getDetectedContainerType() != null)
+                    ? visionResult.getDetectedContainerType()
+                    : (request.getContainerType() != null)
+                            ? request.getContainerType()
+                            : (depthCm > 3.0f ? "DEEP_BOWL" : depthCm > 1.5f ? "REGULAR_BOWL" : "FLAT_PLATE");
+
+            boolean isBowl = containerType.toUpperCase().contains("BOWL");
+
+            // Calculate container volume:
+            // Bowls → paraboloid (½ × π × r² × h) — bowls are curved, not flat-sided
+            // Plates → cylinder (π × r² × h)
+            float containerVolumeCm3 = isBowl
+                    ? (float) (0.5 * Math.PI * radiusCm * radiusCm * depthCm) // paraboloid
+                    : (float) (Math.PI * radiusCm * radiusCm * depthCm); // cylinder
+
+            // Fill level: GPT visual estimation (best) > hardcoded fallback
+            float fillFraction;
+            if (visionResult.getContainerFillPercent() != null && visionResult.getContainerFillPercent() > 0) {
+                fillFraction = visionResult.getContainerFillPercent() / 100.0f;
+                log.info("[v2-PLATE] GPT estimated fill: {}%", visionResult.getContainerFillPercent());
+            } else {
+                fillFraction = getContainerFillFactor(containerType, depthCm);
+                log.info("[v2-PLATE] Using default fill factor: {}", fillFraction);
+            }
+
+            float foodVolumeCm3 = containerVolumeCm3 * fillFraction;
+
+            // Resolve density from the primary food detected
+            String primaryFood = !portionItems.isEmpty() ? portionItems.get(0).name : "other";
+            float density = portionEstimator.calculateWeight(primaryFood, 1.0f); // density = weight/1cm³
+
+            totalWeightToDistribute = foodVolumeCm3 * density;
+
+            log.info("[v2-PLATE] {} {}cm×{}cm → {}Vol={}cm³ × fill={} → food={}cm³ × d={} → {}g",
+                    containerType,
+                    request.getPlateDiameterCm(), depthCm,
+                    isBowl ? "paraboloid" : "cylinder",
+                    String.format("%.1f", containerVolumeCm3),
+                    String.format("%.0f%%", fillFraction * 100),
+                    String.format("%.1f", foodVolumeCm3),
+                    density,
+                    String.format("%.1f", totalWeightToDistribute));
+        }
+
+        // PRIORITY 3: GPT vision estimate (least accurate fallback)
         if (totalWeightToDistribute == null) {
             totalWeightToDistribute = (totalVisionPortions > 0)
                     ? totalVisionPortions
                     : estimateTotalWeightFromFoodTypes(portionItems);
+            log.info("[v2-FALLBACK] Using vision estimate: {}g", totalWeightToDistribute);
         }
 
         Map<String, Float> distributedPortions = portionEstimator.distributePortions(
                 portionItems, totalWeightToDistribute);
 
-        // Step 3: Get nutrition data (INTEGRATING THE JUDGE)
-        apiLogger.scanStep(3, "SEMANTIC NUTRITION MATCHING");
+        // Step 3: Get nutrition data (INTEGRATING THE JUDGE + DENSITY)
+        apiLogger.scanStep(3, "SEMANTIC NUTRITION MATCHING + DENSITY CALCULATION");
         List<MealEntity.FoodItem> foodItems = new ArrayList<>();
         float totalCarbs = 0f;
+        int regionIndex = 0;
 
         for (FoodRecognitionResult.RecognizedFoodItem detected : visionResult.getDetectedFoods()) {
 
-            // --- NEW LOGIC START ---
+            // --- USDA Matching (existing Judge logic) ---
             NutritionInfo finalNutrition = null;
 
             // A. Fetch Candidates (Step 2 - Retrieval)
@@ -153,15 +220,13 @@ public class ScanServiceImpl implements ScanService {
 
                 // C. Get Full Data for Winner
                 if (bestFdcId != null) {
-                    finalNutrition = nutritionDataService.getNutritionInfo(bestFdcId); // Fetch by ID specifically
+                    finalNutrition = nutritionDataService.getNutritionInfo(bestFdcId);
                 } else {
-                    finalNutrition = candidates.get(0); // Fallback to first candidate
+                    finalNutrition = candidates.get(0);
                 }
             } else {
-                // Fallback: If search fails, try old direct lookup or fallback map
                 finalNutrition = nutritionDataService.getNutritionInfo(detected.getName());
             }
-            // --- NEW LOGIC END ---
 
             MealEntity.FoodItem item = new MealEntity.FoodItem();
             item.setName(detected.getName());
@@ -172,21 +237,54 @@ public class ScanServiceImpl implements ScanService {
                 item.setNote("Risks: " + String.join(", ", detected.getRiskFlags()));
             }
 
-            Float itemWeight = distributedPortions.get(detected.getName());
-            if (itemWeight == null) {
-                itemWeight = portionEstimator.estimatePortion(
-                        detected.getName(),
-                        detected.getConfidence(),
-                        detected.getEstimatedPortionGrams());
+            // ── v2: Per-Food Weight Calculation ──
+            Float itemWeight;
+            String weightSource;
+
+            if (hasPhysicsData && regionIndex < foodRegions.size()) {
+                // PHYSICS PATH: Use area × height × density
+                Map<String, Object> region = foodRegions.get(regionIndex);
+                float areaCm2 = ((Number) region.getOrDefault("areaCm2", 0.0)).floatValue();
+                float heightCm = ((Number) region.getOrDefault("heightCm", 1.0)).floatValue();
+                float shapeFactor = getShapeFactor(heightCm);
+
+                float volumeCm3 = areaCm2 * heightCm * shapeFactor;
+
+                // Resolve density: USDA → Lookup → Default
+                float density = resolveDensity(detected.getName(), finalNutrition);
+
+                itemWeight = volumeCm3 * density;
+                weightSource = String.format("PHYSICS(V=%.1fcm³, d=%.2fg/cm³)", volumeCm3, density);
+
+                log.info("[v2] {} → area={}cm² × h={}cm × sf={} = {}cm³ × d={} = {}g",
+                        detected.getName(), areaCm2, heightCm, shapeFactor, volumeCm3, density, itemWeight);
+
+                regionIndex++;
+            } else {
+                // FALLBACK PATH: Use existing distribution logic
+                itemWeight = distributedPortions.get(detected.getName());
+                if (itemWeight == null) {
+                    itemWeight = portionEstimator.estimatePortion(
+                            detected.getName(),
+                            detected.getConfidence(),
+                            detected.getEstimatedPortionGrams());
+                }
+                weightSource = "DISTRIBUTED";
             }
+
             item.setQuantity(NumberUtils.roundTo2Decimals(itemWeight));
+
+            // Append weight source to note (for debugging/transparency)
+            String existingNote = item.getNote();
+            String sourceNote = "Calc: " + weightSource;
+            item.setNote(existingNote != null ? existingNote + " | " + sourceNote : sourceNote);
 
             if (finalNutrition != null && finalNutrition.isFound()) {
                 float itemCarbs = finalNutrition.calculateCarbs(itemWeight);
                 item.setCarbs(NumberUtils.roundTo2Decimals(itemCarbs));
                 item.setUsdaFdcId(finalNutrition.getFdcId());
 
-                String source = "SEMANTIC_JUDGE";
+                String source = hasPhysicsData ? "PHYSICS+JUDGE" : "SEMANTIC_JUDGE";
                 if (finalNutrition.getFdcId().startsWith("fallback-"))
                     source = "FALLBACK";
 
@@ -206,7 +304,7 @@ public class ScanServiceImpl implements ScanService {
             foodItems.add(item);
         }
 
-        log.info("Total carbs (Calculated): {}g", totalCarbs);
+        log.info("Total carbs (Calculated): {}g [method={}]", totalCarbs, hasPhysicsData ? "PHYSICS" : "DISTRIBUTED");
 
         // Step 4: Calculate insulin dose
         apiLogger.scanStep(4, "CALCULATING INSULIN DOSE");
@@ -339,16 +437,87 @@ public class ScanServiceImpl implements ScanService {
         }
     }
 
-    // private MealBoundary createFailedMeal(String userDocId, String imageUrl) {
-    // MealEntity meal = new MealEntity();
-    // String mealUuid = UUID.randomUUID().toString();
-    // meal.setId(systemId + "_" + mealUuid);
-    // meal.setUserId(userDocId);
-    // meal.setImageUrl(imageUrl);
-    // meal.setFoodItems(new ArrayList<>());
-    // meal.setTotalCarbs(0f);
-    // meal.setStatus(MealStatus.FAILED);
-    // MealEntity saved = mealRepository.save(meal);
-    // return mealConverter.toBoundary(saved);
-    // }
+    // ── v2 Pipeline Helper Methods ──
+
+    /**
+     * Estimate what fraction of the container is filled with food.
+     * Deep bowls are rarely filled to the top; flat plates have thin food layers.
+     */
+    private float getContainerFillFactor(String containerType, float depthCm) {
+        if (containerType != null) {
+            switch (containerType.toUpperCase()) {
+                case "FLAT_PLATE":
+                    return 0.70f; // thin spread on plate
+                case "REGULAR_BOWL":
+                    return 0.55f; // typical bowl fill
+                case "DEEP_BOWL":
+                    return 0.50f; // deep bowls aren't filled to brim
+            }
+        }
+        // Infer from depth if no container type specified
+        if (depthCm <= 2.0f)
+            return 0.70f; // flat plate
+        if (depthCm <= 4.0f)
+            return 0.55f; // regular bowl
+        return 0.50f; // deep bowl
+    }
+
+    /**
+     * Parse the JSON-encoded food region measurements from the client.
+     * Returns empty list if null/invalid (graceful fallback to distributed mode).
+     */
+    private List<Map<String, Object>> parseFoodRegions(String json) {
+        if (json == null || json.isBlank()) {
+            return new ArrayList<>();
+        }
+        try {
+            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            return mapper.readValue(json,
+                    mapper.getTypeFactory().constructCollectionType(List.class, Map.class));
+        } catch (Exception e) {
+            log.warn("[v2] Failed to parse foodRegionsJson: {}", e.getMessage());
+            return new ArrayList<>();
+        }
+    }
+
+    /**
+     * Shape factor reduces the cylindrical volume estimate based on food pile
+     * height.
+     * Flat foods (like a tortilla) are closer to cylindrical; tall piles (like
+     * rice) are more conical.
+     */
+    private float getShapeFactor(float heightCm) {
+        if (heightCm <= 0.5f)
+            return 0.85f; // flat (e.g., steak, tortilla)
+        if (heightCm <= 1.5f)
+            return 0.75f; // low pile (e.g., pasta)
+        if (heightCm <= 3.0f)
+            return 0.65f; // medium pile (e.g., rice)
+        return 0.55f; // high pile (e.g., salad, fries)
+    }
+
+    /**
+     * Resolve density for a food item using a 3-tier fallback:
+     * 1. USDA data (serving weight / serving volume)
+     * 2. Server lookup table (PortionEstimator.initFoodDensities)
+     * 3. Default: 0.75 g/cm³
+     */
+    private float resolveDensity(String foodName, NutritionInfo nutrition) {
+        // Tier 1: USDA-derived density
+        if (nutrition != null && nutrition.getDensityGPerCm3() != null && nutrition.getDensityGPerCm3() > 0) {
+            log.debug("[density] {} → USDA: {}g/cm³", foodName, nutrition.getDensityGPerCm3());
+            return nutrition.getDensityGPerCm3();
+        }
+
+        // Tier 2: Lookup table (uses PortionEstimator's density map)
+        float lookupDensity = portionEstimator.calculateWeight(foodName, 1.0f); // density = weight/1cm³
+        if (lookupDensity != 0.75f) { // 0.75 is the default "other" — means we found a specific match
+            log.debug("[density] {} → LOOKUP: {}g/cm³", foodName, lookupDensity);
+            return lookupDensity;
+        }
+
+        // Tier 3: Default
+        log.warn("[density] {} → DEFAULT: 0.75g/cm³ (no specific data)", foodName);
+        return 0.75f;
+    }
 }

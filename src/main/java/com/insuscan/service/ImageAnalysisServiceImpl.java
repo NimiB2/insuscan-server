@@ -69,30 +69,34 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
 
         try {
             // First pass: strict prompt with reference type
-            List<FoodRecognitionResult.RecognizedFoodItem> foods = analyzeWithPrompt(base64Image, true,
+            FoodRecognitionResult parsedResult = analyzeWithPrompt(base64Image, true,
                     referenceObjectType);
 
             // Retry with relaxed prompt if needed
-            if (foods.isEmpty()) {
+            if (parsedResult.getDetectedFoods().isEmpty()) {
                 apiLogger.openaiRetry("Strict prompt returned 0 foods");
-                foods = analyzeWithPrompt(base64Image, false, referenceObjectType);
+                parsedResult = analyzeWithPrompt(base64Image, false, referenceObjectType);
             }
 
             long totalTime = System.currentTimeMillis() - totalStartTime;
 
-            if (foods.isEmpty()) {
+            if (parsedResult.getDetectedFoods().isEmpty()) {
                 apiLogger.openaiError("No foods detected even with relaxed prompt", "EmptyResult");
                 return FoodRecognitionResult.failure("No foods detected in image. Try a clearer photo.");
             }
 
             // Log parsed foods
-            apiLogger.openaiParsedFoods(foods);
-            apiLogger.openaiSuccess(foods.size(), totalTime);
+            apiLogger.openaiParsedFoods(parsedResult.getDetectedFoods());
+            apiLogger.openaiSuccess(parsedResult.getDetectedFoods().size(), totalTime);
 
-            FoodRecognitionResult result = FoodRecognitionResult.success(foods);
-            visionCache.putCache(imageHash, result);
+            parsedResult.setSuccess(true);
+            visionCache.putCache(imageHash, parsedResult);
 
-            return result;
+            log.info("[v2] Container: type={}, fill={}%",
+                    parsedResult.getDetectedContainerType(),
+                    parsedResult.getContainerFillPercent());
+
+            return parsedResult;
 
         } catch (RuntimeException e) {
             apiLogger.openaiError(e.getMessage(), e.getClass().getSimpleName());
@@ -147,10 +151,11 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
                 return FoodRecognitionResult.failure("Could not extract content from response");
             }
 
-            List<FoodRecognitionResult.RecognizedFoodItem> foods = parseFoodsFromOpenAi(content);
-            apiLogger.openaiParsedFoods(foods);
+            FoodRecognitionResult parsedResult = parseFoodsFromOpenAi(content);
+            apiLogger.openaiParsedFoods(parsedResult.getDetectedFoods());
+            parsedResult.setSuccess(true);
 
-            return FoodRecognitionResult.success(foods);
+            return parsedResult;
 
         } catch (Exception e) {
             apiLogger.openaiError(e.getMessage(), e.getClass().getSimpleName());
@@ -163,7 +168,7 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
         return openAiApiKey != null && !openAiApiKey.isBlank();
     }
 
-    private List<FoodRecognitionResult.RecognizedFoodItem> analyzeWithPrompt(String base64Image, boolean strict,
+    private FoodRecognitionResult analyzeWithPrompt(String base64Image, boolean strict,
             String referenceObjectType)
             throws Exception {
         Map<String, Object> requestBody = buildOpenAiRequestWithBase64(base64Image, strict, referenceObjectType);
@@ -250,9 +255,11 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
 
         // If strict is false (fallback mode), use a simpler prompt but still safe
         if (!strict) {
+            boolean isSyringe = referenceObjectType != null && referenceObjectType.toLowerCase().contains("syringe");
             String fallbackRef = isCard
-                    ? "Look for a CREDIT CARD / ID CARD dimensions 8.56cm x 5.4cm."
-                    : "Look for an Insulin Pen or standard cutlery.";
+                    ? "Look for a CREDIT CARD / ID CARD dimensions 8.5cm x 5.5cm."
+                    : (isSyringe ? "Look for an INSULIN SYRINGE dimensions 16cm x 1.25cm."
+                            : "Look for an Insulin Pen or standard cutlery.");
 
             return """
                     You are a defensive food analysis AI.
@@ -268,64 +275,93 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
         // --- MEDICAL GRADE PROMPT ---
         String referenceInstruction;
         if (isCard) {
-            referenceInstruction = "- REFERENCE OBJECT: Look for a CREDIT CARD / ID CARD. Dimensions: Width 8.56cm (or Height 5.4cm). Use this known size to accurately estimate food volume.";
+            referenceInstruction = "- REFERENCE OBJECT: Look for a CREDIT CARD / ID CARD near the food. Known dimensions: 8.5cm × 5.5cm. Use this known size to accurately estimate food volume.";
+        } else if (referenceObjectType != null && referenceObjectType.toLowerCase().contains("syringe")) {
+            referenceInstruction = "- REFERENCE OBJECT: Look for an INSULIN SYRINGE near the food. Known dimensions: 16cm length × 1.25cm width. Use this known size to accurately estimate food volume.";
         } else {
-            referenceInstruction = "- REFERENCE OBJECT: Look for an insulin pen (typical length 12-15cm). IF FOUND, use it as a scale.";
+            referenceInstruction = "- REFERENCE OBJECT: Look for any known-size object near the food (pen, card, cutlery). IF FOUND, use it as a scale reference.";
         }
 
         return """
-                      You are a Clinical Food Safety AI for a diabetes management system.
-                      Your goal is to analyze food NOT just for identity, but for metabolic impact.
+                You are a Clinical Food Safety AI for a diabetes management system.
+                Your goal is to analyze food NOT just for identity, but for metabolic impact.
 
-                      CRITICAL FIRST STEP: NON-FOOD DETECTION
-                      - Is this image a food item or meal?
-                      - IF NO (e.g. person, car, landscape, animal, furniture, blank screen):
-                        RETURN IMMEDIATELY: { "items": [], "warnings": ["NON_FOOD_DETECTED"] }
+                MEAL ANALYSIS PROTOCOL:
+                - Analyze the image for any food items, containers, or meals.
+                - NOTE: It is expected to see medical tools (syringes) or cards near the food for scale. Identify the FOOD, and ignore these reference objects in your final list.
+                - IF NO FOOD IS PRESENT (e.g. empty desk, car, wall): Return { "items": [] }.
 
-                      PROTOCOL:
-                      1. EVIDENCE ONLY: Do not guess ingredients you cannot see. If a sauce is visible but unknown, flag it.
-                      2. STATE ANALYSIS: Distinguish between RAW, BOILED, ROASTED, and FRIED. This critically affects Glycemic Index.
-                      3. BASE INGREDIENT: Separate the full description (e.g. 'Mashed Potatoes with Gravy') from the search term (e.g. 'Potato').
+                PROTOCOL:
+                1. EVIDENCE ONLY: Do not guess ingredients you cannot see. If a sauce is visible but unknown, flag it.
+                2. STATE ANALYSIS: Distinguish between RAW, BOILED, ROASTED, and FRIED. This critically affects Glycemic Index.
+                3. BASE INGREDIENT: Separate the full description (e.g. 'Mashed Potatoes with Gravy') from the search term (e.g. 'Potato').
                 4. ITEM SEPARATION: Break the plate into INDIVIDUAL food items. "Rice with chicken and salad" must become THREE items: "Rice", "Chicken", "Salad".
 
-                      PORTION ESTIMATION (CRITICAL):
-                      %s
-                      - FALLBACK (NO REFERENCE): If no reference object is visible, perform a "best-effort" estimation assuming a standard dinner plate size (approx 26cm diameter).
-                      - DO NOT FAIL simply because a reference object is missing. Always provide an estimated weight (grams) based on visual volume.
+                CONTAINER & FILL ANALYSIS (CRITICAL FOR ACCURATE PORTIONS):
+                - Identify the container type: FLAT_PLATE, REGULAR_BOWL, or DEEP_BOWL
+                - Estimate what percentage (0-100) of the container's USABLE VOLUME is filled.
+                - BOWL MATH RULE: In curved bowls, VOLUME decreases faster than height as you go down.
+                  * If food is halfway up the wall (50%% height), volume is only ~30%%.
+                  * If food is 75%% up the wall, volume is ~55%%.
+                - CALIBRATION GUIDE:
+                  * 15 = thin layer at the bottom
+                  * 30 = halfway up the height of a curved bowl
+                  * 50 = significantly filled, but clearly 2-3cm below the rim
+                  * 70 = near the rim (approx 1cm gap)
+                  * 85 = level with the rim
+                  * 95+ = heaping / overflowing
+                - IMPORTANT: Be conservative. If unsure, 40-50%% is a safe default for a normal serving.
+                - Imagine the container empty, then imagine how much space the food occupies.
 
-                      CRITICAL NEGATIVE CONSTRAINTS:
-                      - Do NOT create a "Main Dish" or "Summary" item that combines others.
-                      - Do NOT list "Chicken and Rice" if you have already listed "Chicken" and "Rice" separately.
-                      - Each food pixel in the image should belong to EXACTLY ONE item in your list. Do not double count.
+                PORTION ESTIMATION (CRITICAL):
+                %s
+                - FALLBACK (NO REFERENCE): If no reference object is visible, perform a "best-effort" estimation assuming a standard dinner plate size (approx 26cm diameter).
+                - DO NOT FAIL simply because a reference object is missing. Always provide an estimated weight (grams) based on visual volume.
 
-                      OUTPUT FORMAT (Strict JSON):
-                      {
-                        "items": [
-                          {
-                            "visual_name": "Roasted Potato Wedges",   // Full descriptive name
-                            "base_ingredient": "Potato",              // The core keyword for DB search (Singular)
-                            "confidence": 0.95,
-                            "estimated_grams": 150,
-                            "visual_state": "ROASTED",                // Enum: RAW, BOILED, FRIED, ROASTED, PROCESSED, UNKNOWN
-                            "risk_flags": ["HIGH_FAT", "POSSIBLE_SUGAR_GLAZE", "SAUCE_DETECTED"], // List potential risks
-                            "requires_user_validation": false         // Set TRUE if the item is ambiguous or high-risk
-                          }
-                        ],
-                        "warnings": []
-                      }
+                CRITICAL NEGATIVE CONSTRAINTS:
+                - Do NOT create a "Main Dish" or "Summary" item that combines others.
+                - Do NOT list "Chicken and Rice" if you have already listed "Chicken" and "Rice" separately.
+                - Each food pixel in the image should belong to EXACTLY ONE item in your list. Do not double count.
 
-                      RULES:
-                      - If packaging text is visible, prioritize it over visual appearance.
-                      - If the food is blurry or unidentifiable, return an empty list. Do not hallucinate.
-                      """
+                OUTPUT FORMAT (Strict JSON):
+                {
+                  "container_type": "REGULAR_BOWL",
+                  "container_fill_percent": 50,
+                  "items": [
+                    {
+                      "visual_name": "Roasted Potato Wedges",
+                      "base_ingredient": "Potato",
+                      "confidence": 0.95,
+                      "estimated_grams": 150,
+                      "visual_state": "ROASTED",
+                      "risk_flags": ["HIGH_FAT", "POSSIBLE_SUGAR_GLAZE", "SAUCE_DETECTED"],
+                      "requires_user_validation": false
+                    }
+                  ],
+                  "warnings": []
+                }
+
+                RULES:
+                - If packaging text is visible, prioritize it over visual appearance.
+                - If the food is blurry or unidentifiable, make a best-effort estimate of the major food group (e.g., 'Grains', 'Vegetables') based on context. Do not hallucinate brand names, but identify the base ingredient if possible.
+                """
                 .formatted(referenceInstruction);
     }
 
-    private List<FoodRecognitionResult.RecognizedFoodItem> parseFoodsFromOpenAi(String rawResponse) throws Exception {
+    private FoodRecognitionResult parseFoodsFromOpenAi(String rawResponse) throws Exception {
         String jsonText = extractFirstJsonObject(rawResponse);
 
         JsonNode root = objectMapper.readTree(jsonText);
         JsonNode items = root.get("items");
+
+        // v2: Extract container-level fields
+        FoodRecognitionResult result = new FoodRecognitionResult();
+        if (root.has("container_fill_percent")) {
+            result.setContainerFillPercent((float) root.get("container_fill_percent").asDouble());
+        }
+        if (root.has("container_type")) {
+            result.setDetectedContainerType(root.get("container_type").asText());
+        }
 
         List<FoodRecognitionResult.RecognizedFoodItem> results = new ArrayList<>();
         if (items != null && items.isArray()) {
@@ -371,7 +407,8 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
                 results.add(recognizedItem);
             }
         }
-        return results;
+        result.setDetectedFoods(results);
+        return result;
     }
 
     private String extractContentFromResponse(String rawResponse) {
