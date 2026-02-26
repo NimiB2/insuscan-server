@@ -14,6 +14,8 @@ public class NutritionInfo {
     private String densitySource; // USDA, LOOKUP, GPT, UNKNOWN
     private Float servingVolumeCm3; // Volume of a single serving (from USDA)
 
+    private float fiberPer100g; // dietary fiber for net carb calculation
+
     public NutritionInfo() {
     }
 
@@ -89,6 +91,14 @@ public class NutritionInfo {
 
     public void setServingVolumeCm3(Float servingVolumeCm3) {
         this.servingVolumeCm3 = servingVolumeCm3;
+    }
+    
+    public float getFiberPer100g() {
+        return fiberPer100g;
+    }
+
+    public void setFiberPer100g(float fiberPer100g) {
+        this.fiberPer100g = fiberPer100g;
     }
 
     // Calculate carbs for a specific weight

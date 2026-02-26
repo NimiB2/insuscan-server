@@ -31,8 +31,21 @@ public class FoodRecognitionResult {
         private List<String> riskFlags; // Warnings: "HIDDEN_SUGAR", "HIGH_FAT", "SAUCE_DETECTED"
         private boolean requiresValidation; // True if AI is unsure or detects high risk
 
+     // How much of the plate this food covers (0-100%)
+     // Server uses this to calculate area from plate dimensions
+     private Float coveragePercent;
+
+     // Height profile: FLAT, LOW_PILE, MEDIUM_PILE, HIGH_PILE
+     // Server maps this to cm when ARCore isn't available
+     private String heightCategory;
+
+     // 2-3 USDA-friendly search terms from GPT (replaces FoodNameNormalizer)
+     // Ordered from most specific to most general
+     private List<String> usdaSearchTerms;
+        
         public RecognizedFoodItem() {
             this.riskFlags = new ArrayList<>();
+            this.usdaSearchTerms = new ArrayList<>();
         }
 
         public RecognizedFoodItem(String name, float confidence, Float estimatedPortionGrams) {
@@ -40,6 +53,7 @@ public class FoodRecognitionResult {
             this.confidence = confidence;
             this.estimatedPortionGrams = estimatedPortionGrams;
             this.riskFlags = new ArrayList<>();
+            this.usdaSearchTerms = new ArrayList<>();
             this.visualState = "UNKNOWN";
             this.baseIngredient = name; // Default fallback
             this.requiresValidation = false;
@@ -101,6 +115,30 @@ public class FoodRecognitionResult {
 
         public void setRequiresValidation(boolean requiresValidation) {
             this.requiresValidation = requiresValidation;
+        }
+        
+        public Float getCoveragePercent() {
+            return coveragePercent;
+        }
+
+        public void setCoveragePercent(Float coveragePercent) {
+            this.coveragePercent = coveragePercent;
+        }
+
+        public String getHeightCategory() {
+            return heightCategory;
+        }
+
+        public void setHeightCategory(String heightCategory) {
+            this.heightCategory = heightCategory;
+        }
+
+        public List<String> getUsdaSearchTerms() {
+            return usdaSearchTerms;
+        }
+
+        public void setUsdaSearchTerms(List<String> usdaSearchTerms) {
+            this.usdaSearchTerms = (usdaSearchTerms != null) ? usdaSearchTerms : new ArrayList<>();
         }
     }
     // --- End of Inner Class ---
