@@ -119,6 +119,110 @@ public class NutritionDataServiceImpl implements NutritionDataService {
             return fallback;
         }
     }
+    
+    @Override
+    public NutritionInfo getNutritionInfoById(String fdcId) {
+        if (fdcId == null || fdcId.isBlank()) {
+            return NutritionInfo.notFound("unknown");
+        }
+
+        // Fallback entries don't have real USDA IDs
+        if (fdcId.startsWith("fallback-")) {
+            String foodName = fdcId.replace("fallback-", "");
+            return getFallbackNutrition(foodName);
+        }
+
+        if (!isServiceAvailable()) {
+            log.warn("[USDA] API key missing, can't fetch by ID: {}", fdcId);
+            return NutritionInfo.notFound(fdcId);
+        }
+
+        try {
+            apiLogger.usdaApiCall("FDC ID lookup: " + fdcId);
+            long startTime = System.currentTimeMillis();
+
+            @SuppressWarnings("unchecked")
+            Map<String, Object> response = webClient.get()
+                    .uri(USDA_BASE_URL + "/food/" + fdcId + "?api_key=" + apiKey)
+                    .retrieve()
+                    .bodyToMono(Map.class)
+                    .block();
+
+            long elapsed = System.currentTimeMillis() - startTime;
+
+            if (response == null) {
+                apiLogger.usdaError("Empty response for fdcId: " + fdcId);
+                return NutritionInfo.notFound(fdcId);
+            }
+
+            NutritionInfo info = new NutritionInfo();
+            info.setFound(true);
+            info.setFdcId(fdcId);
+            info.setFoodName((String) response.get("description"));
+
+            // Parse nutrients
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> nutrients = (List<Map<String, Object>>) response.get("foodNutrients");
+            float fiber = 0f;
+
+            if (nutrients != null) {
+                for (Map<String, Object> nutrient : nutrients) {
+                    // USDA detail endpoint nests nutrient name inside a "nutrient" object
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> nutrientInfo = (Map<String, Object>) nutrient.get("nutrient");
+                    String name = (nutrientInfo != null)
+                            ? (String) nutrientInfo.get("name")
+                            : (String) nutrient.get("nutrientName");
+                    Number value = (Number) nutrient.get("amount");
+                    if (value == null) value = (Number) nutrient.get("value");
+
+                    if (name == null || value == null) continue;
+
+                    String lower = name.toLowerCase();
+                    if (lower.contains("carbohydrate")) {
+                        info.setCarbsPer100g(value.floatValue());
+                    } else if (lower.contains("fiber")) {
+                        fiber = value.floatValue();
+                    }
+                }
+            }
+            info.setFiberPer100g(fiber);
+
+            // Parse serving/portion data for density
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> portions = (List<Map<String, Object>>) response.get("foodPortions");
+            if (portions != null && !portions.isEmpty()) {
+                for (Map<String, Object> portion : portions) {
+                    Number gramWeight = (Number) portion.get("gramWeight");
+                    String desc = (String) portion.get("portionDescription");
+                    if (desc == null) desc = (String) portion.get("modifier");
+
+                    if (gramWeight != null && desc != null && gramWeight.floatValue() > 0) {
+                        float volumeCm3 = estimateVolumeCm3FromDescription(desc);
+                        if (volumeCm3 > 0) {
+                            float density = gramWeight.floatValue() / volumeCm3;
+                            if (density >= 0.1f && density <= 1.4f) {
+                                info.setDensityGPerCm3(density);
+                                info.setDensitySource("USDA");
+                                info.setServingVolumeCm3(volumeCm3);
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+
+            apiLogger.usdaApiResponse(elapsed, 1, fdcId);
+            log.info("[USDA] Fetched by ID {}: '{}', carbs={}g/100g, density={}",
+                    fdcId, info.getFoodName(), info.getCarbsPer100g(), info.getDensityGPerCm3());
+
+            return info;
+
+        } catch (Exception e) {
+            apiLogger.usdaError("Failed to fetch fdcId " + fdcId + ": " + e.getMessage());
+            return NutritionInfo.notFound(fdcId);
+        }
+    }
 
     private NutritionInfo findBestMatch(String normalizedName, List<NutritionInfo> results) {
         if (results.isEmpty()) return null;
@@ -236,14 +340,58 @@ public class NutritionDataServiceImpl implements NutritionDataService {
 
                 List<Map> nutrients = (List<Map>) food.get("foodNutrients");
                 if (nutrients != null) {
+                    float fiber = 0f;
+                    float protein = 0f;
+                    float fat = 0f;
+
                     for (Map nutrient : nutrients) {
                         String name = (String) nutrient.get("nutrientName");
                         Number value = (Number) nutrient.get("value");
 
                         if (name == null || value == null) continue;
 
-                        if (name.toLowerCase().contains("carbohydrate")) {
+                        String lower = name.toLowerCase();
+                        if (lower.contains("carbohydrate")) {
                             info.setCarbsPer100g(value.floatValue());
+                        } else if (lower.contains("fiber")) {
+                            fiber = value.floatValue();
+                        } else if (lower.contains("protein")) {
+                            protein = value.floatValue();
+                        } else if (lower.contains("fat") && !lower.contains("fatty")) {
+                            fat = value.floatValue();
+                        }
+                    }
+
+                    // Store fiber so server can compute net carbs later if needed
+                    info.setFiberPer100g(fiber);
+                }
+
+                // Try to extract density from USDA portion data
+                // USDA returns "foodMeasures" with gramWeight + volume descriptions
+                List<Map> measures = (List<Map>) food.get("foodMeasures");
+                if (measures == null) {
+                    // Some responses use "foodPortions" instead
+                    measures = (List<Map>) food.get("foodPortions");
+                }
+
+                if (measures != null && !measures.isEmpty()) {
+                    for (Map measure : measures) {
+                        Number gramWeight = (Number) measure.get("gramWeight");
+                        String desc = (String) measure.get("disseminationText");
+                        if (desc == null) desc = (String) measure.get("measureUnitName");
+
+                        if (gramWeight != null && desc != null && gramWeight.floatValue() > 0) {
+                            float volumeCm3 = estimateVolumeCm3FromDescription(desc);
+                            if (volumeCm3 > 0) {
+                                float density = gramWeight.floatValue() / volumeCm3;
+                                // Sanity check: food density is typically 0.1-1.4 g/cm³
+                                if (density >= 0.1f && density <= 1.4f) {
+                                    info.setDensityGPerCm3(density);
+                                    info.setDensitySource("USDA");
+                                    info.setServingVolumeCm3(volumeCm3);
+                                    break; // use the first valid one
+                                }
+                            }
                         }
                     }
                 }
@@ -335,5 +483,30 @@ public class NutritionDataServiceImpl implements NutritionDataService {
         info.setCarbsPer100g(carbs);
         info.setFdcId("fallback-" + name);
         return info;
+    }
+    /**
+     * Converts common USDA serving descriptions to volume in cm³.
+     * "1 cup" = 236.6 cm³, "1 tbsp" = 14.8 cm³, etc.
+     */
+    private float estimateVolumeCm3FromDescription(String desc) {
+        if (desc == null) return 0f;
+        String lower = desc.toLowerCase().trim();
+
+        // Standard volume conversions to cm³
+        if (lower.contains("cup")) return 236.6f;
+        if (lower.contains("tablespoon") || lower.contains("tbsp")) return 14.8f;
+        if (lower.contains("teaspoon") || lower.contains("tsp")) return 4.9f;
+        if (lower.contains("fluid oz") || lower.contains("fl oz")) return 29.6f;
+        if (lower.contains("liter") || lower.contains("litre")) return 1000f;
+        if (lower.contains("ml")) {
+            // Try to extract the number: "250 ml" → 250
+            try {
+                String num = lower.replaceAll("[^0-9.]", "");
+                if (!num.isEmpty()) return Float.parseFloat(num);
+            } catch (NumberFormatException e) { /* ignore */ }
+            return 0f;
+        }
+
+        return 0f;
     }
 }

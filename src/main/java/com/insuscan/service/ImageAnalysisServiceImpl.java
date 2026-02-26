@@ -323,6 +323,19 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
                 - Do NOT list "Chicken and Rice" if you have already listed "Chicken" and "Rice" separately.
                 - Each food pixel in the image should belong to EXACTLY ONE item in your list. Do not double count.
 
+        		SPATIAL ANALYSIS (CRITICAL FOR ACCURACY):
+                For each food item, estimate:
+                - coverage_percent: What percentage of the plate/bowl surface this food occupies (all items should sum to ~100).
+                - height_category: How tall the food is piled:
+                  * FLAT = thin layer, under 0.5cm (e.g. sauce, spread, single slice)
+                  * LOW_PILE = 0.5-1.5cm (e.g. steak, flat pasta, single layer)
+                  * MEDIUM_PILE = 1.5-3cm (e.g. rice serving, stir fry)
+                  * HIGH_PILE = 3cm+ (e.g. heaped salad, fries pile, overflowing rice)
+                - usda_search_terms: Provide exactly 2-3 search terms for the USDA FoodData Central database.
+                  * First term: most specific match including cooking method (e.g. "rice white cooked")
+                  * Second term: broader match (e.g. "rice cooked")
+                  * Third term (optional): base ingredient only (e.g. "rice")
+
                 OUTPUT FORMAT (Strict JSON):
                 {
                   "container_type": "REGULAR_BOWL",
@@ -333,8 +346,11 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
                       "base_ingredient": "Potato",
                       "confidence": 0.95,
                       "estimated_grams": 150,
+                      "coverage_percent": 45,
+                      "height_category": "MEDIUM_PILE",
+                      "usda_search_terms": ["potato wedges roasted", "potato roasted", "potato"],
                       "visual_state": "ROASTED",
-                      "risk_flags": ["HIGH_FAT", "POSSIBLE_SUGAR_GLAZE", "SAUCE_DETECTED"],
+                      "risk_flags": ["HIGH_FAT"],
                       "requires_user_validation": false
                     }
                   ],
@@ -398,11 +414,29 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
                 FoodRecognitionResult.RecognizedFoodItem recognizedItem = new FoodRecognitionResult.RecognizedFoodItem(
                         visualName, conf, weight);
 
-                // Set the new fields
+             // Set the new fields
                 recognizedItem.setBaseIngredient(baseIngredient);
                 recognizedItem.setVisualState(state);
                 recognizedItem.setRequiresValidation(needsValidation);
                 recognizedItem.setRiskFlags(risks);
+
+                // Spatial fields for physics-based calculation
+                if (item.has("coverage_percent")) {
+                    recognizedItem.setCoveragePercent((float) item.get("coverage_percent").asDouble());
+                }
+
+                if (item.has("height_category")) {
+                    recognizedItem.setHeightCategory(item.get("height_category").asText());
+                }
+
+                // GPT-provided USDA search terms (replaces hardcoded FoodNameNormalizer)
+                List<String> searchTerms = new ArrayList<>();
+                if (item.has("usda_search_terms") && item.get("usda_search_terms").isArray()) {
+                    for (JsonNode term : item.get("usda_search_terms")) {
+                        searchTerms.add(term.asText());
+                    }
+                }
+                recognizedItem.setUsdaSearchTerms(searchTerms);
 
                 results.add(recognizedItem);
             }

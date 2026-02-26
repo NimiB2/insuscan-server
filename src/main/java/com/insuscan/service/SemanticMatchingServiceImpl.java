@@ -41,8 +41,11 @@ public class SemanticMatchingServiceImpl implements SemanticMatchingService {
     }
 
     @Override
-    public String findBestMatch(FoodRecognitionResult.RecognizedFoodItem visualTarget, List<NutritionInfo> candidates) {
-        if (candidates == null || candidates.isEmpty()) {
+    public String findBestMatch(FoodRecognitionResult.RecognizedFoodItem visualTarget,
+                                List<NutritionInfo> candidates,
+                                String base64Image) {
+    	
+    	if (candidates == null || candidates.isEmpty()) {
             return null;
         }
 
@@ -55,10 +58,10 @@ public class SemanticMatchingServiceImpl implements SemanticMatchingService {
         long startTime = System.currentTimeMillis();
 
         try {
-            // 1. Build the "Trial" (The Prompt)
+        	// 1. Build the "Trial" (The Prompt)
             String prompt = buildJudgePrompt(visualTarget, candidates);
-            Map<String, Object> requestBody = buildRequestBody(prompt);
-
+            Map<String, Object> requestBody = buildRequestBody(prompt, base64Image);
+            
             // 2. Call the Judge (OpenAI)
             String response = webClient.post()
                     .uri("/chat/completions")
@@ -107,9 +110,10 @@ public class SemanticMatchingServiceImpl implements SemanticMatchingService {
                         CANDIDATE LIST (From USDA Database):
                         %s
 
-                        TASK:
-                        Select the SINGLE fdcId from the list that represents the most scientifically accurate nutritional match for the TARGET.
-
+        				TASK:
+                        Look at the image and the TARGET description. Select the SINGLE fdcId from the list that represents the most scientifically accurate nutritional match.
+                        If the image clearly contradicts the TARGET name (e.g. TARGET says "fried rice" but image shows plain white rice), note this in your reason.
+                        
                         LOGIC RULES:
                         1. FORM CHECK: If target is a whole vegetable/fruit, DISCARD 'Flour', 'Powder', 'Baby Food', 'Bread'.
                         2. INGREDIENT MATCH: Prioritize the 'Base Ingredient'. If the target is 'Rice', prefer matches that ARE rice (grains), NOT rice-based products like 'Rice Noodles', 'Rice Paper', or 'Rice Flour'.
@@ -129,13 +133,26 @@ public class SemanticMatchingServiceImpl implements SemanticMatchingService {
                 state);
     }
 
-    private Map<String, Object> buildRequestBody(String prompt) {
+    private Map<String, Object> buildRequestBody(String prompt, String base64Image) {
+        // Build user message content — text only, or text + image
+        Object userContent;
+        if (base64Image != null && !base64Image.isBlank()) {
+            // Send image so the Judge can visually verify the match
+            Map<String, Object> textPart = Map.of("type", "text", "text", prompt);
+            Map<String, Object> imageUrl = Map.of("url", "data:image/jpeg;base64," + base64Image);
+            Map<String, Object> imagePart = Map.of("type", "image_url", "image_url", imageUrl);
+            userContent = List.of(textPart, imagePart);
+        } else {
+            // Fallback: text-only (still works, just less accurate)
+            userContent = prompt;
+        }
+
         return Map.of(
                 "model", openAiModel,
                 "messages", List.of(
                         Map.of("role", "system", "content", "You are a JSON-only data matching engine."),
-                        Map.of("role", "user", "content", prompt)),
-                "temperature", 0.0 // Zero temperature for maximum logic/determinism
+                        Map.of("role", "user", "content", userContent)),
+                "temperature", 0.0
         );
     }
 

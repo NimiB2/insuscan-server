@@ -55,6 +55,7 @@ public class MealEntity {
     private Float activeInsulin; // IOB subtracted from dose
     private Boolean wasSickMode;
     private Boolean wasStressMode;
+    private List<String> reviewWarnings;
 
     public MealEntity() {
         this.scannedAt = new Date();
@@ -396,6 +397,10 @@ public class MealEntity {
     public void setActiveInsulin(Float activeInsulin) {
         this.activeInsulin = activeInsulin;
     }
+    
+    public List<String> getReviewWarnings() { return reviewWarnings; }
+    public void setReviewWarnings(List<String> reviewWarnings) { this.reviewWarnings = reviewWarnings; }
+   
 
     @Override
     public String toString() {

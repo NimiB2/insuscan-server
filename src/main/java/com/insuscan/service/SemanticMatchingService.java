@@ -10,5 +10,7 @@ public interface SemanticMatchingService {
      * Returns the fdcId of the best scientific match.
      * Returns null if no good match is found.
      */
-    String findBestMatch(FoodRecognitionResult.RecognizedFoodItem visualTarget, List<NutritionInfo> candidates);
-}
+	String findBestMatch(FoodRecognitionResult.RecognizedFoodItem visualTarget,
+            List<NutritionInfo> candidates,
+            String base64Image);
+	}
