@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.insuscan.boundary.FoodRecognitionResult;
 import com.insuscan.boundary.NutritionInfo;
 import com.insuscan.util.ApiLogger;
+import com.insuscan.util.OpenAiJsonParser;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -24,6 +26,8 @@ public class SemanticMatchingServiceImpl implements SemanticMatchingService {
     private final ObjectMapper objectMapper;
     private final ApiLogger apiLogger;
 
+    private final OpenAiJsonParser jsonParser;
+    
     @Value("${openai.api.key:}")
     private String openAiApiKey;
 
@@ -32,12 +36,14 @@ public class SemanticMatchingServiceImpl implements SemanticMatchingService {
 
     public SemanticMatchingServiceImpl(WebClient.Builder webClientBuilder,
             ObjectMapper objectMapper,
-            ApiLogger apiLogger) {
+            ApiLogger apiLogger,
+            OpenAiJsonParser jsonParser) {
         this.webClient = webClientBuilder
                 .baseUrl("https://api.openai.com/v1")
                 .build();
         this.objectMapper = objectMapper;
         this.apiLogger = apiLogger;
+        this.jsonParser = jsonParser;
     }
 
     @Override
@@ -152,27 +158,16 @@ public class SemanticMatchingServiceImpl implements SemanticMatchingService {
                 "messages", List.of(
                         Map.of("role", "system", "content", "You are a JSON-only data matching engine."),
                         Map.of("role", "user", "content", userContent)),
-                "temperature", 0.0
+                "temperature", 0.0,
+                "response_format", Map.of("type", "json_object")
         );
     }
 
     private String parseJudgeVerdict(String jsonResponse) {
         try {
-            JsonNode root = objectMapper.readTree(jsonResponse);
-            JsonNode choices = root.get("choices");
-            if (choices != null && !choices.isEmpty()) {
-                String content = choices.get(0).get("message").get("content").asText();
-
-                // Extract JSON from content (handle potential markdown)
-                int start = content.indexOf('{');
-                int end = content.lastIndexOf('}');
-                if (start >= 0 && end > start) {
-                    content = content.substring(start, end + 1);
-                    JsonNode result = objectMapper.readTree(content);
-                    if (result.has("best_match_id")) {
-                        return result.get("best_match_id").asText();
-                    }
-                }
+            JsonNode result = jsonParser.parseContent(jsonResponse);
+            if (result.has("best_match_id")) {
+                return result.get("best_match_id").asText();
             }
         } catch (Exception e) {
             log.error("Failed to parse judge response", e);

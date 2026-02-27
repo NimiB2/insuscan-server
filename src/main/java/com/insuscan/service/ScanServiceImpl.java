@@ -1,5 +1,6 @@
 package com.insuscan.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.insuscan.boundary.*;
 import com.insuscan.converter.MealConverter;
 import com.insuscan.crud.MealRepository;
@@ -14,6 +15,8 @@ import com.insuscan.util.InputValidators;
 import com.insuscan.util.MealIdGenerator;
 import com.insuscan.util.PortionEstimator;
 import com.insuscan.util.NumberUtils;
+import com.insuscan.util.OpenAiJsonParser;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -38,6 +41,7 @@ public class ScanServiceImpl implements ScanService {
     private final MealIdGenerator mealIdGenerator;
     private final PortionEstimator portionEstimator;
     private final ApiLogger apiLogger;
+    private final OpenAiJsonParser jsonParser;
 
     private final WebClient openAiWebClient;
     
@@ -59,7 +63,8 @@ public class ScanServiceImpl implements ScanService {
             MealIdGenerator mealIdGenerator,
             PortionEstimator portionEstimator,
             ApiLogger apiLogger,
-            WebClient.Builder webClientBuilder) {
+            WebClient.Builder webClientBuilder,
+            OpenAiJsonParser jsonParser) {
     	
         this.imageAnalysisService = imageAnalysisService;
         this.nutritionDataService = nutritionDataService;
@@ -73,6 +78,7 @@ public class ScanServiceImpl implements ScanService {
         this.openAiWebClient = webClientBuilder
                 .baseUrl("https://api.openai.com/v1")
                 .build();
+        this.jsonParser = jsonParser;
     }
 
     @Override
@@ -648,7 +654,8 @@ public class ScanServiceImpl implements ScanService {
                     "messages", List.of(
                             Map.of("role", "user", "content", List.of(textContent, imageContent))),
                     "temperature", 0.0,
-                    "max_tokens", 300);
+                    "max_tokens", 300,
+                    "response_format", Map.of("type", "json_object"));
 
             // Reuse the same OpenAI WebClient (needs injection — see 8B)
             String response = openAiWebClient.post()
@@ -661,28 +668,16 @@ public class ScanServiceImpl implements ScanService {
                     .block();
 
             if (response != null) {
-                com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-                com.fasterxml.jackson.databind.JsonNode root = mapper.readTree(response);
-                com.fasterxml.jackson.databind.JsonNode choices = root.get("choices");
-                if (choices != null && !choices.isEmpty()) {
-                    String content = choices.get(0).get("message").get("content").asText();
-                    // Extract JSON
-                    int start = content.indexOf('{');
-                    int end = content.lastIndexOf('}');
-                    if (start >= 0 && end > start) {
-                        com.fasterxml.jackson.databind.JsonNode result = mapper.readTree(
-                                content.substring(start, end + 1));
-                        if (result.has("warnings") && result.get("warnings").isArray()) {
-                            List<String> warnings = new ArrayList<>();
-                            for (com.fasterxml.jackson.databind.JsonNode w : result.get("warnings")) {
-                                warnings.add(w.asText());
-                            }
-                            if (!warnings.isEmpty()) {
-                                log.warn("[FINAL_REVIEW] Issues found: {}", warnings);
-                            }
-                            return warnings;
-                        }
+                JsonNode result = jsonParser.parseContent(response);
+                if (result.has("warnings") && result.get("warnings").isArray()) {
+                    List<String> warnings = new ArrayList<>();
+                    for (JsonNode w : result.get("warnings")) {
+                        warnings.add(w.asText());
                     }
+                    if (!warnings.isEmpty()) {
+                        log.warn("[FINAL_REVIEW] Issues found: {}", warnings);
+                    }
+                    return warnings;
                 }
             }
         } catch (Exception e) {

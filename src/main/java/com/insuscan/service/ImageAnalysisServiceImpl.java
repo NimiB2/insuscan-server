@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.insuscan.boundary.FoodRecognitionResult;
 import com.insuscan.util.ApiLogger;
+import com.insuscan.util.OpenAiJsonParser;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -23,7 +25,8 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
     private final ObjectMapper objectMapper;
     private final VisionCacheService visionCache;
     private final ApiLogger apiLogger;
-
+    private final OpenAiJsonParser jsonParser;
+    
     @Value("${openai.api.key:}")
     private String openAiApiKey;
 
@@ -33,13 +36,15 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
     public ImageAnalysisServiceImpl(WebClient.Builder webClientBuilder,
             ObjectMapper objectMapper,
             VisionCacheService visionCache,
-            ApiLogger apiLogger) {
+            ApiLogger apiLogger,
+            OpenAiJsonParser jsonParser) {
         this.webClient = webClientBuilder
                 .baseUrl("https://api.openai.com/v1")
                 .build();
         this.objectMapper = objectMapper;
         this.visionCache = visionCache;
         this.apiLogger = apiLogger;
+        this.jsonParser = jsonParser;
     }
 
     @Override
@@ -227,7 +232,8 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
                 "model", openAiModel,
                 "messages", List.of(userMessage),
                 "temperature", 0.0,
-                "max_tokens", 1200);
+                "max_tokens", 1200,
+                "response_format", Map.of("type", "json_object"));
     }
 
     private Map<String, Object> buildOpenAiRequestWithUrl(String imageUrl, String referenceObjectType) {
@@ -245,7 +251,8 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
                 "model", openAiModel,
                 "messages", List.of(userMessage),
                 "temperature", 0.0,
-                "max_tokens", 1200);
+                "max_tokens", 1200,
+                "response_format", Map.of("type", "json_object"));
     }
 
     private String buildPrompt(boolean strict, String referenceObjectType) {
@@ -464,27 +471,10 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
     }
 
     private String extractContentFromResponse(String rawResponse) {
-        try {
-            JsonNode root = objectMapper.readTree(rawResponse);
-            JsonNode choices = root.get("choices");
-            if (choices != null && choices.isArray() && !choices.isEmpty()) {
-                JsonNode message = choices.get(0).get("message");
-                if (message != null && message.has("content")) {
-                    return message.get("content").asText();
-                }
-            }
-            return null;
-        } catch (Exception e) {
-            return extractFirstJsonObject(rawResponse);
-        }
+        return jsonParser.extractContent(rawResponse);
     }
 
     private String extractFirstJsonObject(String raw) {
-        int start = raw.indexOf('{');
-        int end = raw.lastIndexOf('}');
-        if (start == -1 || end == -1 || end <= start) {
-            throw new IllegalStateException("Could not locate JSON object in response");
-        }
-        return raw.substring(start, end + 1);
+        return jsonParser.extractJsonObject(raw);
     }
 }
