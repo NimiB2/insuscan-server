@@ -56,6 +56,7 @@ public class MealEntity {
     private Boolean wasSickMode;
     private Boolean wasStressMode;
     private List<String> reviewWarnings;
+    
 
     public MealEntity() {
         this.scannedAt = new Date();
@@ -75,10 +76,24 @@ public class MealEntity {
 
         // This is the field that was missing causing the error
         private String note; // Specific note/risk for this item (e.g., "High Fat")
-
+        // bbox from GPT (% of image) — passed through to client for GrabCut
+        private Float bboxXPct;
+        private Float bboxYPct;
+        private Float bboxWPct;
+        private Float bboxHPct;
+        
         public FoodItem() {
         }
 
+        public Float getBboxXPct() { return bboxXPct; }
+        public void setBboxXPct(Float bboxXPct) { this.bboxXPct = bboxXPct; }
+        public Float getBboxYPct() { return bboxYPct; }
+        public void setBboxYPct(Float bboxYPct) { this.bboxYPct = bboxYPct; }
+        public Float getBboxWPct() { return bboxWPct; }
+        public void setBboxWPct(Float bboxWPct) { this.bboxWPct = bboxWPct; }
+        public Float getBboxHPct() { return bboxHPct; }
+        public void setBboxHPct(Float bboxHPct) { this.bboxHPct = bboxHPct; }
+        
         // --- FoodItem Getters & Setters ---
 
         public String getName() {
