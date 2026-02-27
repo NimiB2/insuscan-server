@@ -331,11 +331,17 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
                   * LOW_PILE = 0.5-1.5cm (e.g. steak, flat pasta, single layer)
                   * MEDIUM_PILE = 1.5-3cm (e.g. rice serving, stir fry)
                   * HIGH_PILE = 3cm+ (e.g. heaped salad, fries pile, overflowing rice)
+                - bounding_box: A tight rectangle around ONLY this food item, as percentage of the FULL IMAGE (not the plate).
+                  * x_pct = left edge (0 = left side of image, 100 = right side)
+                  * y_pct = top edge (0 = top of image, 100 = bottom)
+                  * w_pct = width of the box as %% of image width
+                  * h_pct = height of the box as %% of image height
+                  * Must tightly contain ONLY this specific food, not the whole plate.
                 - usda_search_terms: Provide exactly 2-3 search terms for the USDA FoodData Central database.
                   * First term: most specific match including cooking method (e.g. "rice white cooked")
                   * Second term: broader match (e.g. "rice cooked")
                   * Third term (optional): base ingredient only (e.g. "rice")
-
+                  
                 OUTPUT FORMAT (Strict JSON):
                 {
                   "container_type": "REGULAR_BOWL",
@@ -346,8 +352,9 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
                       "base_ingredient": "Potato",
                       "confidence": 0.95,
                       "estimated_grams": 150,
-                      "coverage_percent": 45,
+        			  "coverage_percent": 45,
                       "height_category": "MEDIUM_PILE",
+                      "bounding_box": { "x_pct": 10.0, "y_pct": 25.0, "w_pct": 35.0, "h_pct": 40.0 },
                       "usda_search_terms": ["potato wedges roasted", "potato roasted", "potato"],
                       "visual_state": "ROASTED",
                       "risk_flags": ["HIGH_FAT"],
@@ -427,6 +434,17 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
 
                 if (item.has("height_category")) {
                     recognizedItem.setHeightCategory(item.get("height_category").asText());
+                }
+                
+             // bounding box for client-side GrabCut segmentation
+                if (item.has("bounding_box")) {
+                    JsonNode bbox = item.get("bounding_box");
+                    recognizedItem.setBoundingBox(
+                        (float) bbox.path("x_pct").asDouble(0),
+                        (float) bbox.path("y_pct").asDouble(0),
+                        (float) bbox.path("w_pct").asDouble(0),
+                        (float) bbox.path("h_pct").asDouble(0)
+                    );
                 }
 
                 // GPT-provided USDA search terms (replaces hardcoded FoodNameNormalizer)

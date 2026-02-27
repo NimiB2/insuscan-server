@@ -14,9 +14,6 @@ import com.insuscan.util.InputValidators;
 import com.insuscan.util.MealIdGenerator;
 import com.insuscan.util.PortionEstimator;
 import com.insuscan.util.NumberUtils;
-import com.insuscan.calculation.InsulinCalculator;
-import com.insuscan.calculation.CalculationParams;
-import com.insuscan.calculation.CalculationResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -258,7 +255,13 @@ public class ScanServiceImpl implements ScanService {
             MealEntity.FoodItem item = new MealEntity.FoodItem();
             item.setName(detected.getName());
             item.setConfidence(NumberUtils.roundTo2Decimals(detected.getConfidence()));
-
+            
+            // pass GPT bounding box through to client
+            item.setBboxXPct(detected.getBboxXPct());
+            item.setBboxYPct(detected.getBboxYPct());
+            item.setBboxWPct(detected.getBboxWPct());
+            item.setBboxHPct(detected.getBboxHPct());
+            
             // Add safety flags to the DB entity for future reference
             if (detected.getRiskFlags() != null && !detected.getRiskFlags().isEmpty()) {
                 item.setNote("Risks: " + String.join(", ", detected.getRiskFlags()));
@@ -274,16 +277,17 @@ public class ScanServiceImpl implements ScanService {
                 float areaCm2 = ((Number) region.getOrDefault("areaCm2", 0.0)).floatValue();
                 float heightCm = ((Number) region.getOrDefault("heightCm", 1.0)).floatValue();
                 float shapeFactor = getShapeFactor(heightCm);
-                float volumeCm3 = areaCm2 * heightCm * shapeFactor;
-
+                float bowlFactor = getBowlGeometryFactor(resolvedContainerType);
+                float volumeCm3 = areaCm2 * heightCm * shapeFactor * bowlFactor;
+                
                 float density = resolveDensity(detected.getName(), finalNutrition);
                 itemWeight = volumeCm3 * density;
-                weightSource = String.format("CLIENT_PHYSICS(a=%.1f h=%.1f sf=%.2f V=%.1f d=%.2f)",
-                        areaCm2, heightCm, shapeFactor, volumeCm3, density);
+                weightSource = String.format("CLIENT_PHYSICS(a=%.1f h=%.1f sf=%.2f bf=%.2f V=%.1f d=%.2f)",
+                        areaCm2, heightCm, shapeFactor, bowlFactor, volumeCm3, density);
 
-                log.info("[v3] {} → CLIENT region: {}cm² × {}cm × {} = {}cm³ × {} = {}g",
-                        detected.getName(), areaCm2, heightCm, shapeFactor, volumeCm3, density, itemWeight);
-                regionIndex++;
+                log.info("[v3] {} → CLIENT region: {}cm² × {}cm × sf={} × bf={} = {}cm³ × d={} = {}g",
+                        detected.getName(), areaCm2, heightCm, shapeFactor, bowlFactor,
+                        String.format("%.1f", volumeCm3), density, String.format("%.1f", itemWeight));
 
             // PRIORITY 2: Plate geometry + GPT coverage (server-side physics)
             } else if (hasPlateGeometry && detected.getCoveragePercent() != null
@@ -301,20 +305,21 @@ public class ScanServiceImpl implements ScanService {
                 }
 
                 float shapeFactor = getShapeFactor(heightCm);
-                float volumeCm3 = foodAreaCm2 * heightCm * shapeFactor;
-
+                float bowlFactor = getBowlGeometryFactor(resolvedContainerType);
+                float volumeCm3 = foodAreaCm2 * heightCm * shapeFactor * bowlFactor;
+                
                 float density = resolveDensity(detected.getName(), finalNutrition);
                 itemWeight = volumeCm3 * density;
-                weightSource = String.format("GPT_PHYSICS(cov=%s%% a=%.1f h=%.1f[%s] sf=%.2f V=%.1f d=%.2f)",
+                weightSource = String.format("GPT_PHYSICS(cov=%s%% a=%.1f h=%.1f[%s] sf=%.2f bf=%.2f V=%.1f d=%.2f)",
                         detected.getCoveragePercent(), foodAreaCm2, heightCm,
-                        detected.getHeightCategory(), shapeFactor, volumeCm3, density);
+                        detected.getHeightCategory(), shapeFactor, bowlFactor, volumeCm3, density);
 
-                log.info("[v3] {} → cov={}% area={}cm² × h={}cm({}) × sf={} = {}cm³ × d={} = {}g",
+                log.info("[v3] {} → cov={}% area={}cm² × h={}cm({}) × sf={} × bf={} = {}cm³ × d={} = {}g",
                         detected.getName(), detected.getCoveragePercent(),
                         String.format("%.1f", foodAreaCm2), heightCm, detected.getHeightCategory(),
-                        shapeFactor, String.format("%.1f", volumeCm3), density,
+                        shapeFactor, bowlFactor, String.format("%.1f", volumeCm3), density,
                         String.format("%.1f", itemWeight));
-
+                
             // PRIORITY 3: Distributed fallback (no geometry or no coverage)
             } else {
                 itemWeight = (distributedPortions != null) ? distributedPortions.get(detected.getName()) : null;
@@ -370,69 +375,17 @@ public class ScanServiceImpl implements ScanService {
             apiLogger.scanStep(3, "FINAL REVIEW: " + reviewWarnings.size() + " warnings");
         }
 
-        // Step 4: Calculate insulin dose
-        apiLogger.scanStep(4, "CALCULATING INSULIN DOSE");
+     // Step 4: Skip insulin calc here — client handles it
+        // (client has glucose, IOB, activity level, and unit preferences
+        //  that aren't available at scan time)
         Float recommendedDose = null;
-        boolean profileComplete = false;
+        boolean profileComplete = isProfileComplete(user);
         List<String> missingFields = new ArrayList<>();
         String insulinMessage = null;
 
-        if (totalCarbs > 0) {
-            String userEmail = userId != null ? userId.getEmail() : null;
-            apiLogger.insulinCalcStart(totalCarbs, userEmail);
-
-            // Build params from user profile - handles null checks
-            CalculationParams params = new CalculationParams.Builder()
-                    .fromUser(user)
-                    .withTotalCarbs(totalCarbs)
-                    .build();
-
-            // Log profile status
-            apiLogger.insulinCalcProfileStatus(params.isProfileComplete(), params.getMissingFields());
-
-            if (params.isProfileComplete()) {
-                // Profile complete - do full calculation
-                apiLogger.insulinCalcParams(
-                        params.getInsulinCarbRatio(),
-                        params.getCorrectionFactor(),
-                        params.getTargetGlucose(),
-                        true);
-
-                // Calculate using the new instance-based method
-                // Note: InsulinCalculator is effectively stateless, we can instantiate it here.
-                InsulinCalculator calculator = new InsulinCalculator();
-                CalculationResult result = calculator.calculate(params);
-
-                // Log breakdown
-                apiLogger.insulinCalcBreakdown(
-                        result.getCarbDose(),
-                        result.getCorrectionDose(),
-                        // Base dose is derived sum
-                        (result.getCarbDose() + result.getCorrectionDose()),
-                        result.getSickAdjustment(),
-                        result.getStressAdjustment(),
-                        result.getExerciseAdjustment(),
-                        result.getTotalDose());
-
-                // Log warning if any
-                if (result.getWarning() != null && !result.getWarning().isEmpty()) {
-                    apiLogger.insulinCalcWarning(result.getWarning());
-                }
-
-                recommendedDose = result.getRoundedDose();
-                profileComplete = true;
-
-                apiLogger.insulinCalcResult(recommendedDose, true, null);
-                log.info("Calculated recommended insulin dose: {} units", recommendedDose);
-
-            } else {
-                // Profile incomplete - skip calculation
-                missingFields = params.getMissingFields();
-                insulinMessage = "Complete your medical profile to get insulin recommendations";
-
-                apiLogger.insulinCalcSkipped(missingFields);
-                apiLogger.insulinCalcResult(null, false, insulinMessage);
-            }
+        if (!profileComplete) {
+            missingFields = getMissingProfileFields(user);
+            insulinMessage = "Complete your medical profile to get insulin recommendations";
         }
 
         // Step 5: Return result WITHOUT saving (Stateless Analysis)
@@ -483,6 +436,27 @@ public class ScanServiceImpl implements ScanService {
         }
         return total;
     }
+    
+ // just checks if the user has the minimum fields for insulin calc
+    private boolean isProfileComplete(UserEntity user) {
+        if (user == null) return false;
+        return user.getInsulinCarbRatio() != null
+                && user.getCorrectionFactor() != null
+                && user.getTargetGlucose() != null;
+    }
+
+    // returns which fields are still missing
+    private List<String> getMissingProfileFields(UserEntity user) {
+        List<String> missing = new ArrayList<>();
+        if (user == null) {
+            missing.add("Full profile");
+            return missing;
+        }
+        if (user.getInsulinCarbRatio() == null) missing.add("Insulin-to-Carb Ratio");
+        if (user.getCorrectionFactor() == null) missing.add("Correction Factor (ISF)");
+        if (user.getTargetGlucose() == null) missing.add("Target Glucose");
+        return missing;
+    }
 
     private void validateScanRequest(ScanRequestBoundary request) {
         if (request == null)
@@ -511,24 +485,24 @@ public class ScanServiceImpl implements ScanService {
      * Estimate what fraction of the container is filled with food.
      * Deep bowls are rarely filled to the top; flat plates have thin food layers.
      */
-    private float getContainerFillFactor(String containerType, float depthCm) {
-        if (containerType != null) {
-            switch (containerType.toUpperCase()) {
-                case "FLAT_PLATE":
-                    return 0.70f; // thin spread on plate
-                case "REGULAR_BOWL":
-                    return 0.55f; // typical bowl fill
-                case "DEEP_BOWL":
-                    return 0.50f; // deep bowls aren't filled to brim
-            }
-        }
-        // Infer from depth if no container type specified
-        if (depthCm <= 2.0f)
-            return 0.70f; // flat plate
-        if (depthCm <= 4.0f)
-            return 0.55f; // regular bowl
-        return 0.50f; // deep bowl
-    }
+//    private float getContainerFillFactor(String containerType, float depthCm) {
+//        if (containerType != null) {
+//            switch (containerType.toUpperCase()) {
+//                case "FLAT_PLATE":
+//                    return 0.70f; // thin spread on plate
+//                case "REGULAR_BOWL":
+//                    return 0.55f; // typical bowl fill
+//                case "DEEP_BOWL":
+//                    return 0.50f; // deep bowls aren't filled to brim
+//            }
+//        }
+//        // Infer from depth if no container type specified
+//        if (depthCm <= 2.0f)
+//            return 0.70f; // flat plate
+//        if (depthCm <= 4.0f)
+//            return 0.55f; // regular bowl
+//        return 0.50f; // deep bowl
+//    }
 
     /**
      * Parse the JSON-encoded food region measurements from the client.
@@ -562,6 +536,28 @@ public class ScanServiceImpl implements ScanService {
         if (heightCm <= 3.0f)
             return 0.65f; // medium pile (e.g., rice)
         return 0.55f; // high pile (e.g., salad, fries)
+    }
+    
+    
+    /**
+     * Geometric correction for bowl curvature.
+     * A bowl's curved floor means less volume than a cylinder of the same
+     * diameter and height. This factor accounts for that.
+     *
+     * A paraboloid bowl holds ~50% of the equivalent cylinder,
+     * a hemisphere ~67%. We use intermediate values.
+     *
+     * Only affects volume — NOT fill level (GPT handles that separately
+     * via coverage_percent and container_fill_percent).
+     */
+    private float getBowlGeometryFactor(String containerType) {
+        if (containerType == null) return 1.0f;
+        switch (containerType.toUpperCase()) {
+            case "FLAT_PLATE":   return 1.0f;  // flat surface, no correction
+            case "REGULAR_BOWL": return 0.65f;  // mid-depth curve
+            case "DEEP_BOWL":    return 0.55f;  // steep paraboloid
+            default:             return 1.0f;
+        }
     }
     
     /**

@@ -221,6 +221,12 @@ public class MealConverter {
         boundary.setConfidence(item.getConfidence());
         boundary.setUsdaFdcId(item.getUsdaFdcId());
 
+        // pass bbox to client
+        boundary.setBboxXPct(item.getBboxXPct());
+        boundary.setBboxYPct(item.getBboxYPct());
+        boundary.setBboxWPct(item.getBboxWPct());
+        boundary.setBboxHPct(item.getBboxHPct());
+        
         return boundary;
     }
 
@@ -238,6 +244,12 @@ public class MealConverter {
         item.setConfidence(boundary.getConfidence());
         item.setUsdaFdcId(boundary.getUsdaFdcId());
         item.setNote(boundary.getNote());
+        
+        item.setBboxXPct(boundary.getBboxXPct());
+        item.setBboxYPct(boundary.getBboxYPct());
+        item.setBboxWPct(boundary.getBboxWPct());
+        item.setBboxHPct(boundary.getBboxHPct());
+        
         return item;
     }
 

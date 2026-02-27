@@ -42,7 +42,13 @@ public class FoodRecognitionResult {
      // 2-3 USDA-friendly search terms from GPT (replaces FoodNameNormalizer)
      // Ordered from most specific to most general
      private List<String> usdaSearchTerms;
-        
+      
+     // bounding box (% of full image) for client-side GrabCut
+     private Float bboxXPct;
+     private Float bboxYPct;
+     private Float bboxWPct;
+     private Float bboxHPct;
+     
         public RecognizedFoodItem() {
             this.riskFlags = new ArrayList<>();
             this.usdaSearchTerms = new ArrayList<>();
@@ -61,6 +67,19 @@ public class FoodRecognitionResult {
 
         // --- Getters & Setters ---
 
+     // bbox for client-side GrabCut
+        public void setBoundingBox(Float xPct, Float yPct, Float wPct, Float hPct) {
+            this.bboxXPct = xPct;
+            this.bboxYPct = yPct;
+            this.bboxWPct = wPct;
+            this.bboxHPct = hPct;
+        }
+
+        public Float getBboxXPct() { return bboxXPct; }
+        public Float getBboxYPct() { return bboxYPct; }
+        public Float getBboxWPct() { return bboxWPct; }
+        public Float getBboxHPct() { return bboxHPct; }
+        
         public String getName() {
             return name;
         }
