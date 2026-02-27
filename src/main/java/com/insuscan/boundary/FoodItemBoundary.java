@@ -10,7 +10,22 @@ public class FoodItemBoundary {
     private String usdaFdcId;       // USDA FoodData Central ID
     private String note;
     
+    // bbox from GPT vision (% of image) — client uses for GrabCut
+    private Float bboxXPct;
+    private Float bboxYPct;
+    private Float bboxWPct;
+    private Float bboxHPct;
+    
     public FoodItemBoundary() {}
+    
+    public Float getBboxXPct() { return bboxXPct; }
+    public void setBboxXPct(Float bboxXPct) { this.bboxXPct = bboxXPct; }
+    public Float getBboxYPct() { return bboxYPct; }
+    public void setBboxYPct(Float bboxYPct) { this.bboxYPct = bboxYPct; }
+    public Float getBboxWPct() { return bboxWPct; }
+    public void setBboxWPct(Float bboxWPct) { this.bboxWPct = bboxWPct; }
+    public Float getBboxHPct() { return bboxHPct; }
+    public void setBboxHPct(Float bboxHPct) { this.bboxHPct = bboxHPct; }
 
     // Getters and Setters
     public String getName() {
