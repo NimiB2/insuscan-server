@@ -1,13 +1,16 @@
 package com.insuscan.calculation;
 
 import java.util.List;
-
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 /**
  * Input parameters for insulin dose calculation.
  * Uses Builder pattern for clean construction.
  */
 public class CalculationParams {
-    
+    private static final Logger log = LoggerFactory.getLogger(CalculationParams.class);
+
+	
     // User profile settings
     /**
      * Insulin-to-Carb Ratio in Grams per Unit (e.g. 10 means 1 unit covers 10g carbs).
@@ -53,12 +56,9 @@ public class CalculationParams {
                 val = Float.parseFloat(ratioStr);
             }
             
-            // Safety Heuristic: Normalizing Legacy Data
-            // If value is < 1.0 (e.g. 0.1), it likely represents "Units per Gram".
-            // We want "Grams per Unit" (e.g. 10).
-            // Example: 0.1 => 1/0.1 = 10.
             if (val > 0 && val < 1.0f) {
-                return 1.0f / val;
+                log.warn("[ICR] Received ICR value {} which is < 1.0. Using as-is (grams per unit). "
+                       + "If this was meant as units-per-gram, caller should convert before passing.", val);
             }
             return val;
         } catch (Exception e) {
