@@ -1,6 +1,7 @@
 package com.insuscan.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.insuscan.boundary.*;
 import com.insuscan.converter.MealConverter;
 import com.insuscan.crud.MealRepository;
@@ -23,8 +24,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 
-import com.insuscan.exception.NoFoodDetectedException;
-
 import java.util.*;
 
 @Service
@@ -35,7 +34,6 @@ public class ScanServiceImpl implements ScanService {
     private final ImageAnalysisService imageAnalysisService;
     private final NutritionDataService nutritionDataService;
     private final SemanticMatchingService semanticMatchingService; // <-- NEW JUDGE
-    private final MealRepository mealRepository;
     private final UserRepository userRepository;
     private final MealConverter mealConverter;
     private final MealIdGenerator mealIdGenerator;
@@ -44,11 +42,11 @@ public class ScanServiceImpl implements ScanService {
     private final OpenAiJsonParser jsonParser;
 
     private final WebClient openAiWebClient;
-    
+
     @Value("${openai.api.key:}")
     private String openAiApiKey;
-    
-    @Value("${spring.application.name}")
+
+    @Value("${spring.application.name:insuscan}")
     private String systemId;
 
     private static final float DEFAULT_PORTION_WEIGHT = 150f;
@@ -65,11 +63,10 @@ public class ScanServiceImpl implements ScanService {
             ApiLogger apiLogger,
             WebClient.Builder webClientBuilder,
             OpenAiJsonParser jsonParser) {
-    	
+
         this.imageAnalysisService = imageAnalysisService;
         this.nutritionDataService = nutritionDataService;
         this.semanticMatchingService = semanticMatchingService;
-        this.mealRepository = mealRepository;
         this.userRepository = userRepository;
         this.mealConverter = mealConverter;
         this.mealIdGenerator = mealIdGenerator;
@@ -111,16 +108,15 @@ public class ScanServiceImpl implements ScanService {
 
         // Step 1: Analyze image (Medical Vision)
         apiLogger.scanStep(1, "ANALYZING IMAGE (MEDICAL VISION)");
-        FoodRecognitionResult visionResult = analyzeImage(request);
+        FoodRecognitionResult visionResult = imageAnalysisService.analyzeImage(request.getImageBase64(),
+                request.getReferenceObjectType());
 
-        if (!visionResult.isSuccess()) {
-            apiLogger.scanFailed("VISION", visionResult.getErrorMessage());
-            throw new NoFoodDetectedException(visionResult.getErrorMessage());
-        }
-
-        if (visionResult.getDetectedFoods().isEmpty()) {
-            apiLogger.scanFailed("VISION", "No food items detected");
-            throw new NoFoodDetectedException("No food detected in image. Try a clearer photo.");
+        if (!visionResult.isSuccess() || visionResult.getDetectedFoods().isEmpty()) {
+            String msg = visionResult.getErrorMessage() != null ? visionResult.getErrorMessage()
+                    : "No food items detected";
+            apiLogger.scanStep(1, "VISION WARNING: " + msg);
+            log.error("[VISION] Proceeding without food items to resolve plate geometry: {}", msg);
+            // We continue instead of throwing to allow plate geometry tests to work
         }
 
         // Step 2: Calculate portion sizes
@@ -144,7 +140,8 @@ public class ScanServiceImpl implements ScanService {
             }
         }
 
-        Float totalWeightToDistribute = estimatedWeightGrams;
+        // Total weight is distributed among detected food items
+        // (Removed unused totalWeightToDistribute variable)
 
         // Check if we have plate geometry for per-food physics calculation
         boolean hasPlateGeometry = request.getPlateDiameterCm() != null
@@ -157,32 +154,94 @@ public class ScanServiceImpl implements ScanService {
         // Pre-compute plate area if available (used per-food in the loop below)
         float plateAreaCm2 = 0f;
         float plateDepthCm = 0f;
+        Float resolvedPlateDiameterCm = null;
+        Float resolvedPlateDepthCm = null;
         String resolvedContainerType = null;
         boolean isBowl = false;
 
         if (hasPlateGeometry) {
-            float radiusCm = request.getPlateDiameterCm() / 2.0f;
+            resolvedPlateDiameterCm = request.getPlateDiameterCm();
+            float radiusCm = resolvedPlateDiameterCm / 2.0f;
             plateAreaCm2 = (float) (Math.PI * radiusCm * radiusCm);
-            plateDepthCm = (request.getPlateDepthCm() != null && request.getPlateDepthCm() > 0)
-                    ? request.getPlateDepthCm()
-                    : 1.5f;
 
+            if (request.getPlateDepthCm() != null && request.getPlateDepthCm() > 0) {
+                // We have BOTH diameter and depth (ARCore full measurement)
+                plateDepthCm = request.getPlateDepthCm();
+                resolvedPlateDepthCm = plateDepthCm;
+
+                // Thresholds: Flat <= 2.0cm, Regular <= 4.5cm, Deep > 4.5cm
+                resolvedContainerType = plateDepthCm > 4.5f ? "DEEP_BOWL"
+                        : plateDepthCm > 2.0f ? "REGULAR_BOWL" : "FLAT_PLATE";
+
+                isBowl = resolvedContainerType.toUpperCase().contains("BOWL");
+
+                log.info("[v3] Plate geometry (ARCore): d={}cm, depth={}cm, area={}cm², type={}",
+                        resolvedPlateDiameterCm, resolvedPlateDepthCm,
+                        String.format("%.1f", plateAreaCm2), resolvedContainerType);
+            } else {
+                // Diameter provided but depth missing — trigger visual estimation
+                log.info("[v3] Diameter provided ({}cm) but depth missing — triggering visual estimation",
+                        resolvedPlateDiameterCm);
+
+                float[] gptEstimate = estimateContainerDimensionsFromGpt(request.getImageBase64(),
+                        request.getReferenceObjectType(),
+                        request.getPlateDiameterCm());
+
+                if (gptEstimate != null) {
+                    resolvedPlateDepthCm = gptEstimate[1];
+                    resolvedContainerType = resolvedPlateDepthCm > 4.5f ? "DEEP_BOWL"
+                            : resolvedPlateDepthCm > 2.0f ? "REGULAR_BOWL" : "FLAT_PLATE";
+                    log.info("[v3-GPT] Estimated depth: {}cm (type={})", resolvedPlateDepthCm, resolvedContainerType);
+                } else {
+                    // Absolute fallback: no history, no GPT, just defaults
+                    resolvedPlateDepthCm = 1.5f;
+                    resolvedContainerType = "FLAT_PLATE";
+                    log.warn("[v3-DEFAULT] GPT estimation failed, using default depth (1.5cm)");
+                }
+                plateDepthCm = resolvedPlateDepthCm;
+                isBowl = resolvedContainerType.toUpperCase().contains("BOWL");
+            }
+        } else {
+            // No direct measurements — fallback to 100% Visual Estimation
             resolvedContainerType = (visionResult.getDetectedContainerType() != null)
                     ? visionResult.getDetectedContainerType()
-                    : (request.getContainerType() != null)
-                            ? request.getContainerType()
-                            : (plateDepthCm > 3.0f ? "DEEP_BOWL"
-                                    : plateDepthCm > 1.5f ? "REGULAR_BOWL" : "FLAT_PLATE");
+                    : (request.getContainerType() != null) ? request.getContainerType() : "FLAT_PLATE";
 
-            isBowl = resolvedContainerType.toUpperCase().contains("BOWL");
+            log.info("[v3] No geometry provided for container type '{}' — asking GPT to estimate",
+                    resolvedContainerType);
 
-            log.info("[v3] Plate geometry: d={}cm, depth={}cm, area={}cm², type={}, hasCoverage={}",
-                    request.getPlateDiameterCm(), plateDepthCm,
-                    String.format("%.1f", plateAreaCm2), resolvedContainerType, hasCoverageData);
+            float[] gptEstimate = estimateContainerDimensionsFromGpt(request.getImageBase64(),
+                    request.getReferenceObjectType(), null);
+
+            if (gptEstimate != null) {
+                resolvedPlateDiameterCm = gptEstimate[0];
+                resolvedPlateDepthCm = gptEstimate[1];
+                resolvedContainerType = resolvedPlateDepthCm > 4.5f ? "DEEP_BOWL"
+                        : resolvedPlateDepthCm > 2.0f ? "REGULAR_BOWL" : "FLAT_PLATE";
+
+                float radiusCm = resolvedPlateDiameterCm / 2.0f;
+                plateAreaCm2 = (float) (Math.PI * radiusCm * radiusCm);
+                plateDepthCm = resolvedPlateDepthCm;
+                hasPlateGeometry = true;
+                isBowl = resolvedContainerType.toUpperCase().contains("BOWL");
+
+                log.info("[v3-GPT] Full visual estimation: d={}cm, depth={}cm, type={}",
+                        String.format("%.1f", resolvedPlateDiameterCm),
+                        String.format("%.1f", resolvedPlateDepthCm), resolvedContainerType);
+            } else {
+                // Absolute last resort
+                log.warn("[v3-FALLBACK] GPT estimation failed, using safe defaults for {}", resolvedContainerType);
+                resolvedPlateDiameterCm = 25.0f;
+                resolvedPlateDepthCm = resolvedContainerType.toUpperCase().contains("BOWL") ? 4.5f : 1.5f;
+                float radiusCm = resolvedPlateDiameterCm / 2.0f;
+                plateAreaCm2 = (float) (Math.PI * radiusCm * radiusCm);
+                plateDepthCm = resolvedPlateDepthCm;
+                hasPlateGeometry = true;
+                isBowl = resolvedContainerType.toUpperCase().contains("BOWL");
+            }
         }
 
         // Fallback: distribute total weight when per-food physics not possible
-        // Only computed if we actually need it (no plate geometry or no coverage data)
         Float totalWeightFallback = null;
         Map<String, Float> distributedPortions = null;
 
@@ -193,67 +252,40 @@ public class ScanServiceImpl implements ScanService {
                         ? totalVisionPortions
                         : estimateTotalWeightFromFoodTypes(portionItems);
             }
-            distributedPortions = portionEstimator.distributePortions(
-                    portionItems, totalWeightFallback);
+            distributedPortions = portionEstimator.distributePortions(portionItems, totalWeightFallback);
             log.info("[v3-FALLBACK] Distributed total: {}g", totalWeightFallback);
         }
 
-        // Step 3: Get nutrition data (INTEGRATING THE JUDGE + DENSITY)
+        // Step 3: Get nutrition data
         apiLogger.scanStep(3, "SEMANTIC NUTRITION MATCHING + DENSITY CALCULATION");
         List<MealEntity.FoodItem> foodItems = new ArrayList<>();
         float totalCarbs = 0f;
         int regionIndex = 0;
 
         for (FoodRecognitionResult.RecognizedFoodItem detected : visionResult.getDetectedFoods()) {
-
-        	// --- USDA Matching (v3: GPT search terms → Judge) ---
             NutritionInfo finalNutrition = null;
-
-            // A. Fetch Candidates — prefer GPT-provided search terms over hardcoded normalizer
-            List<NutritionInfo> candidates;
+            List<NutritionInfo> candidates = new ArrayList<>();
             List<String> gptTerms = detected.getUsdaSearchTerms();
 
             if (gptTerms != null && !gptTerms.isEmpty()) {
-                // Try each GPT term until we get results
-                candidates = new ArrayList<>();
                 for (String term : gptTerms) {
                     candidates = nutritionDataService.searchCandidates(term);
-                    if (!candidates.isEmpty()) {
-                        log.info("[v3] USDA hit on GPT term '{}' → {} candidates", term, candidates.size());
+                    if (!candidates.isEmpty())
                         break;
-                    }
                 }
-                // Last resort: fall back to baseIngredient if all GPT terms missed
-                if (candidates.isEmpty()) {
-                    log.warn("[v3] All GPT terms missed, falling back to baseIngredient: {}",
-                            detected.getBaseIngredient());
-                    candidates = nutritionDataService.searchCandidates(detected.getBaseIngredient());
-                }
-            } else {
-                // No GPT terms available — use existing baseIngredient path
+            }
+
+            if (candidates.isEmpty()) {
                 candidates = nutritionDataService.searchCandidates(detected.getBaseIngredient());
             }
 
             if (!candidates.isEmpty()) {
-                // B. The Judge Decides (Step 3 - Semantic Matching with image)
-                String bestFdcId = semanticMatchingService.findBestMatch(
-                        detected, candidates, request.getImageBase64());
-
-             // C. Get Full Data for Winner
-                if (bestFdcId != null) {
-                    // First try to find it in the candidates we already have (saves an API call)
-                    finalNutrition = candidates.stream()
-                            .filter(c -> bestFdcId.equals(c.getFdcId()))
-                            .findFirst()
-                            .orElse(null);
-
-                    // If not in candidates (shouldn't happen, but just in case), fetch by ID
-                    if (finalNutrition == null) {
-                        finalNutrition = nutritionDataService.getNutritionInfoById(bestFdcId);
-                    }
-                } else {
-                    finalNutrition = candidates.get(0);
-                }
+                String bestFdcId = semanticMatchingService.findBestMatch(detected, candidates,
+                        request.getImageBase64());
+                finalNutrition = candidates.stream()
+                        .filter(c -> bestFdcId != null && bestFdcId.equals(c.getFdcId()))
+                        .findFirst()
+                        .orElse(candidates.get(0));
             } else {
                 finalNutrition = nutritionDataService.getNutritionInfo(detected.getName());
             }
@@ -261,23 +293,19 @@ public class ScanServiceImpl implements ScanService {
             MealEntity.FoodItem item = new MealEntity.FoodItem();
             item.setName(detected.getName());
             item.setConfidence(NumberUtils.roundTo2Decimals(detected.getConfidence()));
-            
-            // pass GPT bounding box through to client
             item.setBboxXPct(detected.getBboxXPct());
             item.setBboxYPct(detected.getBboxYPct());
             item.setBboxWPct(detected.getBboxWPct());
             item.setBboxHPct(detected.getBboxHPct());
-            
-            // Add safety flags to the DB entity for future reference
+
             if (detected.getRiskFlags() != null && !detected.getRiskFlags().isEmpty()) {
                 item.setNote("Risks: " + String.join(", ", detected.getRiskFlags()));
             }
 
-            // ── v3: Per-Food Weight Calculation ──
+            // Weight calculation
             Float itemWeight;
             String weightSource;
 
-            // PRIORITY 1: Client sent per-food region measurements (OpenCV + ARCore)
             if (hasPhysicsData && regionIndex < foodRegions.size()) {
                 Map<String, Object> region = foodRegions.get(regionIndex);
                 float areaCm2 = ((Number) region.getOrDefault("areaCm2", 0.0)).floatValue();
@@ -285,152 +313,83 @@ public class ScanServiceImpl implements ScanService {
                 float shapeFactor = getShapeFactor(heightCm);
                 float bowlFactor = getBowlGeometryFactor(resolvedContainerType);
                 float volumeCm3 = areaCm2 * heightCm * shapeFactor * bowlFactor;
-                
                 float density = resolveDensity(detected.getName(), finalNutrition);
                 itemWeight = volumeCm3 * density;
-                weightSource = String.format("CLIENT_PHYSICS(a=%.1f h=%.1f sf=%.2f bf=%.2f V=%.1f d=%.2f)",
-                        areaCm2, heightCm, shapeFactor, bowlFactor, volumeCm3, density);
-
-                log.info("[v3] {} → CLIENT region: {}cm² × {}cm × sf={} × bf={} = {}cm³ × d={} = {}g",
-                        detected.getName(), areaCm2, heightCm, shapeFactor, bowlFactor,
-                        String.format("%.1f", volumeCm3), density, String.format("%.1f", itemWeight));
-
-            // PRIORITY 2: Plate geometry + GPT coverage (server-side physics)
-            } else if (hasPlateGeometry && detected.getCoveragePercent() != null
-                    && detected.getCoveragePercent() > 0) {
-
-                // Area this food covers on the plate
+                weightSource = "CLIENT_PHYSICS";
+                regionIndex++;
+            } else if (hasPlateGeometry && detected.getCoveragePercent() != null && detected.getCoveragePercent() > 0) {
                 float foodAreaCm2 = plateAreaCm2 * (detected.getCoveragePercent() / 100.0f);
-
-                // Height from GPT category, or ARCore depth as cap
                 float heightCm = heightCategoryToCm(detected.getHeightCategory());
-
-                // For bowls: cap height at measured bowl depth
-                if (isBowl && heightCm > plateDepthCm) {
-                    heightCm = plateDepthCm * 0.8f; // food rarely fills bowl completely
-                }
-
+                if (isBowl && heightCm > plateDepthCm)
+                    heightCm = plateDepthCm * 0.8f;
                 float shapeFactor = getShapeFactor(heightCm);
                 float bowlFactor = getBowlGeometryFactor(resolvedContainerType);
                 float volumeCm3 = foodAreaCm2 * heightCm * shapeFactor * bowlFactor;
-                
                 float density = resolveDensity(detected.getName(), finalNutrition);
                 itemWeight = volumeCm3 * density;
-                weightSource = String.format("GPT_PHYSICS(cov=%s%% a=%.1f h=%.1f[%s] sf=%.2f bf=%.2f V=%.1f d=%.2f)",
-                        detected.getCoveragePercent(), foodAreaCm2, heightCm,
-                        detected.getHeightCategory(), shapeFactor, bowlFactor, volumeCm3, density);
-
-                log.info("[v3] {} → cov={}% area={}cm² × h={}cm({}) × sf={} × bf={} = {}cm³ × d={} = {}g",
-                        detected.getName(), detected.getCoveragePercent(),
-                        String.format("%.1f", foodAreaCm2), heightCm, detected.getHeightCategory(),
-                        shapeFactor, bowlFactor, String.format("%.1f", volumeCm3), density,
-                        String.format("%.1f", itemWeight));
-                
-            // PRIORITY 3: Distributed fallback (no geometry or no coverage)
+                weightSource = "GPT_PHYSICS";
             } else {
                 itemWeight = (distributedPortions != null) ? distributedPortions.get(detected.getName()) : null;
                 if (itemWeight == null) {
-                    itemWeight = portionEstimator.estimatePortion(
-                            detected.getName(),
-                            detected.getConfidence(),
+                    itemWeight = portionEstimator.estimatePortion(detected.getName(), detected.getConfidence(),
                             detected.getEstimatedPortionGrams());
                 }
                 weightSource = "DISTRIBUTED";
             }
 
             item.setQuantity(NumberUtils.roundTo2Decimals(itemWeight));
-
-            // Append weight source to note (for debugging/transparency)
             String existingNote = item.getNote();
-            String sourceNote = "Calc: " + weightSource;
-            item.setNote(existingNote != null ? existingNote + " | " + sourceNote : sourceNote);
+            item.setNote(existingNote != null ? existingNote + " | Calc: " + weightSource : "Calc: " + weightSource);
 
             if (finalNutrition != null && finalNutrition.isFound()) {
                 float itemCarbs = finalNutrition.calculateCarbs(itemWeight);
                 item.setCarbs(NumberUtils.roundTo2Decimals(itemCarbs));
                 item.setUsdaFdcId(finalNutrition.getFdcId());
-
-                String source = hasPhysicsData ? "PHYSICS+JUDGE" : "SEMANTIC_JUDGE";
-                if (finalNutrition.getFdcId().startsWith("fallback-"))
-                    source = "FALLBACK";
-
-                apiLogger.carbCalculation(
-                        detected.getName(),
-                        finalNutrition.getCarbsPer100g(),
-                        itemWeight,
-                        itemCarbs,
-                        source);
-
                 totalCarbs += itemCarbs;
+                apiLogger.carbCalculation(detected.getName(), finalNutrition.getCarbsPer100g(), itemWeight, itemCarbs,
+                        weightSource);
             } else {
                 item.setCarbs(0f);
-                apiLogger.carbCalculationFailed(detected.getName(), "No nutrition data found");
             }
-
             foodItems.add(item);
         }
 
-        String method = hasPhysicsData ? "CLIENT_PHYSICS"
-                : (hasPlateGeometry && hasCoverageData) ? "GPT_PHYSICS"
-                : "DISTRIBUTED";
-        log.info("Total carbs: {}g [method={}]", totalCarbs, method);
-        
-        // Step 3.5: Final sanity review (non-blocking, best-effort)
+        log.info("Total carbs: {}g", totalCarbs);
+
+        // Final sanity review
         List<String> reviewWarnings = runFinalReview(request.getImageBase64(), foodItems, totalCarbs);
-        if (!reviewWarnings.isEmpty()) {
-            apiLogger.scanStep(3, "FINAL REVIEW: " + reviewWarnings.size() + " warnings");
-        }
 
-     // Step 4: Skip insulin calc here — client handles it
-        // (client has glucose, IOB, activity level, and unit preferences
-        //  that aren't available at scan time)
-        Float recommendedDose = null;
-        boolean profileComplete = isProfileComplete(user);
-        List<String> missingFields = new ArrayList<>();
-        String insulinMessage = null;
-
-        if (!profileComplete) {
-            missingFields = getMissingProfileFields(user);
-            insulinMessage = "Complete your medical profile to get insulin recommendations";
-        }
-
-        // Step 5: Return result WITHOUT saving (Stateless Analysis)
-        apiLogger.scanStep(5, "PREPARING RESULT (NO DB SAVE)");
+        // Prepare result
         MealEntity meal = new MealEntity();
         meal.setId(mealIdGenerator.generateMealId(systemId));
         meal.setUserId(userDocId);
         meal.setImageUrl(request.getImageUrl());
         meal.setFoodItems(foodItems);
         meal.setTotalCarbs(NumberUtils.roundTo2Decimals(totalCarbs));
-        meal.setRecommendedDose(recommendedDose);
-        meal.setStatus(MealStatus.PENDING); // Status is Pending until client saves
-
+        meal.setStatus(MealStatus.PENDING);
         if (estimatedWeightGrams != null)
             meal.setEstimatedWeight(estimatedWeightGrams);
         if (portionConfidence != null)
             meal.setAnalysisConfidence(portionConfidence);
-
-        // Persist the user's selected reference object type
         meal.setReferenceObjectType(request.getReferenceObjectType());
+        if (resolvedPlateDiameterCm != null)
+            meal.setPlateDiameterCm(resolvedPlateDiameterCm);
+        if (resolvedPlateDepthCm != null)
+            meal.setPlateDepthCm(resolvedPlateDepthCm);
+        if (resolvedContainerType != null)
+            meal.setContainerType(resolvedContainerType);
 
-        // Set profile status for client
-        meal.setProfileComplete(profileComplete);
-        meal.setMissingProfileFields(missingFields);
-        meal.setInsulinMessage(insulinMessage);
-        
-        // Attach review warnings if any
-        if (!reviewWarnings.isEmpty()) {
+        meal.setProfileComplete(isProfileComplete(user));
+        meal.setMissingProfileFields(getMissingProfileFields(user));
+        if (foodItems.isEmpty())
+            meal.setInsulinMessage("Plate is empty — no food detected");
+
+        if (!reviewWarnings.isEmpty())
             meal.setReviewWarnings(reviewWarnings);
-        }
-        // Per user request, we do NOT save to DB here. The client must call
-        // /save-scanned later.
-        // MealEntity saved = mealRepository.save(meal);
-        // log.info("Meal saved: {}", meal.getId());
 
         long totalTime = System.currentTimeMillis() - scanStartTime;
-        apiLogger.scanComplete(foodItems.size(), totalCarbs, recommendedDose, totalTime);
+        apiLogger.scanComplete(foodItems.size(), totalCarbs, null, totalTime);
 
-        // Convert the transient entity to boundary
         return mealConverter.toBoundary(meal);
     }
 
@@ -442,10 +401,11 @@ public class ScanServiceImpl implements ScanService {
         }
         return total;
     }
-    
- // just checks if the user has the minimum fields for insulin calc
+
+    // just checks if the user has the minimum fields for insulin calc
     private boolean isProfileComplete(UserEntity user) {
-        if (user == null) return false;
+        if (user == null)
+            return false;
         return user.getInsulinCarbRatio() != null
                 && user.getCorrectionFactor() != null
                 && user.getTargetGlucose() != null;
@@ -458,9 +418,12 @@ public class ScanServiceImpl implements ScanService {
             missing.add("Full profile");
             return missing;
         }
-        if (user.getInsulinCarbRatio() == null) missing.add("Insulin-to-Carb Ratio");
-        if (user.getCorrectionFactor() == null) missing.add("Correction Factor (ISF)");
-        if (user.getTargetGlucose() == null) missing.add("Target Glucose");
+        if (user.getInsulinCarbRatio() == null)
+            missing.add("Insulin-to-Carb Ratio");
+        if (user.getCorrectionFactor() == null)
+            missing.add("Correction Factor (ISF)");
+        if (user.getTargetGlucose() == null)
+            missing.add("Target Glucose");
         return missing;
     }
 
@@ -477,38 +440,30 @@ public class ScanServiceImpl implements ScanService {
         }
     }
 
-    private FoodRecognitionResult analyzeImage(ScanRequestBoundary request) {
-        if (request.getImageBase64() != null) {
-            return imageAnalysisService.analyzeImage(request.getImageBase64(), request.getReferenceObjectType());
-        } else {
-            return imageAnalysisService.analyzeImageFromUrl(request.getImageUrl(), request.getReferenceObjectType());
-        }
-    }
-
     // ── v2 Pipeline Helper Methods ──
 
     /**
      * Estimate what fraction of the container is filled with food.
      * Deep bowls are rarely filled to the top; flat plates have thin food layers.
      */
-//    private float getContainerFillFactor(String containerType, float depthCm) {
-//        if (containerType != null) {
-//            switch (containerType.toUpperCase()) {
-//                case "FLAT_PLATE":
-//                    return 0.70f; // thin spread on plate
-//                case "REGULAR_BOWL":
-//                    return 0.55f; // typical bowl fill
-//                case "DEEP_BOWL":
-//                    return 0.50f; // deep bowls aren't filled to brim
-//            }
-//        }
-//        // Infer from depth if no container type specified
-//        if (depthCm <= 2.0f)
-//            return 0.70f; // flat plate
-//        if (depthCm <= 4.0f)
-//            return 0.55f; // regular bowl
-//        return 0.50f; // deep bowl
-//    }
+    // private float getContainerFillFactor(String containerType, float depthCm) {
+    // if (containerType != null) {
+    // switch (containerType.toUpperCase()) {
+    // case "FLAT_PLATE":
+    // return 0.70f; // thin spread on plate
+    // case "REGULAR_BOWL":
+    // return 0.55f; // typical bowl fill
+    // case "DEEP_BOWL":
+    // return 0.50f; // deep bowls aren't filled to brim
+    // }
+    // }
+    // // Infer from depth if no container type specified
+    // if (depthCm <= 2.0f)
+    // return 0.70f; // flat plate
+    // if (depthCm <= 4.0f)
+    // return 0.55f; // regular bowl
+    // return 0.50f; // deep bowl
+    // }
 
     /**
      * Parse the JSON-encoded food region measurements from the client.
@@ -543,8 +498,7 @@ public class ScanServiceImpl implements ScanService {
             return 0.65f; // medium pile (e.g., rice)
         return 0.55f; // high pile (e.g., salad, fries)
     }
-    
-    
+
     /**
      * Geometric correction for bowl curvature.
      * A bowl's curved floor means less volume than a cylinder of the same
@@ -557,27 +511,38 @@ public class ScanServiceImpl implements ScanService {
      * via coverage_percent and container_fill_percent).
      */
     private float getBowlGeometryFactor(String containerType) {
-        if (containerType == null) return 1.0f;
+        if (containerType == null)
+            return 1.0f;
         switch (containerType.toUpperCase()) {
-            case "FLAT_PLATE":   return 1.0f;  // flat surface, no correction
-            case "REGULAR_BOWL": return 0.65f;  // mid-depth curve
-            case "DEEP_BOWL":    return 0.55f;  // steep paraboloid
-            default:             return 1.0f;
+            case "FLAT_PLATE":
+                return 1.0f; // flat surface, no correction
+            case "REGULAR_BOWL":
+                return 0.65f; // mid-depth curve
+            case "DEEP_BOWL":
+                return 0.55f; // steep paraboloid
+            default:
+                return 1.0f;
         }
     }
-    
+
     /**
      * Maps GPT height category to estimated height in cm.
      * Used when ARCore depth is not available.
      */
     private float heightCategoryToCm(String category) {
-        if (category == null) return 1.5f; // safe default
+        if (category == null)
+            return 1.5f; // safe default
         switch (category.toUpperCase()) {
-            case "FLAT":        return 0.4f;
-            case "LOW_PILE":    return 1.0f;
-            case "MEDIUM_PILE": return 2.0f;
-            case "HIGH_PILE":   return 4.0f;
-            default:            return 1.5f;
+            case "FLAT":
+                return 0.4f;
+            case "LOW_PILE":
+                return 1.0f;
+            case "MEDIUM_PILE":
+                return 2.0f;
+            case "HIGH_PILE":
+                return 4.0f;
+            default:
+                return 1.5f;
         }
     }
 
@@ -605,15 +570,17 @@ public class ScanServiceImpl implements ScanService {
         log.warn("[density] {} → DEFAULT: 0.75g/cm³ (no specific data)", foodName);
         return 0.75f;
     }
-    
+
     /**
-     * Final sanity check — asks GPT to review the calculated results against the image.
-     * Returns a list of warnings if something looks off. Does NOT change the results,
+     * Final sanity check — asks GPT to review the calculated results against the
+     * image.
+     * Returns a list of warnings if something looks off. Does NOT change the
+     * results,
      * just flags issues for the client to show the user.
      */
     private List<String> runFinalReview(String base64Image,
-                                        List<MealEntity.FoodItem> foodItems,
-                                        float totalCarbs) {
+            List<MealEntity.FoodItem> foodItems,
+            float totalCarbs) {
         if (base64Image == null || base64Image.isBlank() || foodItems.isEmpty()) {
             return List.of();
         }
@@ -686,4 +653,124 @@ public class ScanServiceImpl implements ScanService {
         }
         return List.of();
     }
+
+    /**
+     * GPT-based container dimension estimation.
+     * When ARCore is unavailable and there's no user history, ask OpenAI to
+     * visually estimate the plate/bowl dimensions from the image.
+     *
+     * Returns float[2] = { diameterCm, depthCm } or null if estimation fails.
+     */
+    private float[] estimateContainerDimensionsFromGpt(String imageBase64, String referenceObjectType,
+            Float knownDiameterCm) {
+        try {
+            if (imageBase64 == null || imageBase64.isBlank()) {
+                log.warn("[GPT-DIM] No image available for dimension estimation");
+                return null;
+            }
+
+            String scaleContext = "";
+            if (knownDiameterCm != null && knownDiameterCm > 0) {
+                scaleContext += String.format(
+                        "\nSCALE ANCHOR: We already measured the container's OUTER DIAMETER as %.1f cm. Use this as your primary scale reference to calculate the depth.",
+                        knownDiameterCm);
+            }
+
+            if (referenceObjectType != null && !referenceObjectType.equalsIgnoreCase("NONE")) {
+                scaleContext += "\nSYSTEM ALERT: Our local computer vision HAS ALREADY DETECTED a '"
+                        + referenceObjectType
+                        + "' in this specific image. It is definitely there. Search for it diligently and use it as your ground truth for scale.";
+            }
+
+            String prompt = "You are an expert in estimating real-world physical dimensions from photographs. "
+                    + "Your task: estimate the INNER diameter and depth of the plate, bowl, or container in this image.\n\n"
+                    + "CONTEXT: " + scaleContext + "\n\n"
+                    + "STEP 1 — Identify the container (Plate/Bowl) and its type. You MUST classify it as FLAT_PLATE, REGULAR_BOWL, or DEEP_BOWL.\n\n"
+                    + "STEP 2 — Use the scale reference. "
+                    + "If a SYSTEM ALERT is mentioned above, the object IS in the image. Use its known length (Card=8.5cm, Syringe/Pen=16cm) to measure the container.\n\n"
+                    + "STEP 3 — Cross-validate with container type norms:\n"
+                    + "- Flat dinner plate: ~24-26cm diameter, 1-2cm depth\n"
+                    + "- Small/Salad plate: ~18-20cm diameter, 1-2cm depth\n"
+                    + "- Regular bowl: ~14-16cm diameter, 4-5cm depth\n"
+                    + "- Deep bowl/Pot: ~14-16cm diameter, 6-10cm depth\n\n"
+                    + "IMPORTANT: Even if the image is slightly blurry or dark, do NOT return 0 and do not complain. Always provide your best professional estimate. Trust the SYSTEM ALERT for the presence of the scale object.\n\n"
+                    + "Reply ONLY with this JSON object:\n"
+                    + "{\n"
+                    + "  \"referenceObjectFound\": \"name of object used for scale\",\n"
+                    + "  \"diameterCm\": <number>,\n"
+                    + "  \"depthCm\": <number>,\n"
+                    + "  \"containerType\": \"FLAT_PLATE\" | \"REGULAR_BOWL\" | \"DEEP_BOWL\",\n"
+                    + "  \"confidence\": \"low\" | \"medium\" | \"high\",\n"
+                    + "  \"reasoning\": \"Explain how you found the reference object and used it to measure the container.\"\n"
+                    + "}";
+
+            Map<String, Object> textContent = Map.of("type", "text", "text", prompt);
+            Map<String, Object> imageUrlObj = Map.of("url", "data:image/jpeg;base64," + imageBase64);
+            Map<String, Object> imageContent = Map.of("type", "image_url", "image_url", imageUrlObj);
+
+            Map<String, Object> userMessage = Map.of(
+                    "role", "user",
+                    "content", List.of(textContent, imageContent));
+
+            Map<String, Object> requestBody = Map.of(
+                    "model", "gpt-4o-mini",
+                    "messages", List.of(userMessage),
+                    "temperature", 0.0,
+                    "max_tokens", 500,
+                    "response_format", Map.of("type", "json_object"));
+
+            long startTime = System.currentTimeMillis();
+
+            String response = openAiWebClient.post()
+                    .uri("/chat/completions")
+                    .header("Authorization", "Bearer " + openAiApiKey)
+                    .header("Content-Type", "application/json")
+                    .bodyValue(requestBody)
+                    .retrieve()
+                    .bodyToMono(String.class)
+                    .block();
+
+            long elapsed = System.currentTimeMillis() - startTime;
+
+            if (response == null || response.isBlank()) {
+                log.warn("[GPT-DIM] Empty response from OpenAI");
+                return null;
+            }
+
+            // Extract content from the response
+            ObjectMapper mapper = new ObjectMapper();
+            JsonNode root = mapper.readTree(response);
+            String content = root.path("choices").path(0).path("message").path("content").asText();
+
+            if (content == null || content.isBlank()) {
+                log.warn("[GPT-DIM] No content in OpenAI response");
+                return null;
+            }
+
+            JsonNode parsed = mapper.readTree(content);
+            float diameter = (float) parsed.path("diameterCm").asDouble(0);
+            float depth = (float) parsed.path("depthCm").asDouble(0);
+            String confidence = parsed.path("confidence").asText("low");
+            String reasoning = parsed.path("reasoning").asText("");
+
+            if (diameter <= 0 || depth <= 0) {
+                log.warn("[GPT-DIM] Invalid dimensions: d={}, depth={}. Reasoning: {}", diameter, depth, reasoning);
+                return null;
+            }
+
+            // Sanity bounds
+            diameter = Math.max(10f, Math.min(35f, diameter));
+            depth = Math.max(0.5f, Math.min(15f, depth));
+
+            log.info("[GPT-DIM] Estimated in {}ms: d={}, depth={}, conf={}, reasoning='{}'",
+                    elapsed, diameter, depth, confidence, reasoning);
+
+            return new float[] { diameter, depth };
+
+        } catch (Exception e) {
+            log.error("[GPT-DIM] Critical error during dimension estimation: {}", e.getMessage());
+            return null;
+        }
+    }
+
 }

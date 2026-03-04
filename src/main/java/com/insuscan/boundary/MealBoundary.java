@@ -33,6 +33,7 @@ public class MealBoundary {
     private Float analysisConfidence; // Overall algorithm confidence (0.0 - 1.0)
     private Boolean referenceDetected; // Was a reference object (e.g. syringe) found?
     private String referenceObjectType; // Selected type: INSULIN_SYRINGE, SYRINGE_KNIFE, CARD, NONE
+    private String containerType; // FLAT_PLATE, REGULAR_BOWL, DEEP_BOWL
 
     // ============================================================================================
     // 4. User Context & State
@@ -179,6 +180,14 @@ public class MealBoundary {
 
     public void setReferenceObjectType(String referenceObjectType) {
         this.referenceObjectType = referenceObjectType;
+    }
+
+    public String getContainerType() {
+        return containerType;
+    }
+
+    public void setContainerType(String containerType) {
+        this.containerType = containerType;
     }
 
     // --- 4. User Context ---

@@ -14,10 +14,10 @@ import java.util.stream.Collectors;
 
 @Repository
 public class MealRepository {
-    
+
     private static final Logger log = LoggerFactory.getLogger(MealRepository.class);
     private static final String COLLECTION_NAME = "meals";
-    
+
     private final Firestore firestore;
 
     public MealRepository(Firestore firestore) {
@@ -70,12 +70,13 @@ public class MealRepository {
                     .orderBy("scannedAt", Query.Direction.DESCENDING)
                     .offset(page * size)
                     .limit(size);
-            
+
             return executeQuery(query);
         } catch (Exception e) {
             // If index error, fall back to query without orderBy and sort in memory
             if (e.getMessage() != null && e.getMessage().contains("index")) {
-                log.warn("Composite index not found for paginated query, using fallback query (slower). userId={}", userId);
+                log.warn("Composite index not found for paginated query, using fallback query (slower). userId={}",
+                        userId);
 
                 try {
                     // Firestore has no server-side offset without ordering; emulate it:
@@ -91,14 +92,18 @@ public class MealRepository {
 
                     // Sort by scannedAt descending in memory
                     meals.sort((a, b) -> {
-                        if (a.getScannedAt() == null && b.getScannedAt() == null) return 0;
-                        if (a.getScannedAt() == null) return 1;
-                        if (b.getScannedAt() == null) return -1;
+                        if (a.getScannedAt() == null && b.getScannedAt() == null)
+                            return 0;
+                        if (a.getScannedAt() == null)
+                            return 1;
+                        if (b.getScannedAt() == null)
+                            return -1;
                         return b.getScannedAt().compareTo(a.getScannedAt());
                     });
 
                     // Slice page
-                    if (offset >= meals.size()) return List.of();
+                    if (offset >= meals.size())
+                        return List.of();
                     int toIndex = Math.min(meals.size(), offset + size);
                     return meals.subList(offset, toIndex);
                 } catch (Exception fallbackError) {
@@ -118,7 +123,7 @@ public class MealRepository {
             Query query = firestore.collection(COLLECTION_NAME)
                     .whereEqualTo("userId", userId)
                     .orderBy("scannedAt", Query.Direction.DESCENDING);
-            
+
             return executeQuery(query);
         } catch (Exception e) {
             log.error("Error finding meals by user: {}", userId, e);
@@ -134,30 +139,33 @@ public class MealRepository {
                     .whereEqualTo("userId", userId)
                     .orderBy("scannedAt", Query.Direction.DESCENDING)
                     .limit(limit);
-            
+
             return executeQuery(query);
         } catch (Exception e) {
             // If index error, fall back to query without orderBy and sort in memory
             if (e.getMessage() != null && e.getMessage().contains("index")) {
-                log.warn("Composite index not found, using fallback query (slower). Create index at: {}", 
+                log.warn("Composite index not found, using fallback query (slower). Create index at: {}",
                         e.getMessage().contains("create it here") ? "Firebase Console" : "Firebase Console");
-                
+
                 try {
                     // Fallback: query without orderBy, then sort in memory
                     Query fallbackQuery = firestore.collection(COLLECTION_NAME)
                             .whereEqualTo("userId", userId)
                             .limit(limit * 2); // Get more to account for no ordering
-                    
+
                     List<MealEntity> meals = executeQuery(fallbackQuery);
-                    
+
                     // Sort by scannedAt descending in memory
                     meals.sort((a, b) -> {
-                        if (a.getScannedAt() == null && b.getScannedAt() == null) return 0;
-                        if (a.getScannedAt() == null) return 1;
-                        if (b.getScannedAt() == null) return -1;
+                        if (a.getScannedAt() == null && b.getScannedAt() == null)
+                            return 0;
+                        if (a.getScannedAt() == null)
+                            return 1;
+                        if (b.getScannedAt() == null)
+                            return -1;
                         return b.getScannedAt().compareTo(a.getScannedAt());
                     });
-                    
+
                     // Return only the requested limit
                     return meals.stream().limit(limit).collect(java.util.stream.Collectors.toList());
                 } catch (Exception fallbackError) {
@@ -177,7 +185,7 @@ public class MealRepository {
             Query query = firestore.collection(COLLECTION_NAME)
                     .whereEqualTo("userId", userId)
                     .whereEqualTo("status", status.name());
-            
+
             return executeQuery(query);
         } catch (Exception e) {
             log.error("Error finding meals by user and status: {} {}", userId, status, e);
@@ -193,7 +201,7 @@ public class MealRepository {
                     .whereGreaterThanOrEqualTo("scannedAt", startDate)
                     .whereLessThanOrEqualTo("scannedAt", endDate)
                     .orderBy("scannedAt", Query.Direction.DESCENDING);
-            
+
             return executeQuery(query);
         } catch (Exception e) {
             log.error("Error finding meals by date range for user: {}", userId, e);
@@ -244,14 +252,14 @@ public class MealRepository {
         try {
             Query query = firestore.collection(COLLECTION_NAME)
                     .whereEqualTo("userId", userId);
-            
+
             QuerySnapshot snapshot = query.get().get();
             WriteBatch batch = firestore.batch();
-            
+
             for (QueryDocumentSnapshot doc : snapshot.getDocuments()) {
                 batch.delete(doc.getReference());
             }
-            
+
             batch.commit().get();
             log.debug("Deleted all meals for user: {}", userId);
         } catch (InterruptedException | ExecutionException e) {
@@ -266,7 +274,7 @@ public class MealRepository {
             Query query = firestore.collection(COLLECTION_NAME)
                     .orderBy("scannedAt", Query.Direction.DESCENDING)
                     .limit(limit);
-            
+
             return executeQuery(query);
         } catch (Exception e) {
             log.error("Error finding recent meals", e);
@@ -286,14 +294,14 @@ public class MealRepository {
     private void deleteCollection(CollectionReference collection) throws ExecutionException, InterruptedException {
         ApiFuture<QuerySnapshot> future = collection.limit(500).get();
         List<QueryDocumentSnapshot> docs = future.get().getDocuments();
-        
+
         while (!docs.isEmpty()) {
             WriteBatch batch = firestore.batch();
             for (QueryDocumentSnapshot doc : docs) {
                 batch.delete(doc.getReference());
             }
             batch.commit().get();
-            
+
             docs = collection.limit(500).get().get().getDocuments();
         }
     }
@@ -305,7 +313,7 @@ public class MealRepository {
         map.put("id", entity.getId());
         map.put("userId", entity.getUserId());
         map.put("imageUrl", entity.getImageUrl());
-        
+
         // Convert food items to list of maps
         if (entity.getFoodItems() != null) {
             List<Map<String, Object>> foodItemMaps = entity.getFoodItems().stream()
@@ -313,7 +321,7 @@ public class MealRepository {
                     .collect(Collectors.toList());
             map.put("foodItems", foodItemMaps);
         }
-        
+
         map.put("totalCarbs", entity.getTotalCarbs());
         map.put("estimatedWeight", entity.getEstimatedWeight());
         map.put("plateVolumeCm3", entity.getPlateVolumeCm3());
@@ -321,6 +329,8 @@ public class MealRepository {
         map.put("plateDepthCm", entity.getPlateDepthCm());
         map.put("analysisConfidence", entity.getAnalysisConfidence());
         map.put("referenceDetected", entity.getReferenceDetected());
+        map.put("referenceObjectType", entity.getReferenceObjectType());
+        map.put("containerType", entity.getContainerType());
         map.put("recommendedDose", entity.getRecommendedDose());
         map.put("actualDose", entity.getActualDose());
         map.put("status", entity.getStatus() != null ? entity.getStatus().name() : null);
@@ -329,7 +339,7 @@ public class MealRepository {
         map.put("completedAt", entity.getCompletedAt());
         map.put("wasSickMode", entity.getWasSickMode());
         map.put("wasStressMode", entity.getWasStressMode());
-        
+
         map.put("carbDose", entity.getCarbDose());
         map.put("correctionDose", entity.getCorrectionDose());
         map.put("sickAdjustment", entity.getSickAdjustment());
@@ -345,7 +355,7 @@ public class MealRepository {
         map.put("missingProfileFields", entity.getMissingProfileFields());
         map.put("insulinMessage", entity.getInsulinMessage());
         map.put("note", entity.getNote());
-        
+
         return map;
     }
 
@@ -367,7 +377,7 @@ public class MealRepository {
         entity.setId(doc.getString("id"));
         entity.setUserId(doc.getString("userId"));
         entity.setImageUrl(doc.getString("imageUrl"));
-        
+
         // Convert food items from list of maps
         List<Map<String, Object>> foodItemMaps = (List<Map<String, Object>>) doc.get("foodItems");
         if (foodItemMaps != null) {
@@ -376,7 +386,7 @@ public class MealRepository {
                     .collect(Collectors.toList());
             entity.setFoodItems(foodItems);
         }
-        
+
         entity.setTotalCarbs(getFloat(doc, "totalCarbs"));
         entity.setEstimatedWeight(getFloat(doc, "estimatedWeight"));
         entity.setPlateVolumeCm3(getFloat(doc, "plateVolumeCm3"));
@@ -384,21 +394,23 @@ public class MealRepository {
         entity.setPlateDepthCm(getFloat(doc, "plateDepthCm"));
         entity.setAnalysisConfidence(getFloat(doc, "analysisConfidence"));
         entity.setReferenceDetected(doc.getBoolean("referenceDetected"));
+        entity.setReferenceObjectType(doc.getString("referenceObjectType"));
+        entity.setContainerType(doc.getString("containerType"));
         entity.setRecommendedDose(getFloat(doc, "recommendedDose"));
         entity.setActualDose(getFloat(doc, "actualDose"));
-        
+
         String statusStr = doc.getString("status");
         if (statusStr != null) {
             entity.setStatus(MealStatus.valueOf(statusStr));
         }
-        
+
         entity.setScannedAt(doc.getDate("scannedAt"));
         entity.setConfirmedAt(doc.getDate("confirmedAt"));
         entity.setCompletedAt(doc.getDate("completedAt"));
         entity.setWasSickMode(doc.getBoolean("wasSickMode"));
         entity.setWasStressMode(doc.getBoolean("wasStressMode"));
-        
-     // calculation breakdown
+
+        // calculation breakdown
         entity.setCarbDose(getFloat(doc, "carbDose"));
         entity.setCorrectionDose(getFloat(doc, "correctionDose"));
         entity.setSickAdjustment(getFloat(doc, "sickAdjustment"));
@@ -407,7 +419,8 @@ public class MealRepository {
 
         // user context
         entity.setCurrentGlucose(doc.getLong("currentGlucose") != null
-                ? doc.getLong("currentGlucose").intValue() : null);
+                ? doc.getLong("currentGlucose").intValue()
+                : null);
         entity.setActivityLevel(doc.getString("activityLevel"));
 
         // profile status
@@ -415,21 +428,21 @@ public class MealRepository {
         entity.setProfileComplete(profileComplete != null && profileComplete);
         entity.setInsulinMessage(doc.getString("insulinMessage"));
         entity.setNote(doc.getString("note"));
-        
+
         return entity;
     }
-    
-    public List<MealEntity> findByUserIdAndDateRange(String userId, Date from, Date to, 
-                                                       int page, int size) {
+
+    public List<MealEntity> findByUserIdAndDateRange(String userId, Date from, Date to,
+            int page, int size) {
         try {
             Query query = firestore.collection(COLLECTION_NAME)
-                .whereEqualTo("userId", userId)
-                .whereGreaterThanOrEqualTo("scannedAt", from)
-                .whereLessThan("scannedAt", to)
-                .orderBy("scannedAt", Query.Direction.DESCENDING)
-                .offset(page * size)
-                .limit(size);
-            
+                    .whereEqualTo("userId", userId)
+                    .whereGreaterThanOrEqualTo("scannedAt", from)
+                    .whereLessThan("scannedAt", to)
+                    .orderBy("scannedAt", Query.Direction.DESCENDING)
+                    .offset(page * size)
+                    .limit(size);
+
             return executeQuery(query);
         } catch (Exception e) {
             log.error("Error finding meals by date range", e);
@@ -454,10 +467,14 @@ public class MealRepository {
     }
 
     private Float toFloat(Object value) {
-        if (value == null) return null;
-        if (value instanceof Double) return ((Double) value).floatValue();
-        if (value instanceof Long) return ((Long) value).floatValue();
-        if (value instanceof Integer) return ((Integer) value).floatValue();
+        if (value == null)
+            return null;
+        if (value instanceof Double)
+            return ((Double) value).floatValue();
+        if (value instanceof Long)
+            return ((Long) value).floatValue();
+        if (value instanceof Integer)
+            return ((Integer) value).floatValue();
         return null;
     }
 }

@@ -23,10 +23,9 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
 
     private final WebClient webClient;
     private final ObjectMapper objectMapper;
-    private final VisionCacheService visionCache;
     private final ApiLogger apiLogger;
     private final OpenAiJsonParser jsonParser;
-    
+
     @Value("${openai.api.key:}")
     private String openAiApiKey;
 
@@ -35,14 +34,12 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
 
     public ImageAnalysisServiceImpl(WebClient.Builder webClientBuilder,
             ObjectMapper objectMapper,
-            VisionCacheService visionCache,
             ApiLogger apiLogger,
             OpenAiJsonParser jsonParser) {
         this.webClient = webClientBuilder
                 .baseUrl("https://api.openai.com/v1")
                 .build();
         this.objectMapper = objectMapper;
-        this.visionCache = visionCache;
         this.apiLogger = apiLogger;
         this.jsonParser = jsonParser;
     }
@@ -58,14 +55,6 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
         if (!isServiceAvailable()) {
             apiLogger.openaiError("API key not configured", "ConfigurationException");
             return FoodRecognitionResult.failure("AI provider is not configured");
-        }
-
-        // Check cache first
-        String imageHash = visionCache.hashImage(base64Image);
-        FoodRecognitionResult cached = visionCache.getCached(imageHash);
-        if (cached != null) {
-            apiLogger.openaiCacheHit(imageHash);
-            return cached;
         }
 
         // Start request
@@ -95,7 +84,6 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
             apiLogger.openaiSuccess(parsedResult.getDetectedFoods().size(), totalTime);
 
             parsedResult.setSuccess(true);
-            visionCache.putCache(imageHash, parsedResult);
 
             log.info("[v2] Container: type={}, fill={}%",
                     parsedResult.getDetectedContainerType(),
@@ -260,121 +248,151 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
         boolean isCard = referenceObjectType != null && (referenceObjectType.toLowerCase().contains("card")
                 || referenceObjectType.toLowerCase().contains("id"));
 
-        // If strict is false (fallback mode), use a simpler prompt but still safe
+        // If strict is false (fallback mode), be more encouraging but still accurate
         if (!strict) {
             boolean isSyringe = referenceObjectType != null && referenceObjectType.toLowerCase().contains("syringe");
-            String fallbackRef = isCard
-                    ? "Look for a CREDIT CARD / ID CARD dimensions 8.5cm x 5.5cm."
-                    : (isSyringe ? "Look for an INSULIN SYRINGE dimensions 16cm x 1.25cm."
-                            : "Look for an Insulin Pen or standard cutlery.");
+            String refInstructions = isCard
+                    ? "SYSTEM ALERT: local detection found a CREDIT CARD / ID CARD. It is definitely there. Use its dimensions 8.5cm x 5.5cm as your primary scale anchor."
+                    : (isSyringe
+                            ? "SYSTEM ALERT: local detection found an INSULIN SYRINGE. It is definitely there. Use its dimensions 16cm x 1.25cm as your primary scale anchor."
+                            : "Identify the container size (diameter/depth) using standard plate sizes or nearby objects for scale.");
 
             return """
-                    You are a defensive food analysis AI.
-                    Identify food items strictly based on visual evidence.
-                    CRITICAL: If the image does not contain any food, return { "items": [] }.
-                    IMPORTANT: List each food SEPARATELY. A plate with rice and chicken = 2 items, not 1. Do not include a combined "Main Dish" item.
-                    Reference Object Strategy: %s
-                    Return JSON: { "items": [{ "name": "string", "confidence": 0.5, "estimatedPortionGrams": 100 }] }
+                    You are a professional nutritionist's assistant AI.
+                    Analyze this image and identify ALL food items.
+
+                    Reference Object Context: %s
+
+                    INSTRUCTIONS:
+                    1. Identify the container (FLAT_PLATE, REGULAR_BOWL, DEEP_BOWL) and its fill level.
+                    2. Identify EVERY edible item in the container.
+                    3. The SYSTEM has already confirmed the presence of the container and scale object. Do not skip them.
+                    4. For each item, provide a visually descriptive name and its base ingredient.
+                    5. Use the SCALE ANCHOR to estimate grams accurately.
+                    6. CRITICAL: DO NOT return an empty "items" list unless the image is totally black or shows NO food-related context. If the image is blurry, provide your BEST GUESS (e.g., "Unidentified Dish", "Starch Group").
+
+                    Return ONLY this JSON structure:
+                    {
+                       "container_type": "FLAT_PLATE" | "REGULAR_BOWL" | "DEEP_BOWL",
+                       "container_fill_percent": <number>,
+                       "items": [
+                         {
+                           "visual_name": "string",
+                           "base_ingredient": "string",
+                           "confidence": <number 0-1>,
+                           "estimated_grams": <number>,
+                           "coverage_percent": <number>,
+                           "height_category": "FLAT" | "MEDIUM_PILE" | "HEEPING",
+                           "bounding_box": { "x_pct": <number>, "y_pct": <number>, "w_pct": <number>, "h_pct": <number> },
+                           "usda_search_terms": ["string"],
+                           "visual_state": "RAW" | "COOKED" | "PROCESSED"
+                         }
+                       ],
+                       "warnings": ["any quality observations here"]
+                    }
                     """
-                    .formatted(fallbackRef);
+                    .formatted(refInstructions);
         }
 
         // --- MEDICAL GRADE PROMPT ---
         String referenceInstruction;
         if (isCard) {
             referenceInstruction = "- REFERENCE OBJECT: Look for a CREDIT CARD / ID CARD near the food. Known dimensions: 8.5cm × 5.5cm. Use this known size to accurately estimate food volume.";
-        } else if (referenceObjectType != null && referenceObjectType.toLowerCase().contains("syringe")) {
-            referenceInstruction = "- REFERENCE OBJECT: Look for an INSULIN SYRINGE near the food. Known dimensions: 16cm length × 1.25cm width. Use this known size to accurately estimate food volume.";
+        } else if (referenceObjectType != null && (referenceObjectType.toLowerCase().contains("syringe")
+                || referenceObjectType.toLowerCase().contains("pen"))) {
+            referenceInstruction = "- REFERENCE OBJECT: Look for an INSULIN SYRINGE or PEN near the food. Known dimensions: 16cm length × 1.25cm width. Use this known size to accurately estimate food volume.";
         } else {
             referenceInstruction = "- REFERENCE OBJECT: Look for any known-size object near the food (pen, card, cutlery). IF FOUND, use it as a scale reference.";
         }
 
         return """
-                You are a Clinical Food Safety AI for a diabetes management system.
-                Your goal is to analyze food NOT just for identity, but for metabolic impact.
+                      You are a Professional Nutritionist AI.
+                      Your goal is to identify ALL food items in the image and estimate their portions for metabolic impact.
 
-                MEAL ANALYSIS PROTOCOL:
-                - Analyze the image for any food items, containers, or meals.
-                - NOTE: It is expected to see medical tools (syringes) or cards near the food for scale. Identify the FOOD, and ignore these reference objects in your final list.
-                - IF NO FOOD IS PRESENT (e.g. empty desk, car, wall): Return { "items": [] }.
+                      MEAL ANALYSIS PROTOCOL:
+                      - Identify every distinct food item. A plate with rice and chicken = 2 items.
+                      - It is expected to see medical tools (syringes) or cards near the food for scale. Identify the FOOD, and ignore these reference objects in your final list.
+                      - Be PROACTIVE: If a food is partially visible or blurry, use context to provide your best estimate rather than returning empty results.
+                      - ONLY return an empty items list if the image truly contains NO food (e.g. just a wall or floor).
+                      - If unsure about a specific dish name, label it by its primary component (e.g. "Mixed Vegetables", "Grains").
 
-                PROTOCOL:
-                1. EVIDENCE ONLY: Do not guess ingredients you cannot see. If a sauce is visible but unknown, flag it.
-                2. STATE ANALYSIS: Distinguish between RAW, BOILED, ROASTED, and FRIED. This critically affects Glycemic Index.
-                3. BASE INGREDIENT: Separate the full description (e.g. 'Mashed Potatoes with Gravy') from the search term (e.g. 'Potato').
-                4. ITEM SEPARATION: Break the plate into INDIVIDUAL food items. "Rice with chicken and salad" must become THREE items: "Rice", "Chicken", "Salad".
+                      PROTOCOL:
+                      1. EVIDENCE ONLY: Do not guess ingredients you cannot see. If a sauce is visible but unknown, flag it.
+                      2. STATE ANALYSIS: Distinguish between RAW, BOILED, ROASTED, and FRIED. This critically affects Glycemic Index.
+                      3. BASE INGREDIENT: Separate the full description (e.g. 'Mashed Potatoes with Gravy') from the search term (e.g. 'Potato').
+                      4. ITEM SEPARATION: Break the plate into INDIVIDUAL food items. "Rice with chicken and salad" must become THREE items: "Rice", "Chicken", "Salad".
 
-                CONTAINER & FILL ANALYSIS (CRITICAL FOR ACCURATE PORTIONS):
-                - Identify the container type: FLAT_PLATE, REGULAR_BOWL, or DEEP_BOWL
-                - Estimate what percentage (0-100) of the container's USABLE VOLUME is filled.
-                - BOWL MATH RULE: In curved bowls, VOLUME decreases faster than height as you go down.
-                  * If food is halfway up the wall (50%% height), volume is only ~30%%.
-                  * If food is 75%% up the wall, volume is ~55%%.
-                - CALIBRATION GUIDE:
-                  * 15 = thin layer at the bottom
-                  * 30 = halfway up the height of a curved bowl
-                  * 50 = significantly filled, but clearly 2-3cm below the rim
-                  * 70 = near the rim (approx 1cm gap)
-                  * 85 = level with the rim
-                  * 95+ = heaping / overflowing
-                - IMPORTANT: Be conservative. If unsure, 40-50%% is a safe default for a normal serving.
-                - Imagine the container empty, then imagine how much space the food occupies.
+                      CONTAINER & FILL ANALYSIS (CRITICAL FOR ACCURATE PORTIONS):
+                      - Identify the container type: FLAT_PLATE, REGULAR_BOWL, or DEEP_BOWL
+                      - Estimate what percentage (0-100) of the container's USABLE VOLUME is filled.
+                      - BOWL MATH RULE: In curved bowls, VOLUME decreases faster than height as you go down.
+                        * If food is halfway up the wall (50%% height), volume is only ~30%%.
+                        * If food is 75%% up the wall, volume is ~55%%.
+                      - CALIBRATION GUIDE:
+                        * 15 = thin layer at the bottom
+                        * 30 = halfway up the height of a curved bowl
+                        * 50 = significantly filled, but clearly 2-3cm below the rim
+                        * 70 = near the rim (approx 1cm gap)
+                        * 85 = level with the rim
+                        * 95+ = heaping / overflowing
+                      - IMPORTANT: Be conservative. If unsure, 40-50%% is a safe default for a normal serving.
+                      - Imagine the container empty, then imagine how much space the food occupies.
 
-                PORTION ESTIMATION (CRITICAL):
-                %s
-                - FALLBACK (NO REFERENCE): If no reference object is visible, perform a "best-effort" estimation assuming a standard dinner plate size (approx 26cm diameter).
-                - DO NOT FAIL simply because a reference object is missing. Always provide an estimated weight (grams) based on visual volume.
+                      PORTION ESTIMATION (CRITICAL):
+                      %s
+                      - FALLBACK (NO REFERENCE): If no reference object is visible, perform a "best-effort" estimation assuming a standard dinner plate size (approx 26cm diameter).
+                      - DO NOT FAIL simply because a reference object is missing. Always provide an estimated weight (grams) based on visual volume.
 
-                CRITICAL NEGATIVE CONSTRAINTS:
-                - Do NOT create a "Main Dish" or "Summary" item that combines others.
-                - Do NOT list "Chicken and Rice" if you have already listed "Chicken" and "Rice" separately.
-                - Each food pixel in the image should belong to EXACTLY ONE item in your list. Do not double count.
+                      CRITICAL NEGATIVE CONSTRAINTS:
+                      - Do NOT create a "Main Dish" or "Summary" item that combines others.
+                      - Do NOT list "Chicken and Rice" if you have already listed "Chicken" and "Rice" separately.
+                      - Each food pixel in the image should belong to EXACTLY ONE item in your list. Do not double count.
 
-        		SPATIAL ANALYSIS (CRITICAL FOR ACCURACY):
-                For each food item, estimate:
-                - coverage_percent: What percentage of the plate/bowl surface this food occupies (all items should sum to ~100).
-                - height_category: How tall the food is piled:
-                  * FLAT = thin layer, under 0.5cm (e.g. sauce, spread, single slice)
-                  * LOW_PILE = 0.5-1.5cm (e.g. steak, flat pasta, single layer)
-                  * MEDIUM_PILE = 1.5-3cm (e.g. rice serving, stir fry)
-                  * HIGH_PILE = 3cm+ (e.g. heaped salad, fries pile, overflowing rice)
-                - bounding_box: A tight rectangle around ONLY this food item, as percentage of the FULL IMAGE (not the plate).
-                  * x_pct = left edge (0 = left side of image, 100 = right side)
-                  * y_pct = top edge (0 = top of image, 100 = bottom)
-                  * w_pct = width of the box as %% of image width
-                  * h_pct = height of the box as %% of image height
-                  * Must tightly contain ONLY this specific food, not the whole plate.
-                - usda_search_terms: Provide exactly 2-3 search terms for the USDA FoodData Central database.
-                  * First term: most specific match including cooking method (e.g. "rice white cooked")
-                  * Second term: broader match (e.g. "rice cooked")
-                  * Third term (optional): base ingredient only (e.g. "rice")
-                  
-                OUTPUT FORMAT (Strict JSON):
-                {
-                  "container_type": "REGULAR_BOWL",
-                  "container_fill_percent": 50,
-                  "items": [
-                    {
-                      "visual_name": "Roasted Potato Wedges",
-                      "base_ingredient": "Potato",
-                      "confidence": 0.95,
-                      "estimated_grams": 150,
-        			  "coverage_percent": 45,
-                      "height_category": "MEDIUM_PILE",
-                      "bounding_box": { "x_pct": 10.0, "y_pct": 25.0, "w_pct": 35.0, "h_pct": 40.0 },
-                      "usda_search_terms": ["potato wedges roasted", "potato roasted", "potato"],
-                      "visual_state": "ROASTED",
-                      "risk_flags": ["HIGH_FAT"],
-                      "requires_user_validation": false
-                    }
-                  ],
-                  "warnings": []
-                }
+                SPATIAL ANALYSIS (CRITICAL FOR ACCURACY):
+                      For each food item, estimate:
+                      - coverage_percent: What percentage of the plate/bowl surface this food occupies (all items should sum to ~100).
+                      - height_category: How tall the food is piled:
+                        * FLAT = thin layer, under 0.5cm (e.g. sauce, spread, single slice)
+                        * LOW_PILE = 0.5-1.5cm (e.g. steak, flat pasta, single layer)
+                        * MEDIUM_PILE = 1.5-3cm (e.g. rice serving, stir fry)
+                        * HIGH_PILE = 3cm+ (e.g. heaped salad, fries pile, overflowing rice)
+                      - bounding_box: A tight rectangle around ONLY this food item, as percentage of the FULL IMAGE (not the plate).
+                        * x_pct = left edge (0 = left side of image, 100 = right side)
+                        * y_pct = top edge (0 = top of image, 100 = bottom)
+                        * w_pct = width of the box as %% of image width
+                        * h_pct = height of the box as %% of image height
+                        * Must tightly contain ONLY this specific food, not the whole plate.
+                      - usda_search_terms: Provide exactly 2-3 search terms for the USDA FoodData Central database.
+                        * First term: most specific match including cooking method (e.g. "rice white cooked")
+                        * Second term: broader match (e.g. "rice cooked")
+                        * Third term (optional): base ingredient only (e.g. "rice")
 
-                RULES:
-                - If packaging text is visible, prioritize it over visual appearance.
-                - If the food is blurry or unidentifiable, make a best-effort estimate of the major food group (e.g., 'Grains', 'Vegetables') based on context. Do not hallucinate brand names, but identify the base ingredient if possible.
-                """
+                      OUTPUT FORMAT (Strict JSON):
+                      {
+                        "container_type": "REGULAR_BOWL",
+                        "container_fill_percent": 50,
+                        "items": [
+                          {
+                            "visual_name": "Roasted Potato Wedges",
+                            "base_ingredient": "Potato",
+                            "confidence": 0.95,
+                            "estimated_grams": 150,
+                	  "coverage_percent": 45,
+                            "height_category": "MEDIUM_PILE",
+                            "bounding_box": { "x_pct": 10.0, "y_pct": 25.0, "w_pct": 35.0, "h_pct": 40.0 },
+                            "usda_search_terms": ["potato wedges roasted", "potato roasted", "potato"],
+                            "visual_state": "ROASTED",
+                            "risk_flags": ["HIGH_FAT"],
+                            "requires_user_validation": false
+                          }
+                        ],
+                        "warnings": []
+                      }
+
+                      RULES:
+                      - If packaging text is visible, prioritize it over visual appearance.
+                      - If the food is blurry or unidentifiable, make a best-effort estimate of the major food group (e.g., 'Grains', 'Vegetables') based on context. Do not hallucinate brand names, but identify the base ingredient if possible.
+                      """
                 .formatted(referenceInstruction);
     }
 
@@ -428,7 +446,7 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
                 FoodRecognitionResult.RecognizedFoodItem recognizedItem = new FoodRecognitionResult.RecognizedFoodItem(
                         visualName, conf, weight);
 
-             // Set the new fields
+                // Set the new fields
                 recognizedItem.setBaseIngredient(baseIngredient);
                 recognizedItem.setVisualState(state);
                 recognizedItem.setRequiresValidation(needsValidation);
@@ -442,16 +460,15 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
                 if (item.has("height_category")) {
                     recognizedItem.setHeightCategory(item.get("height_category").asText());
                 }
-                
-             // bounding box for client-side GrabCut segmentation
+
+                // bounding box for client-side GrabCut segmentation
                 if (item.has("bounding_box")) {
                     JsonNode bbox = item.get("bounding_box");
                     recognizedItem.setBoundingBox(
-                        (float) bbox.path("x_pct").asDouble(0),
-                        (float) bbox.path("y_pct").asDouble(0),
-                        (float) bbox.path("w_pct").asDouble(0),
-                        (float) bbox.path("h_pct").asDouble(0)
-                    );
+                            (float) bbox.path("x_pct").asDouble(0),
+                            (float) bbox.path("y_pct").asDouble(0),
+                            (float) bbox.path("w_pct").asDouble(0),
+                            (float) bbox.path("h_pct").asDouble(0));
                 }
 
                 // GPT-provided USDA search terms (replaces hardcoded FoodNameNormalizer)

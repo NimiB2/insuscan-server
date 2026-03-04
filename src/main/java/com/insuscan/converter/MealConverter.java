@@ -85,6 +85,7 @@ public class MealConverter {
         boundary.setAnalysisConfidence(entity.getAnalysisConfidence());
         boundary.setReferenceDetected(entity.getReferenceDetected());
         boundary.setReferenceObjectType(entity.getReferenceObjectType());
+        boundary.setContainerType(entity.getContainerType());
 
         // User state at meal time
         boundary.setCurrentGlucose(entity.getCurrentGlucose());
@@ -109,6 +110,9 @@ public class MealConverter {
         boundary.setCompletedAt(entity.getCompletedAt());
         boundary.setWasSickMode(entity.getWasSickMode());
         boundary.setWasStressMode(entity.getWasStressMode());
+        boundary.setInsulinMessage(entity.getInsulinMessage());
+        boundary.setMissingProfileFields(entity.getMissingProfileFields());
+        boundary.setProfileComplete(entity.isProfileComplete());
 
         return boundary;
     }
@@ -161,6 +165,7 @@ public class MealConverter {
         entity.setAnalysisConfidence(boundary.getAnalysisConfidence());
         entity.setReferenceDetected(boundary.getReferenceDetected());
         entity.setReferenceObjectType(boundary.getReferenceObjectType());
+        entity.setContainerType(boundary.getContainerType());
 
         // User state at meal time
         entity.setCurrentGlucose(boundary.getCurrentGlucose());
@@ -186,6 +191,9 @@ public class MealConverter {
 
         entity.setWasSickMode(boundary.getWasSickMode());
         entity.setWasStressMode(boundary.getWasStressMode());
+        entity.setInsulinMessage(boundary.getInsulinMessage());
+        entity.setMissingProfileFields(boundary.getMissingProfileFields());
+        entity.setProfileComplete(boundary.isProfileComplete());
 
         return entity;
     }
@@ -226,7 +234,7 @@ public class MealConverter {
         boundary.setBboxYPct(item.getBboxYPct());
         boundary.setBboxWPct(item.getBboxWPct());
         boundary.setBboxHPct(item.getBboxHPct());
-        
+
         return boundary;
     }
 
@@ -244,12 +252,12 @@ public class MealConverter {
         item.setConfidence(boundary.getConfidence());
         item.setUsdaFdcId(boundary.getUsdaFdcId());
         item.setNote(boundary.getNote());
-        
+
         item.setBboxXPct(boundary.getBboxXPct());
         item.setBboxYPct(boundary.getBboxYPct());
         item.setBboxWPct(boundary.getBboxWPct());
         item.setBboxHPct(boundary.getBboxHPct());
-        
+
         return item;
     }
 

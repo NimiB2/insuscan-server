@@ -25,6 +25,7 @@ public class MealEntity {
     private Float analysisConfidence; // 0.0 to 1.0
     private Boolean referenceDetected; // Was reference object found
     private String referenceObjectType; // Selected type: INSULIN_SYRINGE, SYRINGE_KNIFE, CARD, NONE
+    private String containerType; // FLAT_PLATE, REGULAR_BOWL, DEEP_BOWL — used for history-based learning
 
     // --- User Context (State at meal time) ---
     private Integer currentGlucose; // Blood sugar
@@ -56,7 +57,6 @@ public class MealEntity {
     private Boolean wasSickMode;
     private Boolean wasStressMode;
     private List<String> reviewWarnings;
-    
 
     public MealEntity() {
         this.scannedAt = new Date();
@@ -81,19 +81,42 @@ public class MealEntity {
         private Float bboxYPct;
         private Float bboxWPct;
         private Float bboxHPct;
-        
+
         public FoodItem() {
         }
 
-        public Float getBboxXPct() { return bboxXPct; }
-        public void setBboxXPct(Float bboxXPct) { this.bboxXPct = bboxXPct; }
-        public Float getBboxYPct() { return bboxYPct; }
-        public void setBboxYPct(Float bboxYPct) { this.bboxYPct = bboxYPct; }
-        public Float getBboxWPct() { return bboxWPct; }
-        public void setBboxWPct(Float bboxWPct) { this.bboxWPct = bboxWPct; }
-        public Float getBboxHPct() { return bboxHPct; }
-        public void setBboxHPct(Float bboxHPct) { this.bboxHPct = bboxHPct; }
-        
+        public Float getBboxXPct() {
+            return bboxXPct;
+        }
+
+        public void setBboxXPct(Float bboxXPct) {
+            this.bboxXPct = bboxXPct;
+        }
+
+        public Float getBboxYPct() {
+            return bboxYPct;
+        }
+
+        public void setBboxYPct(Float bboxYPct) {
+            this.bboxYPct = bboxYPct;
+        }
+
+        public Float getBboxWPct() {
+            return bboxWPct;
+        }
+
+        public void setBboxWPct(Float bboxWPct) {
+            this.bboxWPct = bboxWPct;
+        }
+
+        public Float getBboxHPct() {
+            return bboxHPct;
+        }
+
+        public void setBboxHPct(Float bboxHPct) {
+            this.bboxHPct = bboxHPct;
+        }
+
         // --- FoodItem Getters & Setters ---
 
         public String getName() {
@@ -261,6 +284,14 @@ public class MealEntity {
         this.referenceObjectType = referenceObjectType;
     }
 
+    public String getContainerType() {
+        return containerType;
+    }
+
+    public void setContainerType(String containerType) {
+        this.containerType = containerType;
+    }
+
     public Integer getCurrentGlucose() {
         return currentGlucose;
     }
@@ -412,10 +443,14 @@ public class MealEntity {
     public void setActiveInsulin(Float activeInsulin) {
         this.activeInsulin = activeInsulin;
     }
-    
-    public List<String> getReviewWarnings() { return reviewWarnings; }
-    public void setReviewWarnings(List<String> reviewWarnings) { this.reviewWarnings = reviewWarnings; }
-   
+
+    public List<String> getReviewWarnings() {
+        return reviewWarnings;
+    }
+
+    public void setReviewWarnings(List<String> reviewWarnings) {
+        this.reviewWarnings = reviewWarnings;
+    }
 
     @Override
     public String toString() {
