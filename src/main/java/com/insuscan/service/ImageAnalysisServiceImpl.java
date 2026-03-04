@@ -5,12 +5,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.insuscan.boundary.FoodRecognitionResult;
 import com.insuscan.util.ApiLogger;
 import com.insuscan.util.OpenAiJsonParser;
+import com.insuscan.util.GeminiApiClient;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.springframework.web.reactive.function.client.WebClient;
+//import org.springframework.web.reactive.function.client.WebClient;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -21,24 +22,38 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
 
     private static final Logger log = LoggerFactory.getLogger(ImageAnalysisServiceImpl.class);
 
-    private final WebClient webClient;
+//    private final WebClient webClient;
+//    private final ObjectMapper objectMapper;
+//    private final ApiLogger apiLogger;
+//    private final OpenAiJsonParser jsonParser;
+//
+//    @Value("${openai.api.key:}")
+//    private String openAiApiKey;
+//
+//    @Value("${openai.model:gpt-4o-mini}")
+//    private String openAiModel;
+//
+//    public ImageAnalysisServiceImpl(WebClient.Builder webClientBuilder,
+//            ObjectMapper objectMapper,
+//            ApiLogger apiLogger,
+//            OpenAiJsonParser jsonParser) {
+//        this.webClient = webClientBuilder
+//                .baseUrl("https://api.openai.com/v1")
+//                .build();
+//        this.objectMapper = objectMapper;
+//        this.apiLogger = apiLogger;
+//        this.jsonParser = jsonParser;
+//    }
+    private final GeminiApiClient geminiClient;
     private final ObjectMapper objectMapper;
     private final ApiLogger apiLogger;
     private final OpenAiJsonParser jsonParser;
 
-    @Value("${openai.api.key:}")
-    private String openAiApiKey;
-
-    @Value("${openai.model:gpt-4o-mini}")
-    private String openAiModel;
-
-    public ImageAnalysisServiceImpl(WebClient.Builder webClientBuilder,
+    public ImageAnalysisServiceImpl(GeminiApiClient geminiClient,
             ObjectMapper objectMapper,
             ApiLogger apiLogger,
             OpenAiJsonParser jsonParser) {
-        this.webClient = webClientBuilder
-                .baseUrl("https://api.openai.com/v1")
-                .build();
+        this.geminiClient = geminiClient;
         this.objectMapper = objectMapper;
         this.apiLogger = apiLogger;
         this.jsonParser = jsonParser;
@@ -46,11 +61,14 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
 
     @Override
     public FoodRecognitionResult analyzeImage(String base64Image, String referenceObjectType) {
-        // Log API key status
-        String keyPreview = (openAiApiKey != null && openAiApiKey.length() > 5)
-                ? openAiApiKey.substring(0, 5)
-                : "N/A";
-        apiLogger.apiKeyStatus("OPENAI", isServiceAvailable(), keyPreview);
+//        // Log API key status
+//        String keyPreview = (openAiApiKey != null && openAiApiKey.length() > 5)
+//                ? openAiApiKey.substring(0, 5)
+//                : "N/A";
+//        apiLogger.apiKeyStatus("OPENAI", isServiceAvailable(), keyPreview);
+        
+        apiLogger.apiKeyStatus("GEMINI", isServiceAvailable(), geminiClient.getKeyPreview());
+
 
         if (!isServiceAvailable()) {
             apiLogger.openaiError("API key not configured", "ConfigurationException");
@@ -58,7 +76,9 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
         }
 
         // Start request
-        apiLogger.openaiStart(openAiModel, base64Image.length());
+//        apiLogger.openaiStart(openAiModel, base64Image.length());
+        apiLogger.openaiStart(geminiClient.getVisionModel(), base64Image.length());
+
         long totalStartTime = System.currentTimeMillis();
 
         try {
@@ -103,42 +123,78 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
         }
     }
 
+//    @Override
+//    public FoodRecognitionResult analyzeImageFromUrl(String imageUrl, String referenceObjectType) {
+//        apiLogger.apiKeyStatus("OPENAI", isServiceAvailable(),
+//                openAiApiKey != null && openAiApiKey.length() > 5 ? openAiApiKey.substring(0, 5) : "N/A");
+//
+//        if (!isServiceAvailable()) {
+//            return FoodRecognitionResult.failure("AI provider is not configured");
+//        }
+//
+//        apiLogger.openaiStart(openAiModel, 0);
+//        long startTime = System.currentTimeMillis();
+//
+//        try {
+//            Map<String, Object> requestBody = buildOpenAiRequestWithUrl(imageUrl, referenceObjectType);
+//
+//            String response = webClient.post()
+//                    .uri("/chat/completions")
+//                    .header("Authorization", "Bearer " + openAiApiKey)
+//                    .header("Content-Type", "application/json")
+//                    .bodyValue(requestBody)
+//                    .retrieve()
+//                    .onStatus(status -> status.is4xxClientError() || status.is5xxServerError(),
+//                            clientResponse -> clientResponse.bodyToMono(String.class)
+//                                    .map(body -> new RuntimeException("OpenAI error: " + body)))
+//                    .bodyToMono(String.class)
+//                    .block();
+//
+//            long elapsed = System.currentTimeMillis() - startTime;
+//            apiLogger.openaiResponseReceived(elapsed, response != null ? response.length() : 0);
+//
+//            if (response == null || response.isBlank()) {
+//                return FoodRecognitionResult.failure("Provider returned empty response");
+//            }
+//
+//            String content = extractContentFromResponse(response);
+//            apiLogger.openaiRawResponse(content);
+//
+//            if (content == null || content.isBlank()) {
+//                return FoodRecognitionResult.failure("Could not extract content from response");
+//            }
+//
+//            FoodRecognitionResult parsedResult = parseFoodsFromOpenAi(content);
+//            apiLogger.openaiParsedFoods(parsedResult.getDetectedFoods());
+//            parsedResult.setSuccess(true);
+//
+//            return parsedResult;
+//
+//        } catch (Exception e) {
+//            apiLogger.openaiError(e.getMessage(), e.getClass().getSimpleName());
+//            return FoodRecognitionResult.failure("Image analysis failed: " + e.getMessage());
+//        }
+//    }
+    
     @Override
     public FoodRecognitionResult analyzeImageFromUrl(String imageUrl, String referenceObjectType) {
-        apiLogger.apiKeyStatus("OPENAI", isServiceAvailable(),
-                openAiApiKey != null && openAiApiKey.length() > 5 ? openAiApiKey.substring(0, 5) : "N/A");
+        apiLogger.apiKeyStatus("GEMINI", isServiceAvailable(), geminiClient.getKeyPreview());
 
         if (!isServiceAvailable()) {
             return FoodRecognitionResult.failure("AI provider is not configured");
         }
 
-        apiLogger.openaiStart(openAiModel, 0);
         long startTime = System.currentTimeMillis();
 
         try {
-            Map<String, Object> requestBody = buildOpenAiRequestWithUrl(imageUrl, referenceObjectType);
+            String prompt = buildPrompt(true, referenceObjectType)
+                    + "\n\nAnalyze the food in this image URL: " + imageUrl;
 
-            String response = webClient.post()
-                    .uri("/chat/completions")
-                    .header("Authorization", "Bearer " + openAiApiKey)
-                    .header("Content-Type", "application/json")
-                    .bodyValue(requestBody)
-                    .retrieve()
-                    .onStatus(status -> status.is4xxClientError() || status.is5xxServerError(),
-                            clientResponse -> clientResponse.bodyToMono(String.class)
-                                    .map(body -> new RuntimeException("OpenAI error: " + body)))
-                    .bodyToMono(String.class)
-                    .block();
+            String content = geminiClient.callVisionModel(prompt, null);
+            apiLogger.openaiRawResponse(content);
 
             long elapsed = System.currentTimeMillis() - startTime;
-            apiLogger.openaiResponseReceived(elapsed, response != null ? response.length() : 0);
-
-            if (response == null || response.isBlank()) {
-                return FoodRecognitionResult.failure("Provider returned empty response");
-            }
-
-            String content = extractContentFromResponse(response);
-            apiLogger.openaiRawResponse(content);
+            apiLogger.openaiResponseReceived(elapsed, content != null ? content.length() : 0);
 
             if (content == null || content.isBlank()) {
                 return FoodRecognitionResult.failure("Could not extract content from response");
@@ -158,90 +214,109 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
 
     @Override
     public boolean isServiceAvailable() {
-        return openAiApiKey != null && !openAiApiKey.isBlank();
+//        return openAiApiKey != null && !openAiApiKey.isBlank();
+    	return geminiClient.isServiceAvailable();
     }
 
+//    private FoodRecognitionResult analyzeWithPrompt(String base64Image, boolean strict,
+//            String referenceObjectType)
+//            throws Exception {
+//        Map<String, Object> requestBody = buildOpenAiRequestWithBase64(base64Image, strict, referenceObjectType);
+//
+//        log.debug("[OPENAI] Sending {} prompt request...", strict ? "STRICT" : "RELAXED");
+//        long startTime = System.currentTimeMillis();
+//
+//        String response = webClient.post()
+//                .uri("/chat/completions")
+//                .header("Authorization", "Bearer " + openAiApiKey)
+//                .header("Content-Type", "application/json")
+//                .bodyValue(requestBody)
+//                .retrieve()
+//                .onStatus(status -> status.is4xxClientError() || status.is5xxServerError(),
+//                        clientResponse -> {
+//                            if (clientResponse.statusCode().value() == 429) {
+//                                return clientResponse.bodyToMono(String.class)
+//                                        .map(body -> new RuntimeException("Rate limit exceeded: " + body));
+//                            }
+//                            return clientResponse.bodyToMono(String.class)
+//                                    .map(body -> new RuntimeException("OpenAI API error: " + body));
+//                        })
+//                .bodyToMono(String.class)
+//                .block();
+//
+//        long elapsed = System.currentTimeMillis() - startTime;
+//        apiLogger.openaiResponseReceived(elapsed, response != null ? response.length() : 0);
+//
+//        if (response == null || response.isBlank()) {
+//            throw new IllegalStateException("Provider returned empty response");
+//        }
+//
+//        String content = extractContentFromResponse(response);
+//        apiLogger.openaiRawResponse(content);
+//
+//        if (content == null || content.isBlank()) {
+//            throw new IllegalStateException("Could not extract content from OpenAI response");
+//        }
+//
+//        return parseFoodsFromOpenAi(content);
+//    }
+    
+    
     private FoodRecognitionResult analyzeWithPrompt(String base64Image, boolean strict,
             String referenceObjectType)
             throws Exception {
-        Map<String, Object> requestBody = buildOpenAiRequestWithBase64(base64Image, strict, referenceObjectType);
+        String prompt = buildPrompt(strict, referenceObjectType);
 
-        log.debug("[OPENAI] Sending {} prompt request...", strict ? "STRICT" : "RELAXED");
-        long startTime = System.currentTimeMillis();
+        log.debug("[GEMINI] Sending {} prompt request...", strict ? "STRICT" : "RELAXED");
 
-        String response = webClient.post()
-                .uri("/chat/completions")
-                .header("Authorization", "Bearer " + openAiApiKey)
-                .header("Content-Type", "application/json")
-                .bodyValue(requestBody)
-                .retrieve()
-                .onStatus(status -> status.is4xxClientError() || status.is5xxServerError(),
-                        clientResponse -> {
-                            if (clientResponse.statusCode().value() == 429) {
-                                return clientResponse.bodyToMono(String.class)
-                                        .map(body -> new RuntimeException("Rate limit exceeded: " + body));
-                            }
-                            return clientResponse.bodyToMono(String.class)
-                                    .map(body -> new RuntimeException("OpenAI API error: " + body));
-                        })
-                .bodyToMono(String.class)
-                .block();
-
-        long elapsed = System.currentTimeMillis() - startTime;
-        apiLogger.openaiResponseReceived(elapsed, response != null ? response.length() : 0);
-
-        if (response == null || response.isBlank()) {
-            throw new IllegalStateException("Provider returned empty response");
-        }
-
-        String content = extractContentFromResponse(response);
+        String content = geminiClient.callVisionModel(prompt, base64Image);
         apiLogger.openaiRawResponse(content);
 
         if (content == null || content.isBlank()) {
-            throw new IllegalStateException("Could not extract content from OpenAI response");
+            throw new IllegalStateException("Gemini returned empty response");
         }
 
         return parseFoodsFromOpenAi(content);
     }
 
-    private Map<String, Object> buildOpenAiRequestWithBase64(String base64Image, boolean strict,
-            String referenceObjectType) {
-        String prompt = buildPrompt(strict, referenceObjectType);
+//    private Map<String, Object> buildOpenAiRequestWithBase64(String base64Image, boolean strict,
+//            String referenceObjectType) {
+//        String prompt = buildPrompt(strict, referenceObjectType);
+//
+//        Map<String, Object> textContent = Map.of("type", "text", "text", prompt);
+//        Map<String, Object> imageUrlObj = Map.of("url", "data:image/jpeg;base64," + base64Image);
+//        Map<String, Object> imageContent = Map.of("type", "image_url", "image_url", imageUrlObj);
+//
+//        Map<String, Object> userMessage = Map.of(
+//                "role", "user",
+//                "content", List.of(textContent, imageContent));
+//
+//        return Map.of(
+//                "model", openAiModel,
+//                "messages", List.of(userMessage),
+//                "temperature", 0.0,
+//                "max_tokens", 1200,
+//                "response_format", Map.of("type", "json_object"));
+//    }
 
-        Map<String, Object> textContent = Map.of("type", "text", "text", prompt);
-        Map<String, Object> imageUrlObj = Map.of("url", "data:image/jpeg;base64," + base64Image);
-        Map<String, Object> imageContent = Map.of("type", "image_url", "image_url", imageUrlObj);
-
-        Map<String, Object> userMessage = Map.of(
-                "role", "user",
-                "content", List.of(textContent, imageContent));
-
-        return Map.of(
-                "model", openAiModel,
-                "messages", List.of(userMessage),
-                "temperature", 0.0,
-                "max_tokens", 1200,
-                "response_format", Map.of("type", "json_object"));
-    }
-
-    private Map<String, Object> buildOpenAiRequestWithUrl(String imageUrl, String referenceObjectType) {
-        String prompt = buildPrompt(true, referenceObjectType);
-
-        Map<String, Object> textContent = Map.of("type", "text", "text", prompt);
-        Map<String, Object> imageUrlObj = Map.of("url", imageUrl);
-        Map<String, Object> imageContent = Map.of("type", "image_url", "image_url", imageUrlObj);
-
-        Map<String, Object> userMessage = Map.of(
-                "role", "user",
-                "content", List.of(textContent, imageContent));
-
-        return Map.of(
-                "model", openAiModel,
-                "messages", List.of(userMessage),
-                "temperature", 0.0,
-                "max_tokens", 1200,
-                "response_format", Map.of("type", "json_object"));
-    }
+//    private Map<String, Object> buildOpenAiRequestWithUrl(String imageUrl, String referenceObjectType) {
+//        String prompt = buildPrompt(true, referenceObjectType);
+//
+//        Map<String, Object> textContent = Map.of("type", "text", "text", prompt);
+//        Map<String, Object> imageUrlObj = Map.of("url", imageUrl);
+//        Map<String, Object> imageContent = Map.of("type", "image_url", "image_url", imageUrlObj);
+//
+//        Map<String, Object> userMessage = Map.of(
+//                "role", "user",
+//                "content", List.of(textContent, imageContent));
+//
+//        return Map.of(
+//                "model", openAiModel,
+//                "messages", List.of(userMessage),
+//                "temperature", 0.0,
+//                "max_tokens", 1200,
+//                "response_format", Map.of("type", "json_object"));
+//    }
 
     private String buildPrompt(boolean strict, String referenceObjectType) {
         // Determine instructions based on selected reference type
@@ -487,9 +562,9 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
         return result;
     }
 
-    private String extractContentFromResponse(String rawResponse) {
-        return jsonParser.extractContent(rawResponse);
-    }
+//    private String extractContentFromResponse(String rawResponse) {
+//        return jsonParser.extractContent(rawResponse);
+//    }
 
     private String extractFirstJsonObject(String raw) {
         return jsonParser.extractJsonObject(raw);

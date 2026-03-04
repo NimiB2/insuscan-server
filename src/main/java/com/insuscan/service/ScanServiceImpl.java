@@ -17,6 +17,7 @@ import com.insuscan.util.MealIdGenerator;
 import com.insuscan.util.PortionEstimator;
 import com.insuscan.util.NumberUtils;
 import com.insuscan.util.OpenAiJsonParser;
+import com.insuscan.util.GeminiApiClient;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,18 +40,47 @@ public class ScanServiceImpl implements ScanService {
     private final MealIdGenerator mealIdGenerator;
     private final PortionEstimator portionEstimator;
     private final ApiLogger apiLogger;
+//    private final OpenAiJsonParser jsonParser;
+
+//    private final WebClient openAiWebClient;
+//
+//    @Value("${openai.api.key:}")
+//    private String openAiApiKey;
+//
+   @Value("${spring.application.name:insuscan}")
+   private String systemId;
+    
     private final OpenAiJsonParser jsonParser;
-
-    private final WebClient openAiWebClient;
-
-    @Value("${openai.api.key:}")
-    private String openAiApiKey;
-
-    @Value("${spring.application.name:insuscan}")
-    private String systemId;
+    private final GeminiApiClient geminiClient;
 
     private static final float DEFAULT_PORTION_WEIGHT = 150f;
 
+//    public ScanServiceImpl(
+//            ImageAnalysisService imageAnalysisService,
+//            NutritionDataService nutritionDataService,
+//            SemanticMatchingService semanticMatchingService,
+//            MealRepository mealRepository,
+//            UserRepository userRepository,
+//            MealConverter mealConverter,
+//            MealIdGenerator mealIdGenerator,
+//            PortionEstimator portionEstimator,
+//            ApiLogger apiLogger,
+//            WebClient.Builder webClientBuilder,
+//            OpenAiJsonParser jsonParser) {
+//
+//        this.imageAnalysisService = imageAnalysisService;
+//        this.nutritionDataService = nutritionDataService;
+//        this.semanticMatchingService = semanticMatchingService;
+//        this.userRepository = userRepository;
+//        this.mealConverter = mealConverter;
+//        this.mealIdGenerator = mealIdGenerator;
+//        this.portionEstimator = portionEstimator;
+//        this.apiLogger = apiLogger;
+//        this.openAiWebClient = webClientBuilder
+//                .baseUrl("https://api.openai.com/v1")
+//                .build();
+//        this.jsonParser = jsonParser;
+//    }
     public ScanServiceImpl(
             ImageAnalysisService imageAnalysisService,
             NutritionDataService nutritionDataService,
@@ -61,7 +91,7 @@ public class ScanServiceImpl implements ScanService {
             MealIdGenerator mealIdGenerator,
             PortionEstimator portionEstimator,
             ApiLogger apiLogger,
-            WebClient.Builder webClientBuilder,
+            GeminiApiClient geminiClient,
             OpenAiJsonParser jsonParser) {
 
         this.imageAnalysisService = imageAnalysisService;
@@ -72,9 +102,7 @@ public class ScanServiceImpl implements ScanService {
         this.mealIdGenerator = mealIdGenerator;
         this.portionEstimator = portionEstimator;
         this.apiLogger = apiLogger;
-        this.openAiWebClient = webClientBuilder
-                .baseUrl("https://api.openai.com/v1")
-                .build();
+        this.geminiClient = geminiClient;
         this.jsonParser = jsonParser;
     }
 
@@ -578,6 +606,82 @@ public class ScanServiceImpl implements ScanService {
      * results,
      * just flags issues for the client to show the user.
      */
+//    private List<String> runFinalReview(String base64Image,
+//            List<MealEntity.FoodItem> foodItems,
+//            float totalCarbs) {
+//        if (base64Image == null || base64Image.isBlank() || foodItems.isEmpty()) {
+//            return List.of();
+//        }
+//
+//        try {
+//            // Build a summary of what we calculated
+//            StringBuilder summary = new StringBuilder();
+//            for (MealEntity.FoodItem item : foodItems) {
+//                summary.append(String.format("- %s: %.0fg, %.1fg carbs\n",
+//                        item.getName(), item.getQuantity(), item.getCarbs()));
+//            }
+//
+//            String prompt = String.format("""
+//                    You are a clinical nutrition reviewer for a diabetes app.
+//                    Look at this meal photo and compare it to the calculated results below.
+//
+//                    CALCULATED RESULTS:
+//                    %s
+//                    Total carbs: %.1fg
+//
+//                    REVIEW CHECKLIST:
+//                    1. Does the total weight per item seem reasonable for the visible portion size?
+//                    2. Are there any visible foods MISSING from the list?
+//                    3. Does total carbs seem realistic for this meal?
+//
+//                    If everything looks reasonable, return: { "ok": true, "warnings": [] }
+//                    If something is off, return: { "ok": false, "warnings": ["specific issue"] }
+//
+//                    Return STRICT JSON ONLY.
+//                    """, summary.toString(), totalCarbs);
+//
+//            Map<String, Object> textContent = Map.of("type", "text", "text", prompt);
+//            Map<String, Object> imageUrlObj = Map.of("url", "data:image/jpeg;base64," + base64Image);
+//            Map<String, Object> imageContent = Map.of("type", "image_url", "image_url", imageUrlObj);
+//
+//            Map<String, Object> requestBody = Map.of(
+//                    "model", "gpt-4o-mini",
+//                    "messages", List.of(
+//                            Map.of("role", "user", "content", List.of(textContent, imageContent))),
+//                    "temperature", 0.0,
+//                    "max_tokens", 300,
+//                    "response_format", Map.of("type", "json_object"));
+//
+//            // Reuse the same OpenAI WebClient (needs injection — see 8B)
+//            String response = openAiWebClient.post()
+//                    .uri("/chat/completions")
+//                    .header("Authorization", "Bearer " + openAiApiKey)
+//                    .header("Content-Type", "application/json")
+//                    .bodyValue(requestBody)
+//                    .retrieve()
+//                    .bodyToMono(String.class)
+//                    .block();
+//
+//            if (response != null) {
+//                JsonNode result = jsonParser.parseContent(response);
+//                if (result.has("warnings") && result.get("warnings").isArray()) {
+//                    List<String> warnings = new ArrayList<>();
+//                    for (JsonNode w : result.get("warnings")) {
+//                        warnings.add(w.asText());
+//                    }
+//                    if (!warnings.isEmpty()) {
+//                        log.warn("[FINAL_REVIEW] Issues found: {}", warnings);
+//                    }
+//                    return warnings;
+//                }
+//            }
+//        } catch (Exception e) {
+//            // Review is best-effort — never block the scan
+//            log.warn("[FINAL_REVIEW] Failed (non-blocking): {}", e.getMessage());
+//        }
+//        return List.of();
+//    }
+    
     private List<String> runFinalReview(String base64Image,
             List<MealEntity.FoodItem> foodItems,
             float totalCarbs) {
@@ -586,7 +690,6 @@ public class ScanServiceImpl implements ScanService {
         }
 
         try {
-            // Build a summary of what we calculated
             StringBuilder summary = new StringBuilder();
             for (MealEntity.FoodItem item : foodItems) {
                 summary.append(String.format("- %s: %.0fg, %.1fg carbs\n",
@@ -612,30 +715,11 @@ public class ScanServiceImpl implements ScanService {
                     Return STRICT JSON ONLY.
                     """, summary.toString(), totalCarbs);
 
-            Map<String, Object> textContent = Map.of("type", "text", "text", prompt);
-            Map<String, Object> imageUrlObj = Map.of("url", "data:image/jpeg;base64," + base64Image);
-            Map<String, Object> imageContent = Map.of("type", "image_url", "image_url", imageUrlObj);
+            String content = geminiClient.callFlashModelWithImage(prompt, base64Image);
 
-            Map<String, Object> requestBody = Map.of(
-                    "model", "gpt-4o-mini",
-                    "messages", List.of(
-                            Map.of("role", "user", "content", List.of(textContent, imageContent))),
-                    "temperature", 0.0,
-                    "max_tokens", 300,
-                    "response_format", Map.of("type", "json_object"));
-
-            // Reuse the same OpenAI WebClient (needs injection — see 8B)
-            String response = openAiWebClient.post()
-                    .uri("/chat/completions")
-                    .header("Authorization", "Bearer " + openAiApiKey)
-                    .header("Content-Type", "application/json")
-                    .bodyValue(requestBody)
-                    .retrieve()
-                    .bodyToMono(String.class)
-                    .block();
-
-            if (response != null) {
-                JsonNode result = jsonParser.parseContent(response);
+            if (content != null && !content.isBlank()) {
+                String json = jsonParser.extractJsonObject(content);
+                JsonNode result = new ObjectMapper().readTree(json);
                 if (result.has("warnings") && result.get("warnings").isArray()) {
                     List<String> warnings = new ArrayList<>();
                     for (JsonNode w : result.get("warnings")) {
@@ -648,7 +732,6 @@ public class ScanServiceImpl implements ScanService {
                 }
             }
         } catch (Exception e) {
-            // Review is best-effort — never block the scan
             log.warn("[FINAL_REVIEW] Failed (non-blocking): {}", e.getMessage());
         }
         return List.of();
@@ -661,6 +744,118 @@ public class ScanServiceImpl implements ScanService {
      *
      * Returns float[2] = { diameterCm, depthCm } or null if estimation fails.
      */
+//    private float[] estimateContainerDimensionsFromGpt(String imageBase64, String referenceObjectType,
+//            Float knownDiameterCm) {
+//        try {
+//            if (imageBase64 == null || imageBase64.isBlank()) {
+//                log.warn("[GPT-DIM] No image available for dimension estimation");
+//                return null;
+//            }
+//
+//            String scaleContext = "";
+//            if (knownDiameterCm != null && knownDiameterCm > 0) {
+//                scaleContext += String.format(
+//                        "\nSCALE ANCHOR: We already measured the container's OUTER DIAMETER as %.1f cm. Use this as your primary scale reference to calculate the depth.",
+//                        knownDiameterCm);
+//            }
+//
+//            if (referenceObjectType != null && !referenceObjectType.equalsIgnoreCase("NONE")) {
+//                scaleContext += "\nSYSTEM ALERT: Our local computer vision HAS ALREADY DETECTED a '"
+//                        + referenceObjectType
+//                        + "' in this specific image. It is definitely there. Search for it diligently and use it as your ground truth for scale.";
+//            }
+//
+//            String prompt = "You are an expert in estimating real-world physical dimensions from photographs. "
+//                    + "Your task: estimate the INNER diameter and depth of the plate, bowl, or container in this image.\n\n"
+//                    + "CONTEXT: " + scaleContext + "\n\n"
+//                    + "STEP 1 — Identify the container (Plate/Bowl) and its type. You MUST classify it as FLAT_PLATE, REGULAR_BOWL, or DEEP_BOWL.\n\n"
+//                    + "STEP 2 — Use the scale reference. "
+//                    + "If a SYSTEM ALERT is mentioned above, the object IS in the image. Use its known length (Card=8.5cm, Syringe/Pen=16cm) to measure the container.\n\n"
+//                    + "STEP 3 — Cross-validate with container type norms:\n"
+//                    + "- Flat dinner plate: ~24-26cm diameter, 1-2cm depth\n"
+//                    + "- Small/Salad plate: ~18-20cm diameter, 1-2cm depth\n"
+//                    + "- Regular bowl: ~14-16cm diameter, 4-5cm depth\n"
+//                    + "- Deep bowl/Pot: ~14-16cm diameter, 6-10cm depth\n\n"
+//                    + "IMPORTANT: Even if the image is slightly blurry or dark, do NOT return 0 and do not complain. Always provide your best professional estimate. Trust the SYSTEM ALERT for the presence of the scale object.\n\n"
+//                    + "Reply ONLY with this JSON object:\n"
+//                    + "{\n"
+//                    + "  \"referenceObjectFound\": \"name of object used for scale\",\n"
+//                    + "  \"diameterCm\": <number>,\n"
+//                    + "  \"depthCm\": <number>,\n"
+//                    + "  \"containerType\": \"FLAT_PLATE\" | \"REGULAR_BOWL\" | \"DEEP_BOWL\",\n"
+//                    + "  \"confidence\": \"low\" | \"medium\" | \"high\",\n"
+//                    + "  \"reasoning\": \"Explain how you found the reference object and used it to measure the container.\"\n"
+//                    + "}";
+//
+//            Map<String, Object> textContent = Map.of("type", "text", "text", prompt);
+//            Map<String, Object> imageUrlObj = Map.of("url", "data:image/jpeg;base64," + imageBase64);
+//            Map<String, Object> imageContent = Map.of("type", "image_url", "image_url", imageUrlObj);
+//
+//            Map<String, Object> userMessage = Map.of(
+//                    "role", "user",
+//                    "content", List.of(textContent, imageContent));
+//
+//            Map<String, Object> requestBody = Map.of(
+//                    "model", "gpt-4o-mini",
+//                    "messages", List.of(userMessage),
+//                    "temperature", 0.0,
+//                    "max_tokens", 500,
+//                    "response_format", Map.of("type", "json_object"));
+//
+//            long startTime = System.currentTimeMillis();
+//
+//            String response = openAiWebClient.post()
+//                    .uri("/chat/completions")
+//                    .header("Authorization", "Bearer " + openAiApiKey)
+//                    .header("Content-Type", "application/json")
+//                    .bodyValue(requestBody)
+//                    .retrieve()
+//                    .bodyToMono(String.class)
+//                    .block();
+//
+//            long elapsed = System.currentTimeMillis() - startTime;
+//
+//            if (response == null || response.isBlank()) {
+//                log.warn("[GPT-DIM] Empty response from OpenAI");
+//                return null;
+//            }
+//
+//            // Extract content from the response
+//            ObjectMapper mapper = new ObjectMapper();
+//            JsonNode root = mapper.readTree(response);
+//            String content = root.path("choices").path(0).path("message").path("content").asText();
+//
+//            if (content == null || content.isBlank()) {
+//                log.warn("[GPT-DIM] No content in OpenAI response");
+//                return null;
+//            }
+//
+//            JsonNode parsed = mapper.readTree(content);
+//            float diameter = (float) parsed.path("diameterCm").asDouble(0);
+//            float depth = (float) parsed.path("depthCm").asDouble(0);
+//            String confidence = parsed.path("confidence").asText("low");
+//            String reasoning = parsed.path("reasoning").asText("");
+//
+//            if (diameter <= 0 || depth <= 0) {
+//                log.warn("[GPT-DIM] Invalid dimensions: d={}, depth={}. Reasoning: {}", diameter, depth, reasoning);
+//                return null;
+//            }
+//
+//            // Sanity bounds
+//            diameter = Math.max(10f, Math.min(35f, diameter));
+//            depth = Math.max(0.5f, Math.min(15f, depth));
+//
+//            log.info("[GPT-DIM] Estimated in {}ms: d={}, depth={}, conf={}, reasoning='{}'",
+//                    elapsed, diameter, depth, confidence, reasoning);
+//
+//            return new float[] { diameter, depth };
+//
+//        } catch (Exception e) {
+//            log.error("[GPT-DIM] Critical error during dimension estimation: {}", e.getMessage());
+//            return null;
+//        }
+//    }
+    
     private float[] estimateContainerDimensionsFromGpt(String imageBase64, String referenceObjectType,
             Float knownDiameterCm) {
         try {
@@ -704,50 +899,19 @@ public class ScanServiceImpl implements ScanService {
                     + "  \"reasoning\": \"Explain how you found the reference object and used it to measure the container.\"\n"
                     + "}";
 
-            Map<String, Object> textContent = Map.of("type", "text", "text", prompt);
-            Map<String, Object> imageUrlObj = Map.of("url", "data:image/jpeg;base64," + imageBase64);
-            Map<String, Object> imageContent = Map.of("type", "image_url", "image_url", imageUrlObj);
-
-            Map<String, Object> userMessage = Map.of(
-                    "role", "user",
-                    "content", List.of(textContent, imageContent));
-
-            Map<String, Object> requestBody = Map.of(
-                    "model", "gpt-4o-mini",
-                    "messages", List.of(userMessage),
-                    "temperature", 0.0,
-                    "max_tokens", 500,
-                    "response_format", Map.of("type", "json_object"));
-
             long startTime = System.currentTimeMillis();
 
-            String response = openAiWebClient.post()
-                    .uri("/chat/completions")
-                    .header("Authorization", "Bearer " + openAiApiKey)
-                    .header("Content-Type", "application/json")
-                    .bodyValue(requestBody)
-                    .retrieve()
-                    .bodyToMono(String.class)
-                    .block();
+            String content = geminiClient.callVisionModel(prompt, imageBase64);
 
             long elapsed = System.currentTimeMillis() - startTime;
 
-            if (response == null || response.isBlank()) {
-                log.warn("[GPT-DIM] Empty response from OpenAI");
-                return null;
-            }
-
-            // Extract content from the response
-            ObjectMapper mapper = new ObjectMapper();
-            JsonNode root = mapper.readTree(response);
-            String content = root.path("choices").path(0).path("message").path("content").asText();
-
             if (content == null || content.isBlank()) {
-                log.warn("[GPT-DIM] No content in OpenAI response");
+                log.warn("[GPT-DIM] Empty response from Gemini");
                 return null;
             }
 
-            JsonNode parsed = mapper.readTree(content);
+            String json = jsonParser.extractJsonObject(content);
+            JsonNode parsed = new ObjectMapper().readTree(json);
             float diameter = (float) parsed.path("diameterCm").asDouble(0);
             float depth = (float) parsed.path("depthCm").asDouble(0);
             String confidence = parsed.path("confidence").asText("low");
@@ -758,7 +922,6 @@ public class ScanServiceImpl implements ScanService {
                 return null;
             }
 
-            // Sanity bounds
             diameter = Math.max(10f, Math.min(35f, diameter));
             depth = Math.max(0.5f, Math.min(15f, depth));
 

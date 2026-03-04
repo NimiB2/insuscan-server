@@ -6,12 +6,13 @@ import com.insuscan.boundary.FoodRecognitionResult;
 import com.insuscan.boundary.NutritionInfo;
 import com.insuscan.util.ApiLogger;
 import com.insuscan.util.OpenAiJsonParser;
+import com.insuscan.util.GeminiApiClient;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
+//import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.springframework.web.reactive.function.client.WebClient;
+//import org.springframework.web.reactive.function.client.WebClient;
 
 import java.util.List;
 import java.util.Map;
@@ -22,25 +23,16 @@ public class SemanticMatchingServiceImpl implements SemanticMatchingService {
 
     private static final Logger log = LoggerFactory.getLogger(SemanticMatchingServiceImpl.class);
 
-    private final WebClient webClient;
+    private final GeminiApiClient geminiClient;
     private final ObjectMapper objectMapper;
     private final ApiLogger apiLogger;
-
     private final OpenAiJsonParser jsonParser;
-    
-    @Value("${openai.api.key:}")
-    private String openAiApiKey;
 
-    @Value("${openai.model:gpt-4o-mini}")
-    private String openAiModel;
-
-    public SemanticMatchingServiceImpl(WebClient.Builder webClientBuilder,
+    public SemanticMatchingServiceImpl(GeminiApiClient geminiClient,
             ObjectMapper objectMapper,
             ApiLogger apiLogger,
             OpenAiJsonParser jsonParser) {
-        this.webClient = webClientBuilder
-                .baseUrl("https://api.openai.com/v1")
-                .build();
+        this.geminiClient = geminiClient;
         this.objectMapper = objectMapper;
         this.apiLogger = apiLogger;
         this.jsonParser = jsonParser;
@@ -60,26 +52,43 @@ public class SemanticMatchingServiceImpl implements SemanticMatchingService {
             return candidates.get(0).getFdcId();
         }
 
+//        apiLogger.openaiStart("SEMANTIC_JUDGE", candidates.size());
+//        long startTime = System.currentTimeMillis();
+//
+//        try {
+//        	// 1. Build the "Trial" (The Prompt)
+//            String prompt = buildJudgePrompt(visualTarget, candidates);
+//            Map<String, Object> requestBody = buildRequestBody(prompt, base64Image);
+//            
+//            // 2. Call the Judge (OpenAI)
+//            String response = webClient.post()
+//                    .uri("/chat/completions")
+//                    .header("Authorization", "Bearer " + openAiApiKey)
+//                    .header("Content-Type", "application/json")
+//                    .bodyValue(requestBody)
+//                    .retrieve()
+//                    .bodyToMono(String.class)
+//                    .block();
+//
+//            // 3. Parse the Verdict
+//            String bestFdcId = parseJudgeVerdict(response);
+//
+//            long elapsed = System.currentTimeMillis() - startTime;
+        
         apiLogger.openaiStart("SEMANTIC_JUDGE", candidates.size());
         long startTime = System.currentTimeMillis();
 
         try {
-        	// 1. Build the "Trial" (The Prompt)
             String prompt = buildJudgePrompt(visualTarget, candidates);
-            Map<String, Object> requestBody = buildRequestBody(prompt, base64Image);
-            
-            // 2. Call the Judge (OpenAI)
-            String response = webClient.post()
-                    .uri("/chat/completions")
-                    .header("Authorization", "Bearer " + openAiApiKey)
-                    .header("Content-Type", "application/json")
-                    .bodyValue(requestBody)
-                    .retrieve()
-                    .bodyToMono(String.class)
-                    .block();
 
-            // 3. Parse the Verdict
-            String bestFdcId = parseJudgeVerdict(response);
+            String content;
+            if (base64Image != null && !base64Image.isBlank()) {
+                content = geminiClient.callFlashModelWithImage(prompt, base64Image);
+            } else {
+                content = geminiClient.callFlashModel(prompt);
+            }
+
+            String bestFdcId = parseJudgeVerdictDirect(content);
 
             long elapsed = System.currentTimeMillis() - startTime;
             log.info("[JUDGE] Verdict: Selected ID {} for target '{}' (in {}ms)", bestFdcId, visualTarget.getName(),
@@ -139,38 +148,54 @@ public class SemanticMatchingServiceImpl implements SemanticMatchingService {
                 state);
     }
 
-    private Map<String, Object> buildRequestBody(String prompt, String base64Image) {
-        // Build user message content — text only, or text + image
-        Object userContent;
-        if (base64Image != null && !base64Image.isBlank()) {
-            // Send image so the Judge can visually verify the match
-            Map<String, Object> textPart = Map.of("type", "text", "text", prompt);
-            Map<String, Object> imageUrl = Map.of("url", "data:image/jpeg;base64," + base64Image);
-            Map<String, Object> imagePart = Map.of("type", "image_url", "image_url", imageUrl);
-            userContent = List.of(textPart, imagePart);
-        } else {
-            // Fallback: text-only (still works, just less accurate)
-            userContent = prompt;
+//    private Map<String, Object> buildRequestBody(String prompt, String base64Image) {
+//        // Build user message content — text only, or text + image
+//        Object userContent;
+//        if (base64Image != null && !base64Image.isBlank()) {
+//            // Send image so the Judge can visually verify the match
+//            Map<String, Object> textPart = Map.of("type", "text", "text", prompt);
+//            Map<String, Object> imageUrl = Map.of("url", "data:image/jpeg;base64," + base64Image);
+//            Map<String, Object> imagePart = Map.of("type", "image_url", "image_url", imageUrl);
+//            userContent = List.of(textPart, imagePart);
+//        } else {
+//            // Fallback: text-only (still works, just less accurate)
+//            userContent = prompt;
+//        }
+//
+//        return Map.of(
+//                "model", openAiModel,
+//                "messages", List.of(
+//                        Map.of("role", "system", "content", "You are a JSON-only data matching engine."),
+//                        Map.of("role", "user", "content", userContent)),
+//                "temperature", 0.0,
+//                "response_format", Map.of("type", "json_object")
+//        );
+//    }
+
+//    private String parseJudgeVerdict(String jsonResponse) {
+//        try {
+//            JsonNode result = jsonParser.parseContent(jsonResponse);
+//            if (result.has("best_match_id")) {
+//                return result.get("best_match_id").asText();
+//            }
+//        } catch (Exception e) {
+//            log.error("Failed to parse judge response", e);
+//        }
+//        return null;
+//    }
+    
+    private String parseJudgeVerdictDirect(String content) {
+        if (content == null || content.isBlank()) {
+            return null;
         }
-
-        return Map.of(
-                "model", openAiModel,
-                "messages", List.of(
-                        Map.of("role", "system", "content", "You are a JSON-only data matching engine."),
-                        Map.of("role", "user", "content", userContent)),
-                "temperature", 0.0,
-                "response_format", Map.of("type", "json_object")
-        );
-    }
-
-    private String parseJudgeVerdict(String jsonResponse) {
         try {
-            JsonNode result = jsonParser.parseContent(jsonResponse);
+            String json = jsonParser.extractJsonObject(content);
+            JsonNode result = objectMapper.readTree(json);
             if (result.has("best_match_id")) {
                 return result.get("best_match_id").asText();
             }
         } catch (Exception e) {
-            log.error("Failed to parse judge response", e);
+            log.error("[JUDGE] Failed to parse verdict: {}", e.getMessage());
         }
         return null;
     }

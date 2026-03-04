@@ -9,8 +9,11 @@ import org.springframework.boot.CommandLineRunner;
 
 @SpringBootApplication
 public class Application {
-	@Value("${openai.api.key}")
-    private String openAiKey;
+//	@Value("${openai.api.key}")
+//    private String openAiKey;
+	
+	@Value("${gemini.api.key}")
+    private String geminiKey;
 	
 	@Value("${insuscan.usda.api.key}")
 	private String usdaApiKey;
@@ -25,6 +28,8 @@ public class Application {
 //        return args -> {
 //            System.out.println("=======================================");
 //
+//  			// Gemini
+//  			if (geminiKey != null && !geminiKey.isEmpty()) {
 //            // OpenAI
 //            if (openAiKey != null && !openAiKey.isEmpty()) {
 //                System.out.println("✅ OpenAI Key loaded successfully!");

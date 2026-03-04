@@ -5,12 +5,14 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.insuscan.boundary.ChatParseRequest;
 import com.insuscan.boundary.ChatParseResponse;
 import com.insuscan.util.OpenAiJsonParser;
+import com.insuscan.util.GeminiApiClient;
+
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
+//import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.springframework.web.reactive.function.client.WebClient;
+//import org.springframework.web.reactive.function.client.WebClient;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -21,26 +23,22 @@ public class ChatParseServiceImpl implements ChatParseService {
 
 	private static final Logger log = LoggerFactory.getLogger(ChatParseServiceImpl.class);
 
-	private final WebClient webClient;
+	private final GeminiApiClient geminiClient;
 	private final ObjectMapper objectMapper;
 	private final OpenAiJsonParser jsonParser;
 
-	@Value("${openai.api.key:}")
-	private String openAiApiKey;
-
-	@Value("${openai.model:gpt-4o-mini}")
-	private String openAiModel;
-
-	public ChatParseServiceImpl(WebClient.Builder webClientBuilder, ObjectMapper objectMapper,
+	public ChatParseServiceImpl(GeminiApiClient geminiClient, ObjectMapper objectMapper,
 			OpenAiJsonParser jsonParser) {
-		this.webClient = webClientBuilder.baseUrl("https://api.openai.com/v1").build();
+		this.geminiClient = geminiClient;
 		this.objectMapper = objectMapper;
 		this.jsonParser = jsonParser;
 	}
 
 	@Override
 	public boolean isAvailable() {
-		return openAiApiKey != null && !openAiApiKey.isBlank();
+//		return openAiApiKey != null && !openAiApiKey.isBlank();
+		return geminiClient.isServiceAvailable();
+
 	}
 
 	@Override
@@ -53,25 +51,36 @@ public class ChatParseServiceImpl implements ChatParseService {
 		long startTime = System.currentTimeMillis();
 		log.info("[CHAT-PARSE] Parsing: '{}' (state={})", request.getText(), request.getState());
 
+//		try {
+//			String prompt = buildPrompt(request.getText(), request.getState());
+//
+//			Map<String, Object> body = Map.of(
+//                    "model", openAiModel,
+//                    "messages", List.of(
+//                            Map.of("role", "system", "content", SYSTEM_PROMPT),
+//                            Map.of("role", "user", "content", prompt)),
+//                    "temperature", 0.2,
+//                    "response_format", Map.of("type", "json_object"));
+//
+//			String response = webClient.post().uri("/chat/completions")
+//					.header("Authorization", "Bearer " + openAiApiKey).header("Content-Type", "application/json")
+//					.bodyValue(body).retrieve().bodyToMono(String.class).block();
+//
+//			long elapsed = System.currentTimeMillis() - startTime;
+//			log.info("[CHAT-PARSE] Response received in {}ms", elapsed);
+//
+//			return parseResponse(response);
+//
+//		} catch (Exception e) {
 		try {
 			String prompt = buildPrompt(request.getText(), request.getState());
 
-			Map<String, Object> body = Map.of(
-                    "model", openAiModel,
-                    "messages", List.of(
-                            Map.of("role", "system", "content", SYSTEM_PROMPT),
-                            Map.of("role", "user", "content", prompt)),
-                    "temperature", 0.2,
-                    "response_format", Map.of("type", "json_object"));
-
-			String response = webClient.post().uri("/chat/completions")
-					.header("Authorization", "Bearer " + openAiApiKey).header("Content-Type", "application/json")
-					.bodyValue(body).retrieve().bodyToMono(String.class).block();
+			String content = geminiClient.callFlashModelWithSystem(SYSTEM_PROMPT, prompt);
 
 			long elapsed = System.currentTimeMillis() - startTime;
 			log.info("[CHAT-PARSE] Response received in {}ms", elapsed);
 
-			return parseResponse(response);
+			return parseResponseDirect(content);
 
 		} catch (Exception e) {
 			log.error("[CHAT-PARSE] Error: {}", e.getMessage());
@@ -138,15 +147,70 @@ public class ChatParseServiceImpl implements ChatParseService {
 
 	// ===== RESPONSE PARSING =====
 
-	private ChatParseResponse parseResponse(String rawResponse) {
+//	private ChatParseResponse parseResponse(String rawResponse) {
+//		try {
+//			JsonNode parsed = jsonParser.parseContent(rawResponse);
+//
+//			ChatParseResponse response = new ChatParseResponse();
+//			response.setAction(parsed.has("action") ? parsed.get("action").asText() : "unknown");
+//			response.setMessage(parsed.has("message") ? parsed.get("message").asText() : "");
+//
+//			// Parse food items
+//			if ("add_food".equals(response.getAction()) && parsed.has("items") && parsed.get("items").isArray()) {
+//				List<ChatParseResponse.FoodEntry> items = new ArrayList<>();
+//				for (JsonNode itemNode : parsed.get("items")) {
+//					ChatParseResponse.FoodEntry entry = new ChatParseResponse.FoodEntry();
+//					entry.setName(itemNode.has("name") ? itemNode.get("name").asText() : "Unknown");
+//					entry.setQuantity(itemNode.has("quantity") ? itemNode.get("quantity").asInt() : 1);
+//					entry.setEstimatedCarbsGrams(
+//							itemNode.has("estimatedCarbsGrams") ? (float) itemNode.get("estimatedCarbsGrams").asDouble()
+//									: 0f);
+//					items.add(entry);
+//				}
+//				response.setItems(items);
+//			}
+//
+//			// Parse glucose
+//			if ("set_glucose".equals(response.getAction()) && parsed.has("glucose")) {
+//				response.setGlucose(parsed.get("glucose").asInt());
+//			}
+//
+//			// Parse activity
+//			if ("set_activity".equals(response.getAction()) && parsed.has("activity")) {
+//				response.setActivity(parsed.get("activity").asText());
+//			}
+//
+//			// Parse medical params
+//			if ("set_medical_params".equals(response.getAction())) {
+//				if (parsed.has("icr"))
+//					response.setIcr(parsed.get("icr").asDouble());
+//				if (parsed.has("isf"))
+//					response.setIsf(parsed.get("isf").asDouble());
+//				if (parsed.has("targetGlucose"))
+//					response.setTargetGlucose(parsed.get("targetGlucose").asInt());
+//			}
+//
+//			log.info("[CHAT-PARSE] Parsed action='{}', message='{}'", response.getAction(), response.getMessage());
+//			return response;
+//
+//		} catch (Exception e) {
+//			log.error("[CHAT-PARSE] Failed to parse response: {}", e.getMessage());
+//			return fallbackResponse("Error parsing response");
+//		}
+//	}
+	
+	private ChatParseResponse parseResponseDirect(String content) {
+		if (content == null || content.isBlank()) {
+			return fallbackResponse("Empty AI response");
+		}
 		try {
-			JsonNode parsed = jsonParser.parseContent(rawResponse);
+			String json = jsonParser.extractJsonObject(content);
+			JsonNode parsed = objectMapper.readTree(json);
 
 			ChatParseResponse response = new ChatParseResponse();
 			response.setAction(parsed.has("action") ? parsed.get("action").asText() : "unknown");
 			response.setMessage(parsed.has("message") ? parsed.get("message").asText() : "");
 
-			// Parse food items
 			if ("add_food".equals(response.getAction()) && parsed.has("items") && parsed.get("items").isArray()) {
 				List<ChatParseResponse.FoodEntry> items = new ArrayList<>();
 				for (JsonNode itemNode : parsed.get("items")) {
@@ -154,38 +218,31 @@ public class ChatParseServiceImpl implements ChatParseService {
 					entry.setName(itemNode.has("name") ? itemNode.get("name").asText() : "Unknown");
 					entry.setQuantity(itemNode.has("quantity") ? itemNode.get("quantity").asInt() : 1);
 					entry.setEstimatedCarbsGrams(
-							itemNode.has("estimatedCarbsGrams") ? (float) itemNode.get("estimatedCarbsGrams").asDouble()
-									: 0f);
+							itemNode.has("estimatedCarbsGrams") ? (float) itemNode.get("estimatedCarbsGrams").asDouble() : 0f);
 					items.add(entry);
 				}
 				response.setItems(items);
 			}
 
-			// Parse glucose
 			if ("set_glucose".equals(response.getAction()) && parsed.has("glucose")) {
 				response.setGlucose(parsed.get("glucose").asInt());
 			}
 
-			// Parse activity
 			if ("set_activity".equals(response.getAction()) && parsed.has("activity")) {
 				response.setActivity(parsed.get("activity").asText());
 			}
 
-			// Parse medical params
 			if ("set_medical_params".equals(response.getAction())) {
-				if (parsed.has("icr"))
-					response.setIcr(parsed.get("icr").asDouble());
-				if (parsed.has("isf"))
-					response.setIsf(parsed.get("isf").asDouble());
-				if (parsed.has("targetGlucose"))
-					response.setTargetGlucose(parsed.get("targetGlucose").asInt());
+				if (parsed.has("icr")) response.setIcr(parsed.get("icr").asDouble());
+				if (parsed.has("isf")) response.setIsf(parsed.get("isf").asDouble());
+				if (parsed.has("targetGlucose")) response.setTargetGlucose(parsed.get("targetGlucose").asInt());
 			}
 
 			log.info("[CHAT-PARSE] Parsed action='{}', message='{}'", response.getAction(), response.getMessage());
 			return response;
 
 		} catch (Exception e) {
-			log.error("[CHAT-PARSE] Failed to parse response: {}", e.getMessage());
+			log.error("[CHAT-PARSE] Failed to parse: {}", e.getMessage());
 			return fallbackResponse("Error parsing response");
 		}
 	}
