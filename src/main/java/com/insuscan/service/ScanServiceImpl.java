@@ -18,12 +18,12 @@ import com.insuscan.util.PortionEstimator;
 import com.insuscan.util.NumberUtils;
 import com.insuscan.util.OpenAiJsonParser;
 import com.insuscan.util.GeminiApiClient;
+import com.insuscan.util.OpenAiApiClient;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.springframework.web.reactive.function.client.WebClient;
 
 import java.util.*;
 
@@ -40,47 +40,20 @@ public class ScanServiceImpl implements ScanService {
     private final MealIdGenerator mealIdGenerator;
     private final PortionEstimator portionEstimator;
     private final ApiLogger apiLogger;
-//    private final OpenAiJsonParser jsonParser;
-
-//    private final WebClient openAiWebClient;
-//
-//    @Value("${openai.api.key:}")
-//    private String openAiApiKey;
-//
-   @Value("${spring.application.name:insuscan}")
-   private String systemId;
-    
     private final OpenAiJsonParser jsonParser;
     private final GeminiApiClient geminiClient;
+    private final OpenAiApiClient openAiClient;
+
+    @Value("${spring.application.name:insuscan}")
+    private String systemId;
 
     private static final float DEFAULT_PORTION_WEIGHT = 150f;
 
-//    public ScanServiceImpl(
-//            ImageAnalysisService imageAnalysisService,
-//            NutritionDataService nutritionDataService,
-//            SemanticMatchingService semanticMatchingService,
-//            MealRepository mealRepository,
-//            UserRepository userRepository,
-//            MealConverter mealConverter,
-//            MealIdGenerator mealIdGenerator,
-//            PortionEstimator portionEstimator,
-//            ApiLogger apiLogger,
-//            WebClient.Builder webClientBuilder,
-//            OpenAiJsonParser jsonParser) {
-//
-//        this.imageAnalysisService = imageAnalysisService;
-//        this.nutritionDataService = nutritionDataService;
-//        this.semanticMatchingService = semanticMatchingService;
-//        this.userRepository = userRepository;
-//        this.mealConverter = mealConverter;
-//        this.mealIdGenerator = mealIdGenerator;
-//        this.portionEstimator = portionEstimator;
-//        this.apiLogger = apiLogger;
-//        this.openAiWebClient = webClientBuilder
-//                .baseUrl("https://api.openai.com/v1")
-//                .build();
-//        this.jsonParser = jsonParser;
-//    }
+    // Preserving OpenAI fields for future use
+    // private final WebClient openAiWebClient;
+    // @Value("${openai.api.key:}")
+    // private String openAiApiKey;
+
     public ScanServiceImpl(
             ImageAnalysisService imageAnalysisService,
             NutritionDataService nutritionDataService,
@@ -92,6 +65,7 @@ public class ScanServiceImpl implements ScanService {
             PortionEstimator portionEstimator,
             ApiLogger apiLogger,
             GeminiApiClient geminiClient,
+            OpenAiApiClient openAiClient,
             OpenAiJsonParser jsonParser) {
 
         this.imageAnalysisService = imageAnalysisService;
@@ -103,6 +77,7 @@ public class ScanServiceImpl implements ScanService {
         this.portionEstimator = portionEstimator;
         this.apiLogger = apiLogger;
         this.geminiClient = geminiClient;
+        this.openAiClient = openAiClient;
         this.jsonParser = jsonParser;
     }
 
@@ -175,7 +150,7 @@ public class ScanServiceImpl implements ScanService {
         boolean hasPlateGeometry = request.getPlateDiameterCm() != null
                 && request.getPlateDiameterCm() > 0;
 
-        // Check if GPT provided coverage data for at least one food
+        // Check if Gemini provided coverage data for at least one food
         boolean hasCoverageData = visionResult.getDetectedFoods().stream()
                 .anyMatch(f -> f.getCoveragePercent() != null && f.getCoveragePercent() > 0);
 
@@ -211,20 +186,22 @@ public class ScanServiceImpl implements ScanService {
                 log.info("[v3] Diameter provided ({}cm) but depth missing — triggering visual estimation",
                         resolvedPlateDiameterCm);
 
-                float[] gptEstimate = estimateContainerDimensionsFromGpt(request.getImageBase64(),
+                float[] geminiEstimate = estimateContainerDimensionsFromGemini(request.getImageBase64(),
                         request.getReferenceObjectType(),
-                        request.getPlateDiameterCm());
+                        request.getPlateDiameterCm(),
+                        request.getSideImageBase64());
 
-                if (gptEstimate != null) {
-                    resolvedPlateDepthCm = gptEstimate[1];
+                if (geminiEstimate != null) {
+                    resolvedPlateDepthCm = geminiEstimate[1];
                     resolvedContainerType = resolvedPlateDepthCm > 4.5f ? "DEEP_BOWL"
                             : resolvedPlateDepthCm > 2.0f ? "REGULAR_BOWL" : "FLAT_PLATE";
-                    log.info("[v3-GPT] Estimated depth: {}cm (type={})", resolvedPlateDepthCm, resolvedContainerType);
+                    log.info("[v3-GEMINI] Estimated depth: {}cm (type={})", resolvedPlateDepthCm,
+                            resolvedContainerType);
                 } else {
-                    // Absolute fallback: no history, no GPT, just defaults
+                    // Absolute fallback: no history, no Gemini, just defaults
                     resolvedPlateDepthCm = 1.5f;
                     resolvedContainerType = "FLAT_PLATE";
-                    log.warn("[v3-DEFAULT] GPT estimation failed, using default depth (1.5cm)");
+                    log.warn("[v3-DEFAULT] Gemini estimation failed, using default depth (1.5cm)");
                 }
                 plateDepthCm = resolvedPlateDepthCm;
                 isBowl = resolvedContainerType.toUpperCase().contains("BOWL");
@@ -235,15 +212,16 @@ public class ScanServiceImpl implements ScanService {
                     ? visionResult.getDetectedContainerType()
                     : (request.getContainerType() != null) ? request.getContainerType() : "FLAT_PLATE";
 
-            log.info("[v3] No geometry provided for container type '{}' — asking GPT to estimate",
+            log.info("[v3] No geometry provided for container type '{}' — asking Gemini to estimate",
                     resolvedContainerType);
 
-            float[] gptEstimate = estimateContainerDimensionsFromGpt(request.getImageBase64(),
-                    request.getReferenceObjectType(), null);
+            float[] geminiEstimate = estimateContainerDimensionsFromGemini(request.getImageBase64(),
+                    request.getReferenceObjectType(), null,
+                    request.getSideImageBase64());
 
-            if (gptEstimate != null) {
-                resolvedPlateDiameterCm = gptEstimate[0];
-                resolvedPlateDepthCm = gptEstimate[1];
+            if (geminiEstimate != null) {
+                resolvedPlateDiameterCm = geminiEstimate[0];
+                resolvedPlateDepthCm = geminiEstimate[1];
                 resolvedContainerType = resolvedPlateDepthCm > 4.5f ? "DEEP_BOWL"
                         : resolvedPlateDepthCm > 2.0f ? "REGULAR_BOWL" : "FLAT_PLATE";
 
@@ -253,12 +231,12 @@ public class ScanServiceImpl implements ScanService {
                 hasPlateGeometry = true;
                 isBowl = resolvedContainerType.toUpperCase().contains("BOWL");
 
-                log.info("[v3-GPT] Full visual estimation: d={}cm, depth={}cm, type={}",
+                log.info("[v3-GEMINI] Full visual estimation: d={}cm, depth={}cm, type={}",
                         String.format("%.1f", resolvedPlateDiameterCm),
                         String.format("%.1f", resolvedPlateDepthCm), resolvedContainerType);
             } else {
                 // Absolute last resort
-                log.warn("[v3-FALLBACK] GPT estimation failed, using safe defaults for {}", resolvedContainerType);
+                log.warn("[v3-FALLBACK] Gemini estimation failed, using safe defaults for {}", resolvedContainerType);
                 resolvedPlateDiameterCm = 25.0f;
                 resolvedPlateDepthCm = resolvedContainerType.toUpperCase().contains("BOWL") ? 4.5f : 1.5f;
                 float radiusCm = resolvedPlateDiameterCm / 2.0f;
@@ -293,10 +271,10 @@ public class ScanServiceImpl implements ScanService {
         for (FoodRecognitionResult.RecognizedFoodItem detected : visionResult.getDetectedFoods()) {
             NutritionInfo finalNutrition = null;
             List<NutritionInfo> candidates = new ArrayList<>();
-            List<String> gptTerms = detected.getUsdaSearchTerms();
+            List<String> geminiTerms = detected.getUsdaSearchTerms();
 
-            if (gptTerms != null && !gptTerms.isEmpty()) {
-                for (String term : gptTerms) {
+            if (geminiTerms != null && !geminiTerms.isEmpty()) {
+                for (String term : geminiTerms) {
                     candidates = nutritionDataService.searchCandidates(term);
                     if (!candidates.isEmpty())
                         break;
@@ -355,7 +333,7 @@ public class ScanServiceImpl implements ScanService {
                 float volumeCm3 = foodAreaCm2 * heightCm * shapeFactor * bowlFactor;
                 float density = resolveDensity(detected.getName(), finalNutrition);
                 itemWeight = volumeCm3 * density;
-                weightSource = "GPT_PHYSICS";
+                weightSource = "GEMINI_PHYSICS";
             } else {
                 itemWeight = (distributedPortions != null) ? distributedPortions.get(detected.getName()) : null;
                 if (itemWeight == null) {
@@ -535,7 +513,7 @@ public class ScanServiceImpl implements ScanService {
      * A paraboloid bowl holds ~50% of the equivalent cylinder,
      * a hemisphere ~67%. We use intermediate values.
      *
-     * Only affects volume — NOT fill level (GPT handles that separately
+     * Only affects volume — NOT fill level (Gemini handles that separately
      * via coverage_percent and container_fill_percent).
      */
     private float getBowlGeometryFactor(String containerType) {
@@ -554,7 +532,7 @@ public class ScanServiceImpl implements ScanService {
     }
 
     /**
-     * Maps GPT height category to estimated height in cm.
+     * Maps Gemini height category to estimated height in cm.
      * Used when ARCore depth is not available.
      */
     private float heightCategoryToCm(String category) {
@@ -600,88 +578,91 @@ public class ScanServiceImpl implements ScanService {
     }
 
     /**
-     * Final sanity check — asks GPT to review the calculated results against the
+     * Final sanity check — asks Gemini to review the calculated results against the
      * image.
      * Returns a list of warnings if something looks off. Does NOT change the
      * results,
      * just flags issues for the client to show the user.
      */
-//    private List<String> runFinalReview(String base64Image,
-//            List<MealEntity.FoodItem> foodItems,
-//            float totalCarbs) {
-//        if (base64Image == null || base64Image.isBlank() || foodItems.isEmpty()) {
-//            return List.of();
-//        }
-//
-//        try {
-//            // Build a summary of what we calculated
-//            StringBuilder summary = new StringBuilder();
-//            for (MealEntity.FoodItem item : foodItems) {
-//                summary.append(String.format("- %s: %.0fg, %.1fg carbs\n",
-//                        item.getName(), item.getQuantity(), item.getCarbs()));
-//            }
-//
-//            String prompt = String.format("""
-//                    You are a clinical nutrition reviewer for a diabetes app.
-//                    Look at this meal photo and compare it to the calculated results below.
-//
-//                    CALCULATED RESULTS:
-//                    %s
-//                    Total carbs: %.1fg
-//
-//                    REVIEW CHECKLIST:
-//                    1. Does the total weight per item seem reasonable for the visible portion size?
-//                    2. Are there any visible foods MISSING from the list?
-//                    3. Does total carbs seem realistic for this meal?
-//
-//                    If everything looks reasonable, return: { "ok": true, "warnings": [] }
-//                    If something is off, return: { "ok": false, "warnings": ["specific issue"] }
-//
-//                    Return STRICT JSON ONLY.
-//                    """, summary.toString(), totalCarbs);
-//
-//            Map<String, Object> textContent = Map.of("type", "text", "text", prompt);
-//            Map<String, Object> imageUrlObj = Map.of("url", "data:image/jpeg;base64," + base64Image);
-//            Map<String, Object> imageContent = Map.of("type", "image_url", "image_url", imageUrlObj);
-//
-//            Map<String, Object> requestBody = Map.of(
-//                    "model", "gpt-4o-mini",
-//                    "messages", List.of(
-//                            Map.of("role", "user", "content", List.of(textContent, imageContent))),
-//                    "temperature", 0.0,
-//                    "max_tokens", 300,
-//                    "response_format", Map.of("type", "json_object"));
-//
-//            // Reuse the same OpenAI WebClient (needs injection — see 8B)
-//            String response = openAiWebClient.post()
-//                    .uri("/chat/completions")
-//                    .header("Authorization", "Bearer " + openAiApiKey)
-//                    .header("Content-Type", "application/json")
-//                    .bodyValue(requestBody)
-//                    .retrieve()
-//                    .bodyToMono(String.class)
-//                    .block();
-//
-//            if (response != null) {
-//                JsonNode result = jsonParser.parseContent(response);
-//                if (result.has("warnings") && result.get("warnings").isArray()) {
-//                    List<String> warnings = new ArrayList<>();
-//                    for (JsonNode w : result.get("warnings")) {
-//                        warnings.add(w.asText());
-//                    }
-//                    if (!warnings.isEmpty()) {
-//                        log.warn("[FINAL_REVIEW] Issues found: {}", warnings);
-//                    }
-//                    return warnings;
-//                }
-//            }
-//        } catch (Exception e) {
-//            // Review is best-effort — never block the scan
-//            log.warn("[FINAL_REVIEW] Failed (non-blocking): {}", e.getMessage());
-//        }
-//        return List.of();
-//    }
-    
+    // private List<String> runFinalReview(String base64Image,
+    // List<MealEntity.FoodItem> foodItems,
+    // float totalCarbs) {
+    // if (base64Image == null || base64Image.isBlank() || foodItems.isEmpty()) {
+    // return List.of();
+    // }
+    //
+    // try {
+    // // Build a summary of what we calculated
+    // StringBuilder summary = new StringBuilder();
+    // for (MealEntity.FoodItem item : foodItems) {
+    // summary.append(String.format("- %s: %.0fg, %.1fg carbs\n",
+    // item.getName(), item.getQuantity(), item.getCarbs()));
+    // }
+    //
+    // String prompt = String.format("""
+    // You are a clinical nutrition reviewer for a diabetes app.
+    // Look at this meal photo and compare it to the calculated results below.
+    //
+    // CALCULATED RESULTS:
+    // %s
+    // Total carbs: %.1fg
+    //
+    // REVIEW CHECKLIST:
+    // 1. Does the total weight per item seem reasonable for the visible portion
+    // size?
+    // 2. Are there any visible foods MISSING from the list?
+    // 3. Does total carbs seem realistic for this meal?
+    //
+    // If everything looks reasonable, return: { "ok": true, "warnings": [] }
+    // If something is off, return: { "ok": false, "warnings": ["specific issue"] }
+    //
+    // Return STRICT JSON ONLY.
+    // """, summary.toString(), totalCarbs);
+    //
+    // Map<String, Object> textContent = Map.of("type", "text", "text", prompt);
+    // Map<String, Object> imageUrlObj = Map.of("url", "data:image/jpeg;base64," +
+    // base64Image);
+    // Map<String, Object> imageContent = Map.of("type", "image_url", "image_url",
+    // imageUrlObj);
+    //
+    // Map<String, Object> requestBody = Map.of(
+    // "model", "gpt-4o-mini",
+    // "messages", List.of(
+    // Map.of("role", "user", "content", List.of(textContent, imageContent))),
+    // "temperature", 0.0,
+    // "max_tokens", 300,
+    // "response_format", Map.of("type", "json_object"));
+    //
+    // // Reuse the same OpenAI WebClient (needs injection — see 8B)
+    // String response = openAiWebClient.post()
+    // .uri("/chat/completions")
+    // .header("Authorization", "Bearer " + openAiApiKey)
+    // .header("Content-Type", "application/json")
+    // .bodyValue(requestBody)
+    // .retrieve()
+    // .bodyToMono(String.class)
+    // .block();
+    //
+    // if (response != null) {
+    // JsonNode result = jsonParser.parseContent(response);
+    // if (result.has("warnings") && result.get("warnings").isArray()) {
+    // List<String> warnings = new ArrayList<>();
+    // for (JsonNode w : result.get("warnings")) {
+    // warnings.add(w.asText());
+    // }
+    // if (!warnings.isEmpty()) {
+    // log.warn("[FINAL_REVIEW] Issues found: {}", warnings);
+    // }
+    // return warnings;
+    // }
+    // }
+    // } catch (Exception e) {
+    // // Review is best-effort — never block the scan
+    // log.warn("[FINAL_REVIEW] Failed (non-blocking): {}", e.getMessage());
+    // }
+    // return List.of();
+    // }
+
     private List<String> runFinalReview(String base64Image,
             List<MealEntity.FoodItem> foodItems,
             float totalCarbs) {
@@ -738,177 +719,221 @@ public class ScanServiceImpl implements ScanService {
     }
 
     /**
-     * GPT-based container dimension estimation.
+     * Gemini-based container dimension estimation.
      * When ARCore is unavailable and there's no user history, ask OpenAI to
      * visually estimate the plate/bowl dimensions from the image.
      *
      * Returns float[2] = { diameterCm, depthCm } or null if estimation fails.
      */
-//    private float[] estimateContainerDimensionsFromGpt(String imageBase64, String referenceObjectType,
-//            Float knownDiameterCm) {
-//        try {
-//            if (imageBase64 == null || imageBase64.isBlank()) {
-//                log.warn("[GPT-DIM] No image available for dimension estimation");
-//                return null;
-//            }
-//
-//            String scaleContext = "";
-//            if (knownDiameterCm != null && knownDiameterCm > 0) {
-//                scaleContext += String.format(
-//                        "\nSCALE ANCHOR: We already measured the container's OUTER DIAMETER as %.1f cm. Use this as your primary scale reference to calculate the depth.",
-//                        knownDiameterCm);
-//            }
-//
-//            if (referenceObjectType != null && !referenceObjectType.equalsIgnoreCase("NONE")) {
-//                scaleContext += "\nSYSTEM ALERT: Our local computer vision HAS ALREADY DETECTED a '"
-//                        + referenceObjectType
-//                        + "' in this specific image. It is definitely there. Search for it diligently and use it as your ground truth for scale.";
-//            }
-//
-//            String prompt = "You are an expert in estimating real-world physical dimensions from photographs. "
-//                    + "Your task: estimate the INNER diameter and depth of the plate, bowl, or container in this image.\n\n"
-//                    + "CONTEXT: " + scaleContext + "\n\n"
-//                    + "STEP 1 — Identify the container (Plate/Bowl) and its type. You MUST classify it as FLAT_PLATE, REGULAR_BOWL, or DEEP_BOWL.\n\n"
-//                    + "STEP 2 — Use the scale reference. "
-//                    + "If a SYSTEM ALERT is mentioned above, the object IS in the image. Use its known length (Card=8.5cm, Syringe/Pen=16cm) to measure the container.\n\n"
-//                    + "STEP 3 — Cross-validate with container type norms:\n"
-//                    + "- Flat dinner plate: ~24-26cm diameter, 1-2cm depth\n"
-//                    + "- Small/Salad plate: ~18-20cm diameter, 1-2cm depth\n"
-//                    + "- Regular bowl: ~14-16cm diameter, 4-5cm depth\n"
-//                    + "- Deep bowl/Pot: ~14-16cm diameter, 6-10cm depth\n\n"
-//                    + "IMPORTANT: Even if the image is slightly blurry or dark, do NOT return 0 and do not complain. Always provide your best professional estimate. Trust the SYSTEM ALERT for the presence of the scale object.\n\n"
-//                    + "Reply ONLY with this JSON object:\n"
-//                    + "{\n"
-//                    + "  \"referenceObjectFound\": \"name of object used for scale\",\n"
-//                    + "  \"diameterCm\": <number>,\n"
-//                    + "  \"depthCm\": <number>,\n"
-//                    + "  \"containerType\": \"FLAT_PLATE\" | \"REGULAR_BOWL\" | \"DEEP_BOWL\",\n"
-//                    + "  \"confidence\": \"low\" | \"medium\" | \"high\",\n"
-//                    + "  \"reasoning\": \"Explain how you found the reference object and used it to measure the container.\"\n"
-//                    + "}";
-//
-//            Map<String, Object> textContent = Map.of("type", "text", "text", prompt);
-//            Map<String, Object> imageUrlObj = Map.of("url", "data:image/jpeg;base64," + imageBase64);
-//            Map<String, Object> imageContent = Map.of("type", "image_url", "image_url", imageUrlObj);
-//
-//            Map<String, Object> userMessage = Map.of(
-//                    "role", "user",
-//                    "content", List.of(textContent, imageContent));
-//
-//            Map<String, Object> requestBody = Map.of(
-//                    "model", "gpt-4o-mini",
-//                    "messages", List.of(userMessage),
-//                    "temperature", 0.0,
-//                    "max_tokens", 500,
-//                    "response_format", Map.of("type", "json_object"));
-//
-//            long startTime = System.currentTimeMillis();
-//
-//            String response = openAiWebClient.post()
-//                    .uri("/chat/completions")
-//                    .header("Authorization", "Bearer " + openAiApiKey)
-//                    .header("Content-Type", "application/json")
-//                    .bodyValue(requestBody)
-//                    .retrieve()
-//                    .bodyToMono(String.class)
-//                    .block();
-//
-//            long elapsed = System.currentTimeMillis() - startTime;
-//
-//            if (response == null || response.isBlank()) {
-//                log.warn("[GPT-DIM] Empty response from OpenAI");
-//                return null;
-//            }
-//
-//            // Extract content from the response
-//            ObjectMapper mapper = new ObjectMapper();
-//            JsonNode root = mapper.readTree(response);
-//            String content = root.path("choices").path(0).path("message").path("content").asText();
-//
-//            if (content == null || content.isBlank()) {
-//                log.warn("[GPT-DIM] No content in OpenAI response");
-//                return null;
-//            }
-//
-//            JsonNode parsed = mapper.readTree(content);
-//            float diameter = (float) parsed.path("diameterCm").asDouble(0);
-//            float depth = (float) parsed.path("depthCm").asDouble(0);
-//            String confidence = parsed.path("confidence").asText("low");
-//            String reasoning = parsed.path("reasoning").asText("");
-//
-//            if (diameter <= 0 || depth <= 0) {
-//                log.warn("[GPT-DIM] Invalid dimensions: d={}, depth={}. Reasoning: {}", diameter, depth, reasoning);
-//                return null;
-//            }
-//
-//            // Sanity bounds
-//            diameter = Math.max(10f, Math.min(35f, diameter));
-//            depth = Math.max(0.5f, Math.min(15f, depth));
-//
-//            log.info("[GPT-DIM] Estimated in {}ms: d={}, depth={}, conf={}, reasoning='{}'",
-//                    elapsed, diameter, depth, confidence, reasoning);
-//
-//            return new float[] { diameter, depth };
-//
-//        } catch (Exception e) {
-//            log.error("[GPT-DIM] Critical error during dimension estimation: {}", e.getMessage());
-//            return null;
-//        }
-//    }
-    
-    private float[] estimateContainerDimensionsFromGpt(String imageBase64, String referenceObjectType,
-            Float knownDiameterCm) {
+    // private float[] estimateContainerDimensionsFromGpt(String imageBase64, String
+    // referenceObjectType,
+    // Float knownDiameterCm) {
+    // try {
+    // if (imageBase64 == null || imageBase64.isBlank()) {
+    // log.warn("[GPT-DIM] No image available for dimension estimation");
+    // return null;
+    // }
+    //
+    // String scaleContext = "";
+    // if (knownDiameterCm != null && knownDiameterCm > 0) {
+    // scaleContext += String.format(
+    // "\nSCALE ANCHOR: We already measured the container's OUTER DIAMETER as %.1f
+    // cm. Use this as your primary scale reference to calculate the depth.",
+    // knownDiameterCm);
+    // }
+    //
+    // if (referenceObjectType != null &&
+    // !referenceObjectType.equalsIgnoreCase("NONE")) {
+    // scaleContext += "\nSYSTEM ALERT: Our local computer vision HAS ALREADY
+    // DETECTED a '"
+    // + referenceObjectType
+    // + "' in this specific image. It is definitely there. Search for it diligently
+    // and use it as your ground truth for scale.";
+    // }
+    //
+    // String prompt = "You are an expert in estimating real-world physical
+    // dimensions from photographs. "
+    // + "Your task: estimate the INNER diameter and depth of the plate, bowl, or
+    // container in this image.\n\n"
+    // + "CONTEXT: " + scaleContext + "\n\n"
+    // + "STEP 1 — Identify the container (Plate/Bowl) and its type. You MUST
+    // classify it as FLAT_PLATE, REGULAR_BOWL, or DEEP_BOWL.\n\n"
+    // + "STEP 2 — Use the scale reference. "
+    // + "If a SYSTEM ALERT is mentioned above, the object IS in the image. Use its
+    // known length (Card=8.5cm, Syringe/Pen=16cm) to measure the container.\n\n"
+    // + "STEP 3 — Cross-validate with container type norms:\n"
+    // + "- Flat dinner plate: ~24-26cm diameter, 1-2cm depth\n"
+    // + "- Small/Salad plate: ~18-20cm diameter, 1-2cm depth\n"
+    // + "- Regular bowl: ~14-16cm diameter, 4-5cm depth\n"
+    // + "- Deep bowl/Pot: ~14-16cm diameter, 6-10cm depth\n\n"
+    // + "IMPORTANT: Even if the image is slightly blurry or dark, do NOT return 0
+    // and do not complain. Always provide your best professional estimate. Trust
+    // the SYSTEM ALERT for the presence of the scale object.\n\n"
+    // + "Reply ONLY with this JSON object:\n"
+    // + "{\n"
+    // + " \"referenceObjectFound\": \"name of object used for scale\",\n"
+    // + " \"diameterCm\": <number>,\n"
+    // + " \"depthCm\": <number>,\n"
+    // + " \"containerType\": \"FLAT_PLATE\" | \"REGULAR_BOWL\" | \"DEEP_BOWL\",\n"
+    // + " \"confidence\": \"low\" | \"medium\" | \"high\",\n"
+    // + " \"reasoning\": \"Explain how you found the reference object and used it
+    // to measure the container.\"\n"
+    // + "}";
+    //
+    // Map<String, Object> textContent = Map.of("type", "text", "text", prompt);
+    // Map<String, Object> imageUrlObj = Map.of("url", "data:image/jpeg;base64," +
+    // imageBase64);
+    // Map<String, Object> imageContent = Map.of("type", "image_url", "image_url",
+    // imageUrlObj);
+    //
+    // Map<String, Object> userMessage = Map.of(
+    // "role", "user",
+    // "content", List.of(textContent, imageContent));
+    //
+    // Map<String, Object> requestBody = Map.of(
+    // "model", "gpt-4o-mini",
+    // "messages", List.of(userMessage),
+    // "temperature", 0.0,
+    // "max_tokens", 500,
+    // "response_format", Map.of("type", "json_object"));
+    //
+    // long startTime = System.currentTimeMillis();
+    //
+    // String response = openAiWebClient.post()
+    // .uri("/chat/completions")
+    // .header("Authorization", "Bearer " + openAiApiKey)
+    // .header("Content-Type", "application/json")
+    // .bodyValue(requestBody)
+    // .retrieve()
+    // .bodyToMono(String.class)
+    // .block();
+    //
+    // long elapsed = System.currentTimeMillis() - startTime;
+    //
+    // if (response == null || response.isBlank()) {
+    // log.warn("[GPT-DIM] Empty response from OpenAI");
+    // return null;
+    // }
+    //
+    // // Extract content from the response
+    // ObjectMapper mapper = new ObjectMapper();
+    // JsonNode root = mapper.readTree(response);
+    // String content =
+    // root.path("choices").path(0).path("message").path("content").asText();
+    //
+    // if (content == null || content.isBlank()) {
+    // log.warn("[GPT-DIM] No content in OpenAI response");
+    // return null;
+    // }
+    //
+    // JsonNode parsed = mapper.readTree(content);
+    // float diameter = (float) parsed.path("diameterCm").asDouble(0);
+    // float depth = (float) parsed.path("depthCm").asDouble(0);
+    // String confidence = parsed.path("confidence").asText("low");
+    // String reasoning = parsed.path("reasoning").asText("");
+    //
+    // if (diameter <= 0 || depth <= 0) {
+    // log.warn("[GPT-DIM] Invalid dimensions: d={}, depth={}. Reasoning: {}",
+    // diameter, depth, reasoning);
+    // return null;
+    // }
+    //
+    // // Sanity bounds
+    // diameter = Math.max(10f, Math.min(35f, diameter));
+    // depth = Math.max(0.5f, Math.min(15f, depth));
+    //
+    // log.info("[GPT-DIM] Estimated in {}ms: d={}, depth={}, conf={},
+    // reasoning='{}'",
+    // elapsed, diameter, depth, confidence, reasoning);
+    //
+    // return new float[] { diameter, depth };
+    //
+    // } catch (Exception e) {
+    // log.error("[GPT-DIM] Critical error during dimension estimation: {}",
+    // e.getMessage());
+    // return null;
+    // }
+    // }
+
+    private float[] estimateContainerDimensionsFromGemini(String imageBase64, String referenceObjectType,
+            Float knownDiameterCm, String sideImageBase64) {
         try {
             if (imageBase64 == null || imageBase64.isBlank()) {
-                log.warn("[GPT-DIM] No image available for dimension estimation");
+                log.warn("[GEMINI-DIM] No image available for dimension estimation");
                 return null;
             }
+
+            boolean hasSideImage = sideImageBase64 != null && !sideImageBase64.isBlank();
 
             String scaleContext = "";
             if (knownDiameterCm != null && knownDiameterCm > 0) {
                 scaleContext += String.format(
-                        "\nSCALE ANCHOR: We already measured the container's OUTER DIAMETER as %.1f cm. Use this as your primary scale reference to calculate the depth.",
+                        "\nARCORE ESTIMATE: Our device's camera estimated the container's OUTER DIAMETER as %.1f cm. IMPORTANT: This estimate might be inaccurate. Verify this against the physical Reference Object (Card/Syringe) provided in the image. If the reference object suggests a different scale, ignore ARCore and trust the reference object.",
                         knownDiameterCm);
             }
 
             if (referenceObjectType != null && !referenceObjectType.equalsIgnoreCase("NONE")) {
-                scaleContext += "\nSYSTEM ALERT: Our local computer vision HAS ALREADY DETECTED a '"
+                scaleContext += "\nCRITICAL SCALE ANCHOR: Our automated detector HAS FOUND a '"
                         + referenceObjectType
-                        + "' in this specific image. It is definitely there. Search for it diligently and use it as your ground truth for scale.";
+                        + "' in this image. THIS IS THE GROUND TRUTH FOR SCALE. Use its standard dimensions (Card=8.56cm, Syringe/Pen=16cm) to measure the container.";
             }
 
-            String prompt = "You are an expert in estimating real-world physical dimensions from photographs. "
-                    + "Your task: estimate the INNER diameter and depth of the plate, bowl, or container in this image.\n\n"
-                    + "CONTEXT: " + scaleContext + "\n\n"
-                    + "STEP 1 — Identify the container (Plate/Bowl) and its type. You MUST classify it as FLAT_PLATE, REGULAR_BOWL, or DEEP_BOWL.\n\n"
-                    + "STEP 2 — Use the scale reference. "
-                    + "If a SYSTEM ALERT is mentioned above, the object IS in the image. Use its known length (Card=8.5cm, Syringe/Pen=16cm) to measure the container.\n\n"
-                    + "STEP 3 — Cross-validate with container type norms:\n"
-                    + "- Flat dinner plate: ~24-26cm diameter, 1-2cm depth\n"
-                    + "- Small/Salad plate: ~18-20cm diameter, 1-2cm depth\n"
-                    + "- Regular bowl: ~14-16cm diameter, 4-5cm depth\n"
-                    + "- Deep bowl/Pot: ~14-16cm diameter, 6-10cm depth\n\n"
-                    + "IMPORTANT: Even if the image is slightly blurry or dark, do NOT return 0 and do not complain. Always provide your best professional estimate. Trust the SYSTEM ALERT for the presence of the scale object.\n\n"
-                    + "Reply ONLY with this JSON object:\n"
+            if (hasSideImage) {
+                scaleContext += "\nMULTI-VIEW DATA: You are receiving exactly TWO images."
+                        + "\nIMAGE 1: Top-down view. Use this exclusively for measuring the INNER DIAMETER."
+                        + "\nIMAGE 2: Side-angle view. Use this exclusively for measuring the INNER DEPTH/HEIGHT."
+                        + "\nCRITICAL: Do not guess depth from Image 1. You MUST look at Image 2 to determine the height of the container.";
+            }
+
+            String prompt = "You are a senior physical volume estimation AI.\n"
+                    + "Task: Estimate the INNER diameter and INNER depth of the food container in this image.\n\n"
+                    + "SCALE & VIEW DATA: " + scaleContext + "\n\n"
+                    + "INSTRUCTIONS:\n"
+                    + "1. Locate the Reference Object (Card is 8.56cm long, Syringe is 16cm). THIS IS YOUR PRIMARY SCALE GROUND TRUTH.\n"
+                    + "2. Map pixels to centimeters based on the Reference Object.\n"
+                    + "3. Measure the container INNER diameter (at the rim) and INNER depth (bottom to top).\n"
+                    + "4. If an ARCORE ESTIMATE is provided, use it only as a hint. If it contradicts the reference object, IGNORE IT.\n\n"
+                    + "PHYSICAL CONSTRAINTS & RULES:\n"
+                    + "- INNER DEPTH VS OUTER RIM: You must measure the inner depth where the food actually sits, do not measure the outside height of the rim which can look taller from an angle.\n"
+                    + "- FLAT PLATE HEURISTIC: If the container looks like a standard flat dinner plate, its depth MUST be firmly restricted to between 0.5 cm and 2.0 cm. Do not exceed 2.0 cm for plates.\n\n"
+                    + "STRICT CLASSIFICATION:\n"
+                    + "- If depth is <= 2.0 cm -> containerType MUST be \"FLAT_PLATE\".\n"
+                    + "- If depth is between 2.1 cm and 4.5 cm -> containerType MUST be \"REGULAR_BOWL\".\n"
+                    + "- If depth is > 4.5 cm -> containerType MUST be \"DEEP_BOWL\".\n\n"
+                    + "5. Return only a JSON object.\n\n"
+                    + "JSON format:\n"
                     + "{\n"
-                    + "  \"referenceObjectFound\": \"name of object used for scale\",\n"
-                    + "  \"diameterCm\": <number>,\n"
-                    + "  \"depthCm\": <number>,\n"
-                    + "  \"containerType\": \"FLAT_PLATE\" | \"REGULAR_BOWL\" | \"DEEP_BOWL\",\n"
-                    + "  \"confidence\": \"low\" | \"medium\" | \"high\",\n"
-                    + "  \"reasoning\": \"Explain how you found the reference object and used it to measure the container.\"\n"
+                    + "  \"referenceObjectFound\": \"string (name of object used)\",\n"
+                    + "  \"diameterCm\": float,\n"
+                    + "  \"depthCm\": float,\n"
+                    + "  \"containerType\": \"FLAT_PLATE\"|\"REGULAR_BOWL\"|\"DEEP_BOWL\",\n"
+                    + "  \"confidence\": \"low\"|\"medium\"|\"high\",\n"
+                    + "  \"reasoning\": \"Explain your logic, mentioning how you compared the reference object to the container and if you found the side view useful.\"\n"
                     + "}";
 
             long startTime = System.currentTimeMillis();
 
-            String content = geminiClient.callVisionModel(prompt, imageBase64);
+            int combinedImageSize = (imageBase64 != null ? imageBase64.length() : 0)
+                    + (sideImageBase64 != null ? sideImageBase64.length() : 0);
+            apiLogger.openaiStart("gpt-4o-mini", combinedImageSize);
+
+            String content;
+            String model = openAiClient.getModel(); // Default to gpt-4o-mini
+            if (hasSideImage) {
+                log.info("[OPENAI-DIM] Using side image and model {} for improved depth estimation", model);
+                content = openAiClient.callModelWithMultipleImages(model, prompt, imageBase64, sideImageBase64);
+            } else {
+                content = openAiClient.callChatModel(model, prompt, imageBase64, null, 0.0);
+            }
 
             long elapsed = System.currentTimeMillis() - startTime;
 
             if (content == null || content.isBlank()) {
-                log.warn("[GPT-DIM] Empty response from Gemini");
+                log.warn("[GEMINI-DIM] Empty response from Gemini");
                 return null;
             }
+
+            log.info("[GEMINI-DIM] Raw dimension response: {}", content);
 
             String json = jsonParser.extractJsonObject(content);
             JsonNode parsed = new ObjectMapper().readTree(json);
@@ -918,20 +943,20 @@ public class ScanServiceImpl implements ScanService {
             String reasoning = parsed.path("reasoning").asText("");
 
             if (diameter <= 0 || depth <= 0) {
-                log.warn("[GPT-DIM] Invalid dimensions: d={}, depth={}. Reasoning: {}", diameter, depth, reasoning);
+                log.warn("[GEMINI-DIM] Invalid dimensions: d={}, depth={}. Reasoning: {}", diameter, depth, reasoning);
                 return null;
             }
 
             diameter = Math.max(10f, Math.min(35f, diameter));
             depth = Math.max(0.5f, Math.min(15f, depth));
 
-            log.info("[GPT-DIM] Estimated in {}ms: d={}, depth={}, conf={}, reasoning='{}'",
+            log.info("[GEMINI-DIM] Estimated in {}ms: d={}, depth={}, conf={}, reasoning='{}'",
                     elapsed, diameter, depth, confidence, reasoning);
 
             return new float[] { diameter, depth };
 
         } catch (Exception e) {
-            log.error("[GPT-DIM] Critical error during dimension estimation: {}", e.getMessage());
+            log.error("[GEMINI-DIM] Critical error during dimension estimation: {}", e.getMessage());
             return null;
         }
     }

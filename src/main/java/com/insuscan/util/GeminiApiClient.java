@@ -33,8 +33,8 @@ public class GeminiApiClient {
     private String flashModel;
 
     public GeminiApiClient(WebClient.Builder webClientBuilder,
-                           ObjectMapper objectMapper,
-                           ApiLogger apiLogger) {
+            ObjectMapper objectMapper,
+            ApiLogger apiLogger) {
         this.webClient = webClientBuilder
                 .baseUrl(GEMINI_BASE_URL)
                 .build();
@@ -48,7 +48,8 @@ public class GeminiApiClient {
 
     public String getKeyPreview() {
         return (geminiApiKey != null && geminiApiKey.length() > 5)
-                ? geminiApiKey.substring(0, 5) : "N/A";
+                ? geminiApiKey.substring(0, 5)
+                : "N/A";
     }
 
     public String getVisionModel() {
@@ -75,8 +76,51 @@ public class GeminiApiClient {
         return callModel(flashModel, userPrompt, null, systemPrompt, 0.2);
     }
 
-    private String callModel(String model, String prompt, String base64Image,
-                             String systemPrompt, double temperature) {
+    /**
+     * Call vision model with two images (top-down + side view).
+     * Used for improved depth estimation when ARCore is unavailable.
+     */
+    public String callVisionModelWithMultipleImages(String prompt, String base64Image1, String base64Image2) {
+        return callModelWithMultipleImages(visionModel, prompt, base64Image1, base64Image2);
+    }
+
+    public String callModelWithMultipleImages(String model, String prompt, String base64Image1, String base64Image2) {
+        Map<String, Object> requestBody = buildMultiImageRequestBody(prompt, base64Image1, base64Image2);
+
+        String uri = String.format("/models/%s:generateContent?key=%s", model, geminiApiKey);
+
+        apiLogger.openaiStart(model, prompt.length());
+        long startTime = System.currentTimeMillis();
+
+        try {
+            String response = webClient.post()
+                    .uri(uri)
+                    .header("Content-Type", "application/json")
+                    .bodyValue(requestBody)
+                    .retrieve()
+                    .onStatus(status -> status.is4xxClientError() || status.is5xxServerError(),
+                            clientResponse -> clientResponse.bodyToMono(String.class)
+                                    .map(body -> new RuntimeException("Gemini API error: " + body)))
+                    .bodyToMono(String.class)
+                    .block();
+
+            long elapsed = System.currentTimeMillis() - startTime;
+            apiLogger.openaiResponseReceived(elapsed, response != null ? response.length() : 0);
+
+            return extractTextFromResponse(response);
+
+        } catch (RuntimeException e) {
+            long elapsed = System.currentTimeMillis() - startTime;
+            apiLogger.openaiError(e.getMessage(), e.getClass().getSimpleName());
+            if (e.getMessage() != null && e.getMessage().contains("429")) {
+                throw new RuntimeException("Gemini rate limit exceeded. Please wait.");
+            }
+            throw e;
+        }
+    }
+
+    public String callModel(String model, String prompt, String base64Image,
+            String systemPrompt, double temperature) {
         Map<String, Object> requestBody = buildRequestBody(prompt, base64Image, systemPrompt, temperature);
 
         String uri = String.format("/models/%s:generateContent?key=%s", model, geminiApiKey);
@@ -111,8 +155,44 @@ public class GeminiApiClient {
         }
     }
 
+    private Map<String, Object> buildMultiImageRequestBody(String prompt, String base64Image1, String base64Image2) {
+        List<Map<String, Object>> parts = new ArrayList<>();
+
+        parts.add(Map.of("text", prompt));
+
+        // First image (top-down view)
+        if (base64Image1 != null && !base64Image1.isBlank()) {
+            parts.add(Map.of(
+                    "inlineData", Map.of(
+                            "mimeType", "image/jpeg",
+                            "data", base64Image1)));
+        }
+
+        // Second image (side view)
+        if (base64Image2 != null && !base64Image2.isBlank()) {
+            parts.add(Map.of(
+                    "inlineData", Map.of(
+                            "mimeType", "image/jpeg",
+                            "data", base64Image2)));
+        }
+
+        List<Map<String, Object>> contents = new ArrayList<>();
+        contents.add(Map.of("parts", parts));
+
+        Map<String, Object> generationConfig = new HashMap<>();
+        generationConfig.put("temperature", 0.0);
+        generationConfig.put("maxOutputTokens", 2048);
+        generationConfig.put("responseMimeType", "application/json");
+
+        Map<String, Object> body = new HashMap<>();
+        body.put("contents", contents);
+        body.put("generationConfig", generationConfig);
+
+        return body;
+    }
+
     private Map<String, Object> buildRequestBody(String prompt, String base64Image,
-                                                  String systemPrompt, double temperature) {
+            String systemPrompt, double temperature) {
         List<Map<String, Object>> parts = new ArrayList<>();
 
         parts.add(Map.of("text", prompt));
@@ -121,9 +201,7 @@ public class GeminiApiClient {
             parts.add(Map.of(
                     "inlineData", Map.of(
                             "mimeType", "image/jpeg",
-                            "data", base64Image
-                    )
-            ));
+                            "data", base64Image)));
         }
 
         List<Map<String, Object>> contents = new ArrayList<>();
@@ -140,8 +218,7 @@ public class GeminiApiClient {
 
         if (systemPrompt != null && !systemPrompt.isBlank()) {
             body.put("systemInstruction", Map.of(
-                    "parts", List.of(Map.of("text", systemPrompt))
-            ));
+                    "parts", List.of(Map.of("text", systemPrompt))));
         }
 
         return body;
@@ -168,7 +245,13 @@ public class GeminiApiClient {
                 if (content != null) {
                     JsonNode responseParts = content.get("parts");
                     if (responseParts != null && responseParts.isArray() && !responseParts.isEmpty()) {
-                        String text = responseParts.get(0).get("text").asText();
+                        StringBuilder fullText = new StringBuilder();
+                        for (JsonNode part : responseParts) {
+                            if (part.has("text")) {
+                                fullText.append(part.get("text").asText());
+                            }
+                        }
+                        String text = fullText.toString();
                         log.debug("[GEMINI] Extracted response length: {} chars", text.length());
                         return text;
                     }

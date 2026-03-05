@@ -230,20 +230,20 @@ public class ApiLogger {
     
      public void openaiStart(String model, int imageSizeBytes) {
         logBoth("--------------------------------------------------------------------------------", (Object[])null);
-        logBoth("[OPENAI] REQUEST", (Object[])null);
+        logBoth("[GEMINI] REQUEST", (Object[])null);
         logBoth("--------------------------------------------------------------------------------", (Object[])null);
-        logBoth("[OPENAI] Model       : {}", model);
-        logBoth("[OPENAI] Image Size  : {} KB", imageSizeBytes / 1024);
-        logBoth("[OPENAI] Status      : Sending to OpenAI...", (Object[])null);
+        logBoth("[GEMINI] Model       : {}", model);
+        logBoth("[GEMINI] Image Size  : {} KB", imageSizeBytes / 1024);
+        logBoth("[GEMINI] Status      : Sending to Gemini...", (Object[])null);
     }
 
     public void openaiCacheHit(String imageHash) {
-        logBoth("[OPENAI] CACHE HIT - returning cached result (hash: {}...)", 
+        logBoth("[GEMINI] CACHE HIT - returning cached result (hash: {}...)", 
             imageHash.substring(0, Math.min(8, imageHash.length())));
     }
     
     public void openaiSuccess(int foodCount, long totalTimeMs) {
-        logBoth("[OPENAI] SUCCESS - {} foods detected in {}ms", foodCount, totalTimeMs);
+        logBoth("[GEMINI] SUCCESS - {} foods detected in {}ms", foodCount, totalTimeMs);
     }
     
     public void usdaStart(String foodName, String normalizedName, List<String> searchTerms) {
@@ -265,11 +265,11 @@ public class ApiLogger {
     }
     
     public void openaiError(String stage, String message) {
-        logBoth("[OPENAI] ❌ ERROR during {}: {}", stage, message);
+        logBoth("[GEMINI] ❌ ERROR during {}: {}", stage, message);
     }
 
     public void openaiResponseReceived(long durationMs, int tokenCount) {
-        logBoth("[OPENAI] Response received in {}ms. Tokens: {}", durationMs, tokenCount > 0 ? tokenCount : "unknown");
+        logBoth("[GEMINI] Response received in {}ms. Tokens: {}", durationMs, tokenCount > 0 ? tokenCount : "unknown");
     }
 
     public void openaiRawResponse(String partialResponse) {
@@ -282,11 +282,11 @@ public class ApiLogger {
     // we can use a wildcard or just Object and toString() it, but the error said "List<RecognizedFoodItem>".
     // Let's assume the caller passes something that can be stringified.
     public void openaiParsedFoods(List<?> foods) {
-        logBoth("[OPENAI] Parsed {} items: {}", foods != null ? foods.size() : 0, foods);
+        logBoth("[GEMINI] Parsed {} items: {}", foods != null ? foods.size() : 0, foods);
     }
 
     public void openaiRetry(String reason) {
-        logBoth("[OPENAI] ⚠️ Retrying request. Reason: {}", reason);
+        logBoth("[GEMINI] ⚠️ Retrying request. Reason: {}", reason);
     }
 
     public void apiKeyStatus(String service, boolean present, String preview) {

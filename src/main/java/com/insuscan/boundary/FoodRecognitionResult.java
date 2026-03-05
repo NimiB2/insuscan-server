@@ -10,7 +10,7 @@ public class FoodRecognitionResult {
     private boolean success;
     private String errorMessage;
 
-    // v2: Container analysis from GPT vision
+    // v2: Container analysis from Gemini vision
     private Float containerFillPercent; // 0-100, how full the container appears
     private String detectedContainerType; // FLAT_PLATE, REGULAR_BOWL, DEEP_BOWL
 
@@ -31,24 +31,24 @@ public class FoodRecognitionResult {
         private List<String> riskFlags; // Warnings: "HIDDEN_SUGAR", "HIGH_FAT", "SAUCE_DETECTED"
         private boolean requiresValidation; // True if AI is unsure or detects high risk
 
-     // How much of the plate this food covers (0-100%)
-     // Server uses this to calculate area from plate dimensions
-     private Float coveragePercent;
+        // How much of the plate this food covers (0-100%)
+        // Server uses this to calculate area from plate dimensions
+        private Float coveragePercent;
 
-     // Height profile: FLAT, LOW_PILE, MEDIUM_PILE, HIGH_PILE
-     // Server maps this to cm when ARCore isn't available
-     private String heightCategory;
+        // Height profile: FLAT, LOW_PILE, MEDIUM_PILE, HIGH_PILE
+        // Server maps this to cm when ARCore isn't available
+        private String heightCategory;
 
-     // 2-3 USDA-friendly search terms from GPT (replaces FoodNameNormalizer)
-     // Ordered from most specific to most general
-     private List<String> usdaSearchTerms;
-      
-     // bounding box (% of full image) for client-side GrabCut
-     private Float bboxXPct;
-     private Float bboxYPct;
-     private Float bboxWPct;
-     private Float bboxHPct;
-     
+        // 2-3 USDA-friendly search terms from Gemini (replaces FoodNameNormalizer)
+        // Ordered from most specific to most general
+        private List<String> usdaSearchTerms;
+
+        // bounding box (% of full image) for client-side GrabCut
+        private Float bboxXPct;
+        private Float bboxYPct;
+        private Float bboxWPct;
+        private Float bboxHPct;
+
         public RecognizedFoodItem() {
             this.riskFlags = new ArrayList<>();
             this.usdaSearchTerms = new ArrayList<>();
@@ -67,7 +67,7 @@ public class FoodRecognitionResult {
 
         // --- Getters & Setters ---
 
-     // bbox for client-side GrabCut
+        // bbox for client-side GrabCut
         public void setBoundingBox(Float xPct, Float yPct, Float wPct, Float hPct) {
             this.bboxXPct = xPct;
             this.bboxYPct = yPct;
@@ -75,11 +75,22 @@ public class FoodRecognitionResult {
             this.bboxHPct = hPct;
         }
 
-        public Float getBboxXPct() { return bboxXPct; }
-        public Float getBboxYPct() { return bboxYPct; }
-        public Float getBboxWPct() { return bboxWPct; }
-        public Float getBboxHPct() { return bboxHPct; }
-        
+        public Float getBboxXPct() {
+            return bboxXPct;
+        }
+
+        public Float getBboxYPct() {
+            return bboxYPct;
+        }
+
+        public Float getBboxWPct() {
+            return bboxWPct;
+        }
+
+        public Float getBboxHPct() {
+            return bboxHPct;
+        }
+
         public String getName() {
             return name;
         }
@@ -135,7 +146,7 @@ public class FoodRecognitionResult {
         public void setRequiresValidation(boolean requiresValidation) {
             this.requiresValidation = requiresValidation;
         }
-        
+
         public Float getCoveragePercent() {
             return coveragePercent;
         }

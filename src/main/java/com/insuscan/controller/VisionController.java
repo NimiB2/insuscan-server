@@ -105,7 +105,10 @@ public class VisionController {
             @Parameter(description = "Plate/bowl depth in cm") @RequestParam(value = "plateDepthCm", required = false) Float plateDepthCm,
             @Parameter(description = "Container type: FLAT_PLATE, REGULAR_BOWL, DEEP_BOWL") @RequestParam(value = "containerType", required = false) String containerType,
             @Parameter(description = "Pixel-to-cm ratio from reference object") @RequestParam(value = "pixelToCmRatio", required = false) Float pixelToCmRatio,
-            @Parameter(description = "JSON-encoded per-food region measurements") @RequestParam(value = "foodRegionsJson", required = false) String foodRegionsJson)
+            @Parameter(description = "JSON-encoded per-food region measurements") @RequestParam(value = "foodRegionsJson", required = false) String foodRegionsJson,
+
+            // ── Side image for depth estimation fallback ──
+            @Parameter(description = "Optional side-angle photo for better depth estimation") @RequestPart(value = "sideFile", required = false) MultipartFile sideFile)
             throws IOException {
 
         if (file == null || file.isEmpty()) {
@@ -126,6 +129,13 @@ public class VisionController {
         request.setContainerType(containerType);
         request.setPixelToCmRatio(pixelToCmRatio);
         request.setFoodRegionsJson(foodRegionsJson);
+
+        // Side image for depth estimation
+        if (sideFile != null && !sideFile.isEmpty()) {
+            String sideBase64 = Base64.getEncoder().encodeToString(sideFile.getBytes());
+            request.setSideImageBase64(sideBase64);
+            log.info("Side image provided for depth estimation ({} KB)", sideFile.getSize() / 1024);
+        }
 
         UserIdBoundary userIdBoundary = new UserIdBoundary();
         userIdBoundary.setSystemId(systemId);

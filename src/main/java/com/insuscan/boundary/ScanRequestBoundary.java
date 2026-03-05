@@ -112,11 +112,23 @@ public class ScanRequestBoundary {
         this.foodRegionsJson = foodRegionsJson;
     }
 
+    // ── Side image for depth estimation fallback ──
+    private String sideImageBase64; // Optional side-angle photo for better depth estimation
+
+    public String getSideImageBase64() {
+        return sideImageBase64;
+    }
+
+    public void setSideImageBase64(String sideImageBase64) {
+        this.sideImageBase64 = sideImageBase64;
+    }
+
     @Override
     public String toString() {
         return "ScanRequestBoundary{" +
                 "userId=" + userId +
                 ", hasImage=" + (imageBase64 != null || imageUrl != null) +
+                ", hasSideImage=" + (sideImageBase64 != null) +
                 ", refType=" + referenceObjectType +
                 '}';
     }
