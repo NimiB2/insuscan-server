@@ -186,7 +186,7 @@ public class ScanServiceImpl implements ScanService {
                 log.info("[v3] Diameter provided ({}cm) but depth missing — triggering visual estimation",
                         resolvedPlateDiameterCm);
 
-                float[] geminiEstimate = estimateContainerDimensionsFromGemini(request.getImageBase64(),
+                float[] geminiEstimate = estimateContainerDimensionsFromGpt(request.getImageBase64(),
                         request.getReferenceObjectType(),
                         request.getPlateDiameterCm(),
                         request.getSideImageBase64());
@@ -215,7 +215,7 @@ public class ScanServiceImpl implements ScanService {
             log.info("[v3] No geometry provided for container type '{}' — asking Gemini to estimate",
                     resolvedContainerType);
 
-            float[] geminiEstimate = estimateContainerDimensionsFromGemini(request.getImageBase64(),
+            float[] geminiEstimate = estimateContainerDimensionsFromGpt(request.getImageBase64(),
                     request.getReferenceObjectType(), null,
                     request.getSideImageBase64());
 
@@ -719,9 +719,9 @@ public class ScanServiceImpl implements ScanService {
     }
 
     /**
-     * Gemini-based container dimension estimation.
-     * When ARCore is unavailable and there's no user history, ask OpenAI to
-     * visually estimate the plate/bowl dimensions from the image.
+     * GPT-based container dimension estimation (uses GPT-4o-mini via OpenAI API).
+     * When ARCore depth is unavailable, visually estimates the plate/bowl
+     * dimensions from the top-down image and optional side image.
      *
      * Returns float[2] = { diameterCm, depthCm } or null if estimation fails.
      */
@@ -855,11 +855,11 @@ public class ScanServiceImpl implements ScanService {
     // }
     // }
 
-    private float[] estimateContainerDimensionsFromGemini(String imageBase64, String referenceObjectType,
+    private float[] estimateContainerDimensionsFromGpt(String imageBase64, String referenceObjectType,
             Float knownDiameterCm, String sideImageBase64) {
         try {
             if (imageBase64 == null || imageBase64.isBlank()) {
-                log.warn("[GEMINI-DIM] No image available for dimension estimation");
+                log.warn("[GPT-DIM] No image available for dimension estimation");
                 return null;
             }
 
@@ -915,12 +915,12 @@ public class ScanServiceImpl implements ScanService {
 
             int combinedImageSize = (imageBase64 != null ? imageBase64.length() : 0)
                     + (sideImageBase64 != null ? sideImageBase64.length() : 0);
-            apiLogger.openaiStart("gpt-4o-mini", combinedImageSize);
+            apiLogger.openaiStart(openAiClient.getModel(), combinedImageSize);
 
             String content;
             String model = openAiClient.getModel(); // Default to gpt-4o-mini
             if (hasSideImage) {
-                log.info("[OPENAI-DIM] Using side image and model {} for improved depth estimation", model);
+                log.info("[GPT-DIM] Using side image and model {} for improved depth estimation", model);
                 content = openAiClient.callModelWithMultipleImages(model, prompt, imageBase64, sideImageBase64);
             } else {
                 content = openAiClient.callChatModel(model, prompt, imageBase64, null, 0.0);
@@ -929,11 +929,11 @@ public class ScanServiceImpl implements ScanService {
             long elapsed = System.currentTimeMillis() - startTime;
 
             if (content == null || content.isBlank()) {
-                log.warn("[GEMINI-DIM] Empty response from Gemini");
+                log.warn("[GPT-DIM] Empty response from GPT");
                 return null;
             }
 
-            log.info("[GEMINI-DIM] Raw dimension response: {}", content);
+            log.info("[GPT-DIM] Raw dimension response: {}", content);
 
             String json = jsonParser.extractJsonObject(content);
             JsonNode parsed = new ObjectMapper().readTree(json);
@@ -943,20 +943,20 @@ public class ScanServiceImpl implements ScanService {
             String reasoning = parsed.path("reasoning").asText("");
 
             if (diameter <= 0 || depth <= 0) {
-                log.warn("[GEMINI-DIM] Invalid dimensions: d={}, depth={}. Reasoning: {}", diameter, depth, reasoning);
+                log.warn("[GPT-DIM] Invalid dimensions: d={}, depth={}. Reasoning: {}", diameter, depth, reasoning);
                 return null;
             }
 
             diameter = Math.max(10f, Math.min(35f, diameter));
             depth = Math.max(0.5f, Math.min(15f, depth));
 
-            log.info("[GEMINI-DIM] Estimated in {}ms: d={}, depth={}, conf={}, reasoning='{}'",
+            log.info("[GPT-DIM] Estimated in {}ms: d={}, depth={}, conf={}, reasoning='{}'",
                     elapsed, diameter, depth, confidence, reasoning);
 
             return new float[] { diameter, depth };
 
         } catch (Exception e) {
-            log.error("[GEMINI-DIM] Critical error during dimension estimation: {}", e.getMessage());
+            log.error("[GPT-DIM] Critical error during dimension estimation: {}", e.getMessage());
             return null;
         }
     }
