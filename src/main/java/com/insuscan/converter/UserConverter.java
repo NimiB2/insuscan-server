@@ -67,6 +67,9 @@ public class UserConverter {
         // Preferences
         boundary.setGlucoseUnits(entity.getGlucoseUnits());
         
+        // Inslun Plans
+        boundary.setInsulinPlans(entity.getInsulinPlans());
+        
         return boundary;
     }
 
@@ -117,6 +120,9 @@ public class UserConverter {
         // Preferences
         entity.setGlucoseUnits(boundary.getGlucoseUnits());
         
+        // Insulin Plans
+        entity.setInsulinPlans(boundary.getInsulinPlans());
+        
         return entity;
     }
 
@@ -158,6 +164,9 @@ public class UserConverter {
 
         // Preferences
         boundary.setGlucoseUnits(newUser.getGlucoseUnits());
+
+        // Insulin Plans 
+        boundary.setInsulinPlans(newUser.getInsulinPlans());
 
         return boundary;
     }

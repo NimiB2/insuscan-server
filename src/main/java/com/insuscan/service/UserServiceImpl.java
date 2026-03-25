@@ -175,6 +175,11 @@ public class UserServiceImpl implements UserService {
         if (update.getGlucoseUnits() != null) {
             existing.setGlucoseUnits(update.getGlucoseUnits());
         }
+        
+        // Insulin Plans
+        if (update.getInsulinPlans() != null) {
+            existing.setInsulinPlans(update.getInsulinPlans());
+        }
 
         existing.setUpdatedAt(new Date());
         apiLogger.logUserEntityBeforeSave(existing);

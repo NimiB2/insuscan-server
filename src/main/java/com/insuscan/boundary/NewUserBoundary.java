@@ -36,7 +36,10 @@ public class NewUserBoundary {
     private Integer lightExerciseAdjustment;
     private Integer intenseExerciseAdjustment;
     
-    // Preferences
+    // Insslin Plans
+    private java.util.List<com.insuscan.data.InsulinPlan> insulinPlans;
+
+	// Preferences
     private String glucoseUnits;
 
     public NewUserBoundary() {}
@@ -149,6 +152,10 @@ public class NewUserBoundary {
     // === Preferences ===
     public String getGlucoseUnits() { return glucoseUnits; }
     public void setGlucoseUnits(String glucoseUnits) { this.glucoseUnits = glucoseUnits; }
+    
+    // === Plans ===
+    public java.util.List<com.insuscan.data.InsulinPlan> getInsulinPlans() { return insulinPlans; }
+    public void setInsulinPlans(java.util.List<com.insuscan.data.InsulinPlan> insulinPlans) { this.insulinPlans = insulinPlans; }
     
     @Override
     public String toString() {

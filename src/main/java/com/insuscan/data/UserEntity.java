@@ -34,6 +34,10 @@ public class UserEntity {
     private Integer lightExerciseAdjustment; // e.g., -15 means -15%
     private Integer intenseExerciseAdjustment; // e.g., -30 means -30%
     
+    // Insulin Plans
+    private java.util.List<InsulinPlan> insulinPlans;
+
+    
     // Preferences
     private String glucoseUnits;        // "mg/dL" or "mmol/L"
     
@@ -187,6 +191,10 @@ public class UserEntity {
     public String getGlucoseUnits() { return glucoseUnits; }
     public void setGlucoseUnits(String glucoseUnits) { this.glucoseUnits = glucoseUnits; }
 
+    // === Plans ===
+    public java.util.List<InsulinPlan> getInsulinPlans() { return insulinPlans; }
+    public void setInsulinPlans(java.util.List<InsulinPlan> insulinPlans) { this.insulinPlans = insulinPlans; }
+    
     @Override
     public String toString() {
         return "UserEntity{" +

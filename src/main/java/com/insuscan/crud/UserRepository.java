@@ -206,6 +206,22 @@ public class UserRepository {
         map.put("lightExerciseAdjustment", entity.getLightExerciseAdjustment());
         map.put("intenseExerciseAdjustment", entity.getIntenseExerciseAdjustment());
         
+     // Insulin Plans
+        if (entity.getInsulinPlans() != null) {
+            List<Map<String, Object>> plansList = new ArrayList<>();
+            for (com.insuscan.data.InsulinPlan plan : entity.getInsulinPlans()) {
+                Map<String, Object> planMap = new HashMap<>();
+                planMap.put("id", plan.getId());
+                planMap.put("name", plan.getName());
+                planMap.put("isDefault", plan.isDefault());
+                planMap.put("icr", plan.getIcr());
+                planMap.put("isf", plan.getIsf());
+                planMap.put("targetGlucose", plan.getTargetGlucose());
+                plansList.add(planMap);
+            }
+            map.put("insulinPlans", plansList);
+        }
+        
         // Preferences
         map.put("glucoseUnits", entity.getGlucoseUnits());
         
@@ -280,6 +296,27 @@ public class UserRepository {
         
         Long intenseExAdj = doc.getLong("intenseExerciseAdjustment");
         entity.setIntenseExerciseAdjustment(intenseExAdj != null ? intenseExAdj.intValue() : null);
+        
+     // Insulin Plans
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> plansRaw = (List<Map<String, Object>>) doc.get("insulinPlans");
+        if (plansRaw != null) {
+            List<com.insuscan.data.InsulinPlan> plans = new ArrayList<>();
+            for (Map<String, Object> map2 : plansRaw) {
+                com.insuscan.data.InsulinPlan plan = new com.insuscan.data.InsulinPlan();
+                plan.setId((String) map2.get("id"));
+                plan.setName((String) map2.get("name"));
+                plan.setDefault(Boolean.TRUE.equals(map2.get("isDefault")));
+                Number icr = (Number) map2.get("icr");
+                if (icr != null) plan.setIcr(icr.floatValue());
+                Number isf = (Number) map2.get("isf");
+                if (isf != null) plan.setIsf(isf.floatValue());
+                Number tg = (Number) map2.get("targetGlucose");
+                if (tg != null) plan.setTargetGlucose(tg.intValue());
+                plans.add(plan);
+            }
+            entity.setInsulinPlans(plans);
+        }
         
         // Preferences
         entity.setGlucoseUnits(doc.getString("glucoseUnits"));
