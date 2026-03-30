@@ -237,7 +237,7 @@ public class ScanServiceImpl implements ScanService {
             } else {
                 // Absolute last resort
                 log.warn("[v3-FALLBACK] Gemini estimation failed, using safe defaults for {}", resolvedContainerType);
-                resolvedPlateDiameterCm = 25.0f;
+                resolvedPlateDiameterCm = 22.0f;
                 resolvedPlateDepthCm = resolvedContainerType.toUpperCase().contains("BOWL") ? 4.5f : 1.5f;
                 float radiusCm = resolvedPlateDiameterCm / 2.0f;
                 plateAreaCm2 = (float) (Math.PI * radiusCm * radiusCm);
@@ -868,47 +868,62 @@ public class ScanServiceImpl implements ScanService {
             String scaleContext = "";
             if (knownDiameterCm != null && knownDiameterCm > 0) {
                 scaleContext += String.format(
-                        "\nARCORE ESTIMATE: Our device's camera estimated the container's OUTER DIAMETER as %.1f cm. IMPORTANT: This estimate might be inaccurate. Verify this against the physical Reference Object (Card/Syringe) provided in the image. If the reference object suggests a different scale, ignore ARCore and trust the reference object.",
+                        "\nARCORE HINT: Our device's camera estimated the container's OUTER DIAMETER as %.1f cm. "
+                        + "This is ONLY a hint and may be inaccurate. You MUST verify this against the physical "
+                        + "Reference Object (Card/Syringe) in the image. If the reference object suggests a different scale, "
+                        + "IGNORE the ARCore estimate entirely and trust the reference object.",
                         knownDiameterCm);
             }
 
             if (referenceObjectType != null && !referenceObjectType.equalsIgnoreCase("NONE")) {
                 scaleContext += "\nCRITICAL SCALE ANCHOR: Our automated detector HAS FOUND a '"
                         + referenceObjectType
-                        + "' in this image. THIS IS THE GROUND TRUTH FOR SCALE. Use its standard dimensions (Card=8.56cm, Syringe/Pen=16cm) to measure the container.";
+                        + "' in this image. THIS IS THE GROUND TRUTH FOR SCALE. "
+                        + "Known dimensions: Card = 8.56cm × 5.4cm, Syringe/Pen = 16cm × 1.25cm. "
+                        + "Measure how many reference-object-lengths fit across the container to calculate its diameter.";
             }
 
             if (hasSideImage) {
-                scaleContext += "\nMULTI-VIEW DATA: You are receiving exactly TWO images."
-                        + "\nIMAGE 1: Top-down view. Use this exclusively for measuring the INNER DIAMETER."
-                        + "\nIMAGE 2: Side-angle view. Use this exclusively for measuring the INNER DEPTH/HEIGHT."
-                        + "\nCRITICAL: Do not guess depth from Image 1. You MUST look at Image 2 to determine the height of the container.";
+                scaleContext += "\n\nMULTI-VIEW ANALYSIS (CRITICAL):"
+                        + "\n  IMAGE 1: Top-down view → Use ONLY for measuring the INNER DIAMETER at the rim."
+                        + "\n  IMAGE 2: Side-angle view → Use ONLY for measuring the INNER DEPTH/HEIGHT."
+                        + "\n\n  DEPTH MEASUREMENT FROM SIDE IMAGE:"
+                        + "\n  1. Locate the RIM of the container in Image 2."
+                        + "\n  2. Locate the BOTTOM of the interior (where food sits)."
+                        + "\n  3. The depth = vertical distance from rim to interior bottom."
+                        + "\n  4. If a reference object is visible in Image 2, use it for scale."
+                        + "\n  5. Do NOT estimate depth from Image 1 — top-down views cannot show depth."
+                        + "\n  6. For flat plates in Image 2: the depth is the small lip/edge, typically 1.0-2.0cm.";
             }
 
-            String prompt = "You are a senior physical volume estimation AI.\n"
+            String prompt = "You are a senior physical volume estimation AI specialized in food container measurement.\n"
                     + "Task: Estimate the INNER diameter and INNER depth of the food container in this image.\n\n"
                     + "SCALE & VIEW DATA: " + scaleContext + "\n\n"
-                    + "INSTRUCTIONS:\n"
-                    + "1. Locate the Reference Object (Card is 8.56cm long, Syringe is 16cm). THIS IS YOUR PRIMARY SCALE GROUND TRUTH.\n"
-                    + "2. Map pixels to centimeters based on the Reference Object.\n"
-                    + "3. Measure the container INNER diameter (at the rim) and INNER depth (bottom to top).\n"
-                    + "4. If an ARCORE ESTIMATE is provided, use it only as a hint. If it contradicts the reference object, IGNORE IT.\n\n"
-                    + "PHYSICAL CONSTRAINTS & RULES:\n"
-                    + "- INNER DEPTH VS OUTER RIM: You must measure the inner depth where the food actually sits, do not measure the outside height of the rim which can look taller from an angle.\n"
-                    + "- FLAT PLATE HEURISTIC: If the container looks like a standard flat dinner plate, its depth MUST be firmly restricted to between 0.5 cm and 2.0 cm. Do not exceed 2.0 cm for plates.\n\n"
+                    + "MEASUREMENT PROTOCOL:\n"
+                    + "1. FIND THE REFERENCE OBJECT first. Card = 8.56cm long, Syringe = 16cm long. This is your primary scale.\n"
+                    + "2. Calculate pixels-per-cm from the reference object.\n"
+                    + "3. Measure the container INNER diameter (rim-to-rim, inside edge) using this scale.\n"
+                    + "4. Measure the container INNER depth (rim to bottom, where food actually sits).\n"
+                    + "5. If an ARCORE HINT is provided, use it ONLY if the reference object confirms it (within ±15%).\n\n"
+                    + "PHYSICAL CONSTRAINTS (from real-world data):\n"
+                    + "- Standard dinner plate: 20-26cm diameter, 1.0-2.0cm depth\n"
+                    + "- Small/salad plate: 16-20cm diameter, 1.0-1.5cm depth\n"
+                    + "- Regular bowl: 14-18cm diameter, 3.0-4.5cm depth\n"
+                    + "- Deep bowl/soup bowl: 14-18cm diameter, 5.0-8.0cm depth\n"
+                    + "- FLAT PLATE RULE: If it looks like a flat plate, depth MUST be 0.5-2.0cm. Never exceed 2.0cm for plates.\n\n"
                     + "STRICT CLASSIFICATION:\n"
-                    + "- If depth is <= 2.0 cm -> containerType MUST be \"FLAT_PLATE\".\n"
-                    + "- If depth is between 2.1 cm and 4.5 cm -> containerType MUST be \"REGULAR_BOWL\".\n"
-                    + "- If depth is > 4.5 cm -> containerType MUST be \"DEEP_BOWL\".\n\n"
-                    + "5. Return only a JSON object.\n\n"
-                    + "JSON format:\n"
+                    + "- depth <= 2.0cm → containerType = \"FLAT_PLATE\"\n"
+                    + "- depth 2.1-4.5cm → containerType = \"REGULAR_BOWL\"\n"
+                    + "- depth > 4.5cm → containerType = \"DEEP_BOWL\"\n\n"
+                    + "Return ONLY this JSON:\n"
                     + "{\n"
-                    + "  \"referenceObjectFound\": \"string (name of object used)\",\n"
-                    + "  \"diameterCm\": float,\n"
-                    + "  \"depthCm\": float,\n"
-                    + "  \"containerType\": \"FLAT_PLATE\"|\"REGULAR_BOWL\"|\"DEEP_BOWL\",\n"
-                    + "  \"confidence\": \"low\"|\"medium\"|\"high\",\n"
-                    + "  \"reasoning\": \"Explain your logic, mentioning how you compared the reference object to the container and if you found the side view useful.\"\n"
+                    + "  \"referenceObjectFound\": \"name of object used for scale (or 'none')\",\n"
+                    + "  \"diameterCm\": <number>,\n"
+                    + "  \"depthCm\": <number>,\n"
+                    + "  \"containerType\": \"FLAT_PLATE\" | \"REGULAR_BOWL\" | \"DEEP_BOWL\",\n"
+                    + "  \"diameterConfidence\": \"low\" | \"medium\" | \"high\",\n"
+                    + "  \"depthConfidence\": \"low\" | \"medium\" | \"high\",\n"
+                    + "  \"reasoning\": \"Step-by-step: (1) reference object identification, (2) pixels-per-cm calculation, (3) diameter measurement, (4) depth measurement from side view or estimation, (5) cross-validation against physical constraints.\"\n"
                     + "}";
 
             long startTime = System.currentTimeMillis();
@@ -918,7 +933,7 @@ public class ScanServiceImpl implements ScanService {
             apiLogger.openaiStart(openAiClient.getModel(), combinedImageSize);
 
             String content;
-            String model = openAiClient.getModel(); // Default to gpt-4o-mini
+            String model = openAiClient.getModel();
             if (hasSideImage) {
                 log.info("[GPT-DIM] Using side image and model {} for improved depth estimation", model);
                 content = openAiClient.callModelWithMultipleImages(model, prompt, imageBase64, sideImageBase64);
@@ -939,7 +954,10 @@ public class ScanServiceImpl implements ScanService {
             JsonNode parsed = new ObjectMapper().readTree(json);
             float diameter = (float) parsed.path("diameterCm").asDouble(0);
             float depth = (float) parsed.path("depthCm").asDouble(0);
-            String confidence = parsed.path("confidence").asText("low");
+            String diameterConf = parsed.path("diameterConfidence").asText(
+                    parsed.path("confidence").asText("low"));
+            String depthConf = parsed.path("depthConfidence").asText(
+                    parsed.path("confidence").asText("low"));
             String reasoning = parsed.path("reasoning").asText("");
 
             if (diameter <= 0 || depth <= 0) {
@@ -947,11 +965,12 @@ public class ScanServiceImpl implements ScanService {
                 return null;
             }
 
+            // Sanity bounds
             diameter = Math.max(10f, Math.min(35f, diameter));
             depth = Math.max(0.5f, Math.min(15f, depth));
 
-            log.info("[GPT-DIM] Estimated in {}ms: d={}, depth={}, conf={}, reasoning='{}'",
-                    elapsed, diameter, depth, confidence, reasoning);
+            log.info("[GPT-DIM] Estimated in {}ms: d={}cm (conf={}), depth={}cm (conf={}), reasoning='{}'",
+                    elapsed, diameter, diameterConf, depth, depthConf, reasoning);
 
             return new float[] { diameter, depth };
 
