@@ -17,6 +17,7 @@ public class MealEntity {
     private List<FoodItem> foodItems; // Detected food items
     private Float totalCarbs; // Total carbs in grams
 
+    
     // --- Portion Analysis & Metadata ---
     private Float estimatedWeight; // Total weight in grams
     private Float plateVolumeCm3;
@@ -52,6 +53,7 @@ public class MealEntity {
     private boolean profileComplete;
     private List<String> missingProfileFields;
     private String insulinMessage;
+    private String savedPlanName;
 
     private Float activeInsulin; // IOB subtracted from dose
     private Boolean wasSickMode;
@@ -452,6 +454,14 @@ public class MealEntity {
         this.reviewWarnings = reviewWarnings;
     }
 
+    public String getSavedPlanName() {
+        return savedPlanName;
+    }
+
+    public void setSavedPlanName(String savedPlanName) {
+        this.savedPlanName = savedPlanName;
+    }
+    
     @Override
     public String toString() {
         return "MealEntity{" +

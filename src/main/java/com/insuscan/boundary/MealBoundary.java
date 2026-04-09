@@ -77,8 +77,9 @@ public class MealBoundary {
 
     private String note; // User notes
     private boolean profileComplete; // Flag: Was profile complete during calc?
-    private List<String> missingProfileFields;// List of missing fields if incomplete
+    private List<String> missingProfileFields; // List of missing fields if incomplete
     private String insulinMessage; // Warnings or info messages
+    private String savedPlanName; // The insulin plan selected at the time of the meal
 
     public MealBoundary() {
     }
@@ -362,6 +363,14 @@ public class MealBoundary {
         this.insulinMessage = insulinMessage;
     }
 
+    public String getSavedPlanName() {
+        return savedPlanName;
+    }
+
+    public void setSavedPlanName(String savedPlanName) {
+        this.savedPlanName = savedPlanName;
+    }
+
     @Override
     public String toString() {
         return "MealBoundary{" +
@@ -374,6 +383,7 @@ public class MealBoundary {
                 ", status=" + status +
                 ", sickMode=" + wasSickMode +
                 ", stressMode=" + wasStressMode +
+                ", savedPlanName=" + savedPlanName +
                 '}';
     }
 }

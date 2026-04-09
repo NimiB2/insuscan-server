@@ -73,16 +73,13 @@ public class MealRepository {
 
             return executeQuery(query);
         } catch (Exception e) {
-            // If index error, fall back to query without orderBy and sort in memory
             if (e.getMessage() != null && e.getMessage().contains("index")) {
                 log.warn("Composite index not found for paginated query, using fallback query (slower). userId={}",
                         userId);
 
                 try {
-                    // Firestore has no server-side offset without ordering; emulate it:
-                    // fetch enough items, sort, then slice.
                     int offset = Math.max(0, page * size);
-                    int fetchLimit = Math.min(1000, offset + size); // safety cap
+                    int fetchLimit = Math.min(1000, offset + size);
 
                     Query fallbackQuery = firestore.collection(COLLECTION_NAME)
                             .whereEqualTo("userId", userId)
@@ -90,20 +87,14 @@ public class MealRepository {
 
                     List<MealEntity> meals = executeQuery(fallbackQuery);
 
-                    // Sort by scannedAt descending in memory
                     meals.sort((a, b) -> {
-                        if (a.getScannedAt() == null && b.getScannedAt() == null)
-                            return 0;
-                        if (a.getScannedAt() == null)
-                            return 1;
-                        if (b.getScannedAt() == null)
-                            return -1;
+                        if (a.getScannedAt() == null && b.getScannedAt() == null) return 0;
+                        if (a.getScannedAt() == null) return 1;
+                        if (b.getScannedAt() == null) return -1;
                         return b.getScannedAt().compareTo(a.getScannedAt());
                     });
 
-                    // Slice page
-                    if (offset >= meals.size())
-                        return List.of();
+                    if (offset >= meals.size()) return List.of();
                     int toIndex = Math.min(meals.size(), offset + size);
                     return meals.subList(offset, toIndex);
                 } catch (Exception fallbackError) {
@@ -134,7 +125,6 @@ public class MealRepository {
     // Find recent meals by user (ordered by scanned date desc)
     public List<MealEntity> findRecentByUserId(String userId, int limit) {
         try {
-            // Try query with orderBy first (requires composite index)
             Query query = firestore.collection(COLLECTION_NAME)
                     .whereEqualTo("userId", userId)
                     .orderBy("scannedAt", Query.Direction.DESCENDING)
@@ -142,31 +132,24 @@ public class MealRepository {
 
             return executeQuery(query);
         } catch (Exception e) {
-            // If index error, fall back to query without orderBy and sort in memory
             if (e.getMessage() != null && e.getMessage().contains("index")) {
                 log.warn("Composite index not found, using fallback query (slower). Create index at: {}",
                         e.getMessage().contains("create it here") ? "Firebase Console" : "Firebase Console");
 
                 try {
-                    // Fallback: query without orderBy, then sort in memory
                     Query fallbackQuery = firestore.collection(COLLECTION_NAME)
                             .whereEqualTo("userId", userId)
-                            .limit(limit * 2); // Get more to account for no ordering
+                            .limit(limit * 2);
 
                     List<MealEntity> meals = executeQuery(fallbackQuery);
 
-                    // Sort by scannedAt descending in memory
                     meals.sort((a, b) -> {
-                        if (a.getScannedAt() == null && b.getScannedAt() == null)
-                            return 0;
-                        if (a.getScannedAt() == null)
-                            return 1;
-                        if (b.getScannedAt() == null)
-                            return -1;
+                        if (a.getScannedAt() == null && b.getScannedAt() == null) return 0;
+                        if (a.getScannedAt() == null) return 1;
+                        if (b.getScannedAt() == null) return -1;
                         return b.getScannedAt().compareTo(a.getScannedAt());
                     });
 
-                    // Return only the requested limit
                     return meals.stream().limit(limit).collect(java.util.stream.Collectors.toList());
                 } catch (Exception fallbackError) {
                     log.error("Fallback query also failed for user: {}", userId, fallbackError);
@@ -301,7 +284,6 @@ public class MealRepository {
                 batch.delete(doc.getReference());
             }
             batch.commit().get();
-
             docs = collection.limit(500).get().get().getDocuments();
         }
     }
@@ -314,7 +296,6 @@ public class MealRepository {
         map.put("userId", entity.getUserId());
         map.put("imageUrl", entity.getImageUrl());
 
-        // Convert food items to list of maps
         if (entity.getFoodItems() != null) {
             List<Map<String, Object>> foodItemMaps = entity.getFoodItems().stream()
                     .map(this::foodItemToMap)
@@ -356,6 +337,9 @@ public class MealRepository {
         map.put("insulinMessage", entity.getInsulinMessage());
         map.put("note", entity.getNote());
 
+        // insulin plan used at meal time
+        map.put("savedPlanName", entity.getSavedPlanName());
+
         return map;
     }
 
@@ -378,7 +362,6 @@ public class MealRepository {
         entity.setUserId(doc.getString("userId"));
         entity.setImageUrl(doc.getString("imageUrl"));
 
-        // Convert food items from list of maps
         List<Map<String, Object>> foodItemMaps = (List<Map<String, Object>>) doc.get("foodItems");
         if (foodItemMaps != null) {
             List<MealEntity.FoodItem> foodItems = foodItemMaps.stream()
@@ -429,6 +412,9 @@ public class MealRepository {
         entity.setInsulinMessage(doc.getString("insulinMessage"));
         entity.setNote(doc.getString("note"));
 
+        // insulin plan used at meal time
+        entity.setSavedPlanName(doc.getString("savedPlanName"));
+
         return entity;
     }
 
@@ -467,14 +453,10 @@ public class MealRepository {
     }
 
     private Float toFloat(Object value) {
-        if (value == null)
-            return null;
-        if (value instanceof Double)
-            return ((Double) value).floatValue();
-        if (value instanceof Long)
-            return ((Long) value).floatValue();
-        if (value instanceof Integer)
-            return ((Integer) value).floatValue();
+        if (value == null) return null;
+        if (value instanceof Double) return ((Double) value).floatValue();
+        if (value instanceof Long) return ((Long) value).floatValue();
+        if (value instanceof Integer) return ((Integer) value).floatValue();
         return null;
     }
 }

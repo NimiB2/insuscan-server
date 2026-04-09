@@ -89,6 +89,8 @@ public class MealServiceImpl implements MealService {
         System.out.println("DEBUG SAVE: Exercise Adjustment: " + entity.getExerciseAdjustment());
         System.out.println("DEBUG SAVE: Sick Adjustment: " + entity.getSickAdjustment());
         System.out.println("DEBUG SAVE: Stress Adjustment: " + entity.getStressAdjustment());
+        System.out.println("DEBUG SAVE: Saved Plan Name: " + entity.getSavedPlanName());
+
 
         // Set final status
         entity.setStatus(MealStatus.CONFIRMED); // Saved = Confirmed
@@ -104,6 +106,8 @@ public class MealServiceImpl implements MealService {
         // Debug what was actually saved
         System.out.println("DEBUG AFTER SAVE: Carb Dose: " + saved.getCarbDose());
         System.out.println("DEBUG AFTER SAVE: Correction Dose: " + saved.getCorrectionDose());
+        System.out.println("DEBUG AFTER SAVE: Saved Plan Name: " + saved.getSavedPlanName());
+
         
         return mealConverter.toBoundary(saved);
     }

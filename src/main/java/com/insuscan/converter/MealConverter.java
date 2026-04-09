@@ -114,6 +114,9 @@ public class MealConverter {
         boundary.setMissingProfileFields(entity.getMissingProfileFields());
         boundary.setProfileComplete(entity.isProfileComplete());
 
+        // Insulin plan used at meal time
+        boundary.setSavedPlanName(entity.getSavedPlanName());
+
         return boundary;
     }
 
@@ -194,6 +197,9 @@ public class MealConverter {
         entity.setInsulinMessage(boundary.getInsulinMessage());
         entity.setMissingProfileFields(boundary.getMissingProfileFields());
         entity.setProfileComplete(boundary.isProfileComplete());
+
+        // Insulin plan used at meal time
+        entity.setSavedPlanName(boundary.getSavedPlanName());
 
         return entity;
     }
