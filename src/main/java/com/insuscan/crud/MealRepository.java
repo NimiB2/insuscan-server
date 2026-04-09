@@ -317,19 +317,13 @@ public class MealRepository {
         map.put("status", entity.getStatus() != null ? entity.getStatus().name() : null);
         map.put("scannedAt", entity.getScannedAt());
         map.put("confirmedAt", entity.getConfirmedAt());
-        map.put("completedAt", entity.getCompletedAt());
-        map.put("wasSickMode", entity.getWasSickMode());
-        map.put("wasStressMode", entity.getWasStressMode());
 
+        // calculation breakdown
         map.put("carbDose", entity.getCarbDose());
         map.put("correctionDose", entity.getCorrectionDose());
-        map.put("sickAdjustment", entity.getSickAdjustment());
-        map.put("stressAdjustment", entity.getStressAdjustment());
-        map.put("exerciseAdjustment", entity.getExerciseAdjustment());
 
         // user context at meal time
         map.put("currentGlucose", entity.getCurrentGlucose());
-        map.put("activityLevel", entity.getActivityLevel());
 
         // profile status and messages
         map.put("profileComplete", entity.isProfileComplete());
@@ -389,22 +383,15 @@ public class MealRepository {
 
         entity.setScannedAt(doc.getDate("scannedAt"));
         entity.setConfirmedAt(doc.getDate("confirmedAt"));
-        entity.setCompletedAt(doc.getDate("completedAt"));
-        entity.setWasSickMode(doc.getBoolean("wasSickMode"));
-        entity.setWasStressMode(doc.getBoolean("wasStressMode"));
 
         // calculation breakdown
         entity.setCarbDose(getFloat(doc, "carbDose"));
         entity.setCorrectionDose(getFloat(doc, "correctionDose"));
-        entity.setSickAdjustment(getFloat(doc, "sickAdjustment"));
-        entity.setStressAdjustment(getFloat(doc, "stressAdjustment"));
-        entity.setExerciseAdjustment(getFloat(doc, "exerciseAdjustment"));
 
         // user context
         entity.setCurrentGlucose(doc.getLong("currentGlucose") != null
                 ? doc.getLong("currentGlucose").intValue()
                 : null);
-        entity.setActivityLevel(doc.getString("activityLevel"));
 
         // profile status
         Boolean profileComplete = doc.getBoolean("profileComplete");
