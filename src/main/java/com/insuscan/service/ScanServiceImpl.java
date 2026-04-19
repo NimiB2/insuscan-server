@@ -9,9 +9,11 @@ import com.insuscan.crud.UserRepository;
 import com.insuscan.data.MealEntity;
 import com.insuscan.data.UserEntity;
 import com.insuscan.enums.MealStatus;
+import com.insuscan.enums.ReferenceObjectDimensions;
 import com.insuscan.exception.InsuScanInvalidInputException;
 import com.insuscan.exception.InsuScanNotFoundException;
 import com.insuscan.util.ApiLogger;
+import com.insuscan.util.FoodTextureClassifier;
 import com.insuscan.util.InputValidators;
 import com.insuscan.util.MealIdGenerator;
 import com.insuscan.util.PortionEstimator;
@@ -43,6 +45,8 @@ public class ScanServiceImpl implements ScanService {
     private final OpenAiJsonParser jsonParser;
     private final GeminiApiClient geminiClient;
     private final OpenAiApiClient openAiClient;
+    private final FoodTextureClassifier foodTextureClassifier;
+    private final GeometryFusionService geometryFusionService;
 
     @Value("${spring.application.name:insuscan}")
     private String systemId;
@@ -66,6 +70,8 @@ public class ScanServiceImpl implements ScanService {
             ApiLogger apiLogger,
             GeminiApiClient geminiClient,
             OpenAiApiClient openAiClient,
+            FoodTextureClassifier foodTextureClassifier,
+            GeometryFusionService geometryFusionService,
             OpenAiJsonParser jsonParser) {
 
         this.imageAnalysisService = imageAnalysisService;
@@ -78,6 +84,8 @@ public class ScanServiceImpl implements ScanService {
         this.apiLogger = apiLogger;
         this.geminiClient = geminiClient;
         this.openAiClient = openAiClient;
+        this.foodTextureClassifier = foodTextureClassifier;
+        this.geometryFusionService = geometryFusionService;
         this.jsonParser = jsonParser;
     }
 
@@ -189,7 +197,8 @@ public class ScanServiceImpl implements ScanService {
                 float[] geminiEstimate = estimateContainerDimensionsFromGpt(request.getImageBase64(),
                         request.getReferenceObjectType(),
                         request.getPlateDiameterCm(),
-                        request.getSideImageBase64());
+                        request.getSideImageBase64(),
+                        request.getPixelToCmRatio());
 
                 if (geminiEstimate != null) {
                     resolvedPlateDepthCm = geminiEstimate[1];
@@ -217,7 +226,8 @@ public class ScanServiceImpl implements ScanService {
 
             float[] geminiEstimate = estimateContainerDimensionsFromGpt(request.getImageBase64(),
                     request.getReferenceObjectType(), null,
-                    request.getSideImageBase64());
+                    request.getSideImageBase64(),
+                    request.getPixelToCmRatio());
 
             if (geminiEstimate != null) {
                 resolvedPlateDiameterCm = geminiEstimate[0];
@@ -324,15 +334,31 @@ public class ScanServiceImpl implements ScanService {
                 weightSource = "CLIENT_PHYSICS";
                 regionIndex++;
             } else if (hasPlateGeometry && detected.getCoveragePercent() != null && detected.getCoveragePercent() > 0) {
-                float foodAreaCm2 = plateAreaCm2 * (detected.getCoveragePercent() / 100.0f);
-                float heightCm = heightCategoryToCm(detected.getHeightCategory());
+                float fillFactor = (visionResult.getContainerFillPercent() != null && visionResult.getContainerFillPercent() > 0)
+                        ? visionResult.getContainerFillPercent() / 100.0f
+                        : 1.0f;
+                float foodAreaCm2 = plateAreaCm2 * fillFactor * (detected.getCoveragePercent() / 100.0f);
+                FusedMeasurement fusedHeight = geometryFusionService.fuseFoodHeights(
+                        List.of(detected.getName()),
+                        List.of(detected.getHeightCategory() != null ? detected.getHeightCategory() : ""),
+                        request.getSideImageBase64(),
+                        request.getReferenceObjectType(),
+                        request.getPixelToCmRatio()).stream().findFirst()
+                        .orElse(new FusedMeasurement(heightCategoryToCm(detected.getHeightCategory()), 0.5f, FusedMeasurement.Source.FALLBACK));
+                float heightCm = fusedHeight.getValue() > 0 ? fusedHeight.getValue() : heightCategoryToCm(detected.getHeightCategory());
                 if (isBowl && heightCm > plateDepthCm)
                     heightCm = plateDepthCm * 0.8f;
                 float shapeFactor = getShapeFactor(heightCm);
                 float bowlFactor = getBowlGeometryFactor(resolvedContainerType);
                 float volumeCm3 = foodAreaCm2 * heightCm * shapeFactor * bowlFactor;
                 float density = resolveDensity(detected.getName(), finalNutrition);
-                itemWeight = volumeCm3 * density;
+                FoodTextureClassifier.TextureType texture = foodTextureClassifier.classify(detected.getTextureType());
+                float packingFactor = texture.getPackingFactor();
+                itemWeight = volumeCm3 * density * packingFactor;
+                log.debug("[weight] {} → vol={}cm³ × density={} × packing={} ({}) = {}g",
+                        detected.getName(), String.format("%.1f", volumeCm3),
+                        String.format("%.2f", density), String.format("%.2f", packingFactor),
+                        texture.name(), String.format("%.1f", itemWeight));
                 weightSource = "GEMINI_PHYSICS";
             } else {
                 itemWeight = (distributedPortions != null) ? distributedPortions.get(detected.getName()) : null;
@@ -559,20 +585,25 @@ public class ScanServiceImpl implements ScanService {
      * 3. Default: 0.75 g/cm³
      */
     private float resolveDensity(String foodName, NutritionInfo nutrition) {
-        // Tier 1: USDA-derived density
         if (nutrition != null && nutrition.getDensityGPerCm3() != null && nutrition.getDensityGPerCm3() > 0) {
-            log.debug("[density] {} → USDA: {}g/cm³", foodName, nutrition.getDensityGPerCm3());
+            log.debug("[density] {} → USDA_SERVING: {}g/cm³", foodName, nutrition.getDensityGPerCm3());
             return nutrition.getDensityGPerCm3();
         }
 
-        // Tier 2: Lookup table (uses PortionEstimator's density map)
-        float lookupDensity = portionEstimator.calculateWeight(foodName, 1.0f); // density = weight/1cm³
-        if (lookupDensity != 0.75f) { // 0.75 is the default "other" — means we found a specific match
+        if (nutrition != null) {
+            Float proximateDensity = nutrition.calculateDensityFromProximates();
+            if (proximateDensity != null) {
+                log.debug("[density] {} → USDA_PROXIMATE: {}g/cm³", foodName, proximateDensity);
+                return proximateDensity;
+            }
+        }
+
+        float lookupDensity = portionEstimator.calculateWeight(foodName, 1.0f);
+        if (lookupDensity != 0.75f) {
             log.debug("[density] {} → LOOKUP: {}g/cm³", foodName, lookupDensity);
             return lookupDensity;
         }
 
-        // Tier 3: Default
         log.warn("[density] {} → DEFAULT: 0.75g/cm³ (no specific data)", foodName);
         return 0.75f;
     }
@@ -856,7 +887,7 @@ public class ScanServiceImpl implements ScanService {
     // }
 
     private float[] estimateContainerDimensionsFromGpt(String imageBase64, String referenceObjectType,
-            Float knownDiameterCm, String sideImageBase64) {
+            Float knownDiameterCm, String sideImageBase64, Float pixelToCmRatio) {
         try {
             if (imageBase64 == null || imageBase64.isBlank()) {
                 log.warn("[GPT-DIM] No image available for dimension estimation");
@@ -864,37 +895,12 @@ public class ScanServiceImpl implements ScanService {
             }
 
             boolean hasSideImage = sideImageBase64 != null && !sideImageBase64.isBlank();
-
-            String scaleContext = "";
-            if (knownDiameterCm != null && knownDiameterCm > 0) {
-                scaleContext += String.format(
-                        "\nARCORE HINT: Our device's camera estimated the container's OUTER DIAMETER as %.1f cm. "
-                        + "This is ONLY a hint and may be inaccurate. You MUST verify this against the physical "
-                        + "Reference Object (Card/Syringe) in the image. If the reference object suggests a different scale, "
-                        + "IGNORE the ARCore estimate entirely and trust the reference object.",
-                        knownDiameterCm);
-            }
-
-            if (referenceObjectType != null && !referenceObjectType.equalsIgnoreCase("NONE")) {
-                scaleContext += "\nCRITICAL SCALE ANCHOR: Our automated detector HAS FOUND a '"
-                        + referenceObjectType
-                        + "' in this image. THIS IS THE GROUND TRUTH FOR SCALE. "
-                        + "Known dimensions: Card = 8.56cm × 5.4cm, Syringe/Pen = 16cm × 1.25cm. "
-                        + "Measure how many reference-object-lengths fit across the container to calculate its diameter.";
-            }
-
-            if (hasSideImage) {
-                scaleContext += "\n\nMULTI-VIEW ANALYSIS (CRITICAL):"
-                        + "\n  IMAGE 1: Top-down view → Use ONLY for measuring the INNER DIAMETER at the rim."
-                        + "\n  IMAGE 2: Side-angle view → Use ONLY for measuring the INNER DEPTH/HEIGHT."
-                        + "\n\n  DEPTH MEASUREMENT FROM SIDE IMAGE:"
-                        + "\n  1. Locate the RIM of the container in Image 2."
-                        + "\n  2. Locate the BOTTOM of the interior (where food sits)."
-                        + "\n  3. The depth = vertical distance from rim to interior bottom."
-                        + "\n  4. If a reference object is visible in Image 2, use it for scale."
-                        + "\n  5. Do NOT estimate depth from Image 1 — top-down views cannot show depth."
-                        + "\n  6. For flat plates in Image 2: the depth is the small lip/edge, typically 1.0-2.0cm.";
-            }
+            String scaleContext = buildScaleContext(
+                    knownDiameterCm,
+                    referenceObjectType,
+                    pixelToCmRatio,
+                    hasSideImage
+            );
 
             String prompt = "You are a senior physical volume estimation AI specialized in food container measurement.\n"
                     + "Task: Estimate the INNER diameter and INNER depth of the food container in this image.\n\n"
@@ -980,4 +986,59 @@ public class ScanServiceImpl implements ScanService {
         }
     }
 
+    private String buildScaleContext(Float knownDiameterCm, String referenceObjectType,
+            Float pixelToCmRatio, boolean hasSideImage) {
+StringBuilder ctx = new StringBuilder();
+
+if (knownDiameterCm != null && knownDiameterCm > 0) {
+ctx.append(String.format(
+"\nARCORE HINT: Device estimated container OUTER DIAMETER as %.1fcm. " +
+"Verify against reference object. If they conflict, trust the reference object.",
+knownDiameterCm));
+}
+
+if (pixelToCmRatio != null && pixelToCmRatio > 0) {
+ctx.append(String.format(
+"\nCALIBRATED SCALE: Our OpenCV detector measured pixelToCmRatio=%.6f cm/px from the " +
+"reference object in this image. This means 1 pixel = %.6f cm at the image plane. " +
+"Use this to convert any pixel measurement to centimeters: measurementCm = pixels × %.6f. " +
+"This is the GROUND TRUTH for scale — use it as your primary measurement tool.",
+pixelToCmRatio, pixelToCmRatio, pixelToCmRatio));
+
+if (referenceObjectType != null && !referenceObjectType.equalsIgnoreCase("NONE")) {
+ctx.append(String.format(
+"\nThe reference object is a '%s'. Its physical dimensions are: %s. " +
+"Cross-validate your pixelToCmRatio calculation against the visible object.",
+referenceObjectType,
+ReferenceObjectDimensions.getScaleDescription(referenceObjectType)));
+}
+} else if (referenceObjectType != null && !referenceObjectType.equalsIgnoreCase("NONE")) {
+    String dims = ReferenceObjectDimensions.getScaleDescription(referenceObjectType);
+    ctx.append(String.format(
+        "\n\nCRITICAL SCALE ANCHOR — READ CAREFULLY:\n" +
+        "The user physically placed a '%s' next to the plate before taking this photo.\n" +
+        "Known dimensions: %s\n" +
+        "This object IS in the image — the user confirmed its presence.\n" +
+        "YOUR PRIMARY TASK: Locate this object visually, even if small or partially visible.\n" +
+        "Once found: measure how many reference-object-lengths fit across the plate interior.\n" +
+        "If the object appears unclear, still use its known size to estimate the plate diameter.\n" +
+        "DO NOT return diameterCm=0. Always provide your best estimate.",
+        referenceObjectType, dims));
+}
+
+if (hasSideImage) {
+ctx.append("\n\nMULTI-VIEW ANALYSIS (CRITICAL):")
+.append("\n  IMAGE 1: Top-down view → measure INNER DIAMETER at the rim.")
+.append("\n  IMAGE 2: Side-angle view → measure INNER DEPTH/HEIGHT only.")
+.append("\n\n  DEPTH MEASUREMENT FROM SIDE IMAGE:")
+.append("\n  1. Locate the RIM of the container in Image 2.")
+.append("\n  2. Locate the BOTTOM of the interior (where food sits).")
+.append("\n  3. depth = vertical distance from rim to interior bottom.")
+.append("\n  4. If reference object is visible in Image 2, use pixelToCmRatio for scale.")
+.append("\n  5. For flat plates in Image 2: depth is the small lip/edge, typically 1.0-2.0cm.")
+.append("\n  6. Do NOT estimate depth from Image 1 — top-down views cannot show depth.");
+}
+
+return ctx.toString();
+}
 }

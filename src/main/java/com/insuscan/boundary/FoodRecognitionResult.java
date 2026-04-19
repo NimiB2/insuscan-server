@@ -39,6 +39,10 @@ public class FoodRecognitionResult {
         // Server maps this to cm when ARCore isn't available
         private String heightCategory;
 
+        // Texture type: SOLID, GRANULAR, LEAFY, MIXED
+        // Server uses this to apply packing factor to density calculation
+        private String textureType;
+     
         // 2-3 USDA-friendly search terms from Gemini (replaces FoodNameNormalizer)
         // Ordered from most specific to most general
         private List<String> usdaSearchTerms;
@@ -161,6 +165,14 @@ public class FoodRecognitionResult {
 
         public void setHeightCategory(String heightCategory) {
             this.heightCategory = heightCategory;
+        }
+        
+        public String getTextureType() {
+            return textureType;
+        }
+
+        public void setTextureType(String textureType) {
+            this.textureType = textureType;
         }
 
         public List<String> getUsdaSearchTerms() {

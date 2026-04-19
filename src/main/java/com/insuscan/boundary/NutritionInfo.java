@@ -15,6 +15,10 @@ public class NutritionInfo {
     private Float servingVolumeCm3; // Volume of a single serving (from USDA)
 
     private float fiberPer100g; // dietary fiber for net carb calculation
+    private float waterPer100g;
+    private float proteinPer100g;
+    private float fatPer100g;
+    private float ashPer100g;
 
     public NutritionInfo() {
     }
@@ -100,11 +104,75 @@ public class NutritionInfo {
     public void setFiberPer100g(float fiberPer100g) {
         this.fiberPer100g = fiberPer100g;
     }
+    
+    public float getWaterPer100g() {
+        return waterPer100g;
+    }
+
+    public void setWaterPer100g(float waterPer100g) {
+        this.waterPer100g = waterPer100g;
+    }
+
+    public float getProteinPer100g() {
+        return proteinPer100g;
+    }
+
+    public void setProteinPer100g(float proteinPer100g) {
+        this.proteinPer100g = proteinPer100g;
+    }
+
+    public float getFatPer100g() {
+        return fatPer100g;
+    }
+
+    public void setFatPer100g(float fatPer100g) {
+        this.fatPer100g = fatPer100g;
+    }
+
+    public float getAshPer100g() {
+        return ashPer100g;
+    }
+
+    public void setAshPer100g(float ashPer100g) {
+        this.ashPer100g = ashPer100g;
+    }
+    
 
     // Calculate carbs for a specific weight
     public float calculateCarbs(float weightGrams) {
         return (carbsPer100g * weightGrams) / 100f;
     }
+    
+    public Float calculateDensityFromProximates() {
+        if (waterPer100g <= 0 && proteinPer100g <= 0 && fatPer100g <= 0) {
+            return null;
+        }
+
+        float water   = waterPer100g   / 100f;
+        float protein = proteinPer100g / 100f;
+        float fat     = fatPer100g     / 100f;
+        float carb    = carbsPer100g   / 100f;
+        float ash     = ashPer100g > 0 ? ashPer100g / 100f : Math.max(0f, 1f - water - protein - fat - carb);
+
+        float specificVolume = (water   / 1.000f)
+                             + (protein / 1.330f)
+                             + (fat     / 0.925f)
+                             + (carb    / 1.600f)
+                             + (ash     / 2.400f);
+
+        if (specificVolume <= 0) {
+            return null;
+        }
+
+        float density = 1f / specificVolume;
+
+        if (density < 0.1f || density > 1.4f) {
+            return null;
+        }
+
+        return density;
+    }
+    
 
     // Factory for "not found" result
     public static NutritionInfo notFound(String foodName) {

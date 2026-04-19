@@ -183,6 +183,14 @@ public class NutritionDataServiceImpl implements NutritionDataService {
                         info.setCarbsPer100g(value.floatValue());
                     } else if (lower.contains("fiber")) {
                         fiber = value.floatValue();
+                    } else if (lower.contains("protein")) {
+                        info.setProteinPer100g(value.floatValue());
+                    } else if (lower.contains("fat") && !lower.contains("fatty")) {
+                        info.setFatPer100g(value.floatValue());
+                    } else if (lower.contains("water") || lower.contains("moisture")) {
+                        info.setWaterPer100g(value.floatValue());
+                    } else if (lower.equals("ash")) {
+                        info.setAshPer100g(value.floatValue());
                     }
                 }
             }
@@ -308,14 +316,22 @@ public class NutritionDataServiceImpl implements NutritionDataService {
         if (baseIngredient == null || baseIngredient.trim().isEmpty()) {
             return List.of();
         }
-        
-        // 1. Normalize: Remove special chars to ensure clean search
+
         String cleanQuery = baseIngredient.replaceAll("[^a-zA-Z0-9 ]", "").trim();
-        
-        // 2. Fetch 25 candidates (The "Wide Net" strategy)
         apiLogger.usdaApiCall("Candidate Search: " + cleanQuery);
-        return searchFoodsInternal(cleanQuery, 20).stream()
-                .sorted(Comparator.comparing(NutritionInfo::getFdcId)) // ENVFORCE DETERMINISM
+
+        List<NutritionInfo> candidates = searchFoodsInternal(cleanQuery, 20).stream()
+                .sorted(Comparator.comparing(NutritionInfo::getFdcId))
+                .toList();
+
+        return candidates.stream()
+                .map(candidate -> {
+                    if (candidate.getWaterPer100g() <= 0 && !candidate.getFdcId().startsWith("fallback-")) {
+                        NutritionInfo enriched = getNutritionInfoById(candidate.getFdcId());
+                        return enriched.isFound() ? enriched : candidate;
+                    }
+                    return candidate;
+                })
                 .toList();
     }
 
@@ -357,12 +373,17 @@ public class NutritionDataServiceImpl implements NutritionDataService {
                             fiber = value.floatValue();
                         } else if (lower.contains("protein")) {
                             protein = value.floatValue();
+                            info.setProteinPer100g(value.floatValue());
                         } else if (lower.contains("fat") && !lower.contains("fatty")) {
                             fat = value.floatValue();
+                            info.setFatPer100g(value.floatValue());
+                        } else if (lower.contains("water") || lower.contains("moisture")) {
+                            info.setWaterPer100g(value.floatValue());
+                        } else if (lower.equals("ash")) {
+                            info.setAshPer100g(value.floatValue());
                         }
                     }
 
-                    // Store fiber so server can compute net carbs later if needed
                     info.setFiberPer100g(fiber);
                 }
 
