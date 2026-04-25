@@ -1,6 +1,6 @@
 package com.insuscan.service;
 
-import com.insuscan.boundary.FoodRecognitionResult;
+import com.insuscan.pipeline.model.PipelineFoodItem;
 import com.insuscan.boundary.NutritionInfo;
 import java.util.List;
 
@@ -10,7 +10,7 @@ public interface SemanticMatchingService {
      * Returns the fdcId of the best scientific match.
      * Returns null if no good match is found.
      */
-	String findBestMatch(FoodRecognitionResult.RecognizedFoodItem visualTarget,
+	String findBestMatch(PipelineFoodItem visualTarget,
             List<NutritionInfo> candidates,
             String base64Image);
 	}
