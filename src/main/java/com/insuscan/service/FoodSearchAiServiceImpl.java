@@ -104,8 +104,11 @@ public class FoodSearchAiServiceImpl implements FoodSearchAiService {
 			String[] variations = parseJsonArray(root.get("searchVariations"));
 			String[] excludes = parseJsonArray(root.get("excludeTerms"));
 			String intent = root.has("intent") ? root.get("intent").asText() : "unknown";
+			String[] prepKeywords = parseJsonArray(root.get("preparationKeywords"));
 
-			return new SearchOptimization(translatedQuery, variations, excludes, intent);
+			SearchOptimization opt = new SearchOptimization(translatedQuery, variations, excludes, intent);
+			opt.setPreparationKeywords(prepKeywords);
+			return opt;
 
 		} catch (Exception e) {
 			log.error("[AI-SEARCH] Failed to parse optimization response: {}", e.getMessage());
@@ -183,22 +186,33 @@ public class FoodSearchAiServiceImpl implements FoodSearchAiService {
 						USER LANGUAGE: %s
 
 						TASK:
-						1. If the query is in Hebrew, translate it to English
-						2. Identify the user's search intent (basic ingredient, prepared dish, etc.)
-						3. Generate 2-3 search variations that would find the item in USDA database
-						4. Identify terms that should EXCLUDE results (e.g., "pudding", "fried", "cake" if user wants plain rice)
+						1. If the query is in Hebrew, translate it to English.
+						2. Identify how the food is typically prepared and return USDA-style preparation keywords.
+						3. Generate 2-3 search variations for the USDA FoodData Central database.
+						4. Identify terms to EXCLUDE from results.
+
+						PREPARATION KEYWORDS — choose one or more from this list:
+						  "cooked"   — for grains, pasta, legumes, potatoes, eggs (boiled/scrambled)
+						  "raw"      — for fresh vegetables, fruits, salads
+						  "fried"    — for fried foods (fries, schnitzel, fried chicken)
+						  "roasted"  — for roasted/baked meats or vegetables
+						  "broiled"  — for grilled meats or fish
+						  "canned"   — for canned/preserved foods
+						  "dried"    — for dried fruits, nuts, seeds
+						  "baked"    — for bread, cakes, pastries
 
 						RULES:
-						- For basic ingredients, prioritize plain/cooked versions
-						- Exclude processed/prepared variations unless specifically requested
-						- Generate both specific and general search terms
+						- The first searchVariation MUST include the preparationKeyword
+						  (e.g. if query is "white rice" and prep is "cooked" → first variation: "rice white cooked")
+						- Exclude processed/branded variations unless specifically requested.
 
-						OUTPUT (Strict JSON):
+						OUTPUT (Strict JSON, no markdown):
 						{
 						  "translatedQuery": "white rice",
-						  "searchVariations": ["white rice", "rice, white, cooked", "rice white long-grain"],
-						  "excludeTerms": ["pudding", "fried", "cake", "mix"],
-						  "intent": "basic ingredient"
+						  "searchVariations": ["rice white cooked", "rice, white, cooked", "white rice"],
+						  "excludeTerms": ["pudding", "fried", "cake"],
+						  "intent": "cooked grain",
+						  "preparationKeywords": ["cooked"]
 						}
 						""",
 				query, language);

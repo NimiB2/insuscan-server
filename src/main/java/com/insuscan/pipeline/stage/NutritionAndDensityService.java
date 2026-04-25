@@ -13,6 +13,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -20,17 +21,35 @@ import java.util.Map;
 /**
  * Stage 7 — Resolves USDA nutrition data and calculates physical density.
  *
- * <p>
- * Two-step approach (proven from old system):
- * 1. optimizeQuery() — AI generates USDA-formatted search terms like "rice, white, cooked"
- *    (this is fast, cheap, and cached; it also handles Hebrew→English translation)
- * 2. searchCandidates(term) → string matching — no AI ranking, just reliable string matching
+ * <p>Flow:
+ * 1. optimizeQuery() → AI returns preparationKeywords (e.g. ["cooked"], ["raw"], ["fried"])
+ *    and searchVariations where the FIRST variation already includes the prep keyword
+ *    (e.g. "rice white cooked" instead of just "white rice")
+ * 2. buildTermList() uses the prep keyword to build a precise primary USDA search term.
+ *    Broader fallback terms are tried only if the precise term returns no results.
+ * 3. All candidates from tried terms are pooled and pickBestCandidate() selects the winner,
+ *    preferring candidates whose USDA name matches the expected preparation style.
  * </p>
  */
 @Service
 public class NutritionAndDensityService {
 
     private static final Logger log = LoggerFactory.getLogger(NutritionAndDensityService.class);
+
+    /**
+     * USDA keywords that are opposite to each other.
+     * Used to penalize candidates that contradict the expected preparation style.
+     */
+    private static final Map<String, List<String>> OPPOSITE_PREPS = Map.of(
+            "raw",     List.of("cooked", "boiled", "roasted", "fried", "baked", "broiled"),
+            "cooked",  List.of("raw"),
+            "fried",   List.of("raw", "baked", "boiled"),
+            "roasted", List.of("raw", "boiled"),
+            "broiled", List.of("raw", "boiled"),
+            "canned",  List.of("raw", "fresh"),
+            "dried",   List.of("raw", "fresh", "cooked"),
+            "baked",   List.of("raw", "fried")
+    );
 
     private final NutritionDataService nutritionDataService;
     private final DensityCalculator densityCalculator;
@@ -83,16 +102,19 @@ public class NutritionAndDensityService {
     }
 
     /**
-     * Search strategy:
-     * 1. Run ALL search terms and aggregate candidates (dedup by fdcId)
-     *    — this ensures "rice, white, cooked" candidates enter the pool
-     *      even if "white rice" already returned 20 results.
-     * 2. Apply smart string matching with cooked-over-raw preference.
+     * Main resolution flow:
+     * 1. AI gives us precise, prep-aware search terms + preparationKeywords
+     * 2. We try each term and collect all candidates into a pool
+     * 3. pickBestCandidate() selects the winner using prep-aware matching
      */
     private NutritionInfo findNutritionForFood(PipelineFoodItem item) {
-        List<String> termsToTry = buildTermList(item);
+        SearchOptimization opt = fetchOptimization(item);
+        List<String> termsToTry = buildTermList(item, opt);
+        List<String> prepKeywords = opt != null && opt.getPreparationKeywords() != null
+                ? Arrays.asList(opt.getPreparationKeywords())
+                : List.of();
 
-        // Collect candidates from ALL terms, dedup by fdcId
+        // Collect candidates from all terms, dedup by fdcId
         Map<String, NutritionInfo> candidateMap = new LinkedHashMap<>();
         for (String term : termsToTry) {
             List<NutritionInfo> results = nutritionDataService.searchCandidates(term);
@@ -105,46 +127,59 @@ public class NutritionAndDensityService {
             return null;
         }
 
-        NutritionInfo best = pickBestCandidate(item.getName(), new ArrayList<>(candidateMap.values()));
-        log.info("[NutritionDensity] Matched '{}' for '{}'", best.getFoodName(), item.getName());
+        NutritionInfo best = pickBestCandidate(item.getName(), new ArrayList<>(candidateMap.values()), prepKeywords);
+        log.info("[NutritionDensity] Matched '{}' for '{}' (prep: {})",
+                best.getFoodName(), item.getName(), prepKeywords);
         return best;
     }
 
+    private SearchOptimization fetchOptimization(PipelineFoodItem item) {
+        try {
+            return foodSearchAiService.optimizeQuery(item.getName(), "en");
+        } catch (Exception e) {
+            log.warn("[NutritionDensity] optimizeQuery failed for '{}': {}", item.getName(), e.getMessage());
+            return null;
+        }
+    }
+
     /**
-     * Builds the ordered list of unique search terms to try.
-     * AI-optimized terms come first because they are formatted for USDA
-     * (e.g. "rice, white, cooked" instead of "White Rice").
+     * Builds an ordered list of USDA search terms.
+     *
+     * Priority:
+     * 1. AI-generated searchVariations — the FIRST one already includes the prep keyword
+     *    (e.g. "rice white cooked") thanks to the updated prompt.
+     * 2. Gemini Vision searchTerms from FoodDetectionService (item.getSearchTerms())
+     * 3. Base ingredient fallback (item.getBaseIngredient())
+     * 4. Display name last resort (item.getName())
+     *
+     * Capped at MAX_TERMS to avoid excessive USDA API calls.
      */
-    private List<String> buildTermList(PipelineFoodItem item) {
+    private static final int MAX_TERMS = 4;
+
+    private List<String> buildTermList(PipelineFoodItem item, SearchOptimization opt) {
         List<String> terms = new ArrayList<>();
 
-        // 1. AI-optimized terms (cached after first call — fast on repeat)
-        try {
-            SearchOptimization opt = foodSearchAiService.optimizeQuery(item.getName(), "en");
-            if (opt.getSearchVariations() != null) {
-                for (String v : opt.getSearchVariations()) {
-                    addIfNew(terms, v);
-                }
+        // 1. AI-optimized variations (first variation already has prep keyword baked in)
+        if (opt != null && opt.getSearchVariations() != null) {
+            for (String v : opt.getSearchVariations()) {
+                addIfNew(terms, v);
+                if (terms.size() >= MAX_TERMS) break;
             }
-            // Also add the translated/normalized query itself
-            addIfNew(terms, opt.getTranslatedQuery());
-        } catch (Exception e) {
-            log.warn("[NutritionDensity] optimizeQuery failed for '{}', falling back: {}",
-                    item.getName(), e.getMessage());
         }
 
-        // 2. Gemini Vision search terms (from FoodDetectionService)
-        if (item.getSearchTerms() != null) {
+        // 2. Gemini Vision search terms
+        if (terms.size() < MAX_TERMS && item.getSearchTerms() != null) {
             for (String t : item.getSearchTerms()) {
                 addIfNew(terms, t);
+                if (terms.size() >= MAX_TERMS) break;
             }
         }
 
         // 3. Base ingredient
-        addIfNew(terms, item.getBaseIngredient());
+        if (terms.size() < MAX_TERMS) addIfNew(terms, item.getBaseIngredient());
 
-        // 4. Display name (last resort)
-        addIfNew(terms, item.getName());
+        // 4. Display name
+        if (terms.size() < MAX_TERMS) addIfNew(terms, item.getName());
 
         return terms;
     }
@@ -156,17 +191,19 @@ public class NutritionAndDensityService {
     }
 
     /**
-     * Picks the best candidate using smart string matching:
-     *   1. Exact match (case-insensitive)
-     *   2. Cooked-over-raw: if target doesn't imply raw, prefer "cooked" candidates
-     *   3. Contains match (either direction) — non-raw first
-     *   4. Best word overlap
-     *   5. First result (USDA relevance order)
+     * Picks the best USDA candidate using preparation-aware string matching:
+     *
+     * 1. Exact match (case-insensitive)
+     * 2. Prep-style match: candidate contains a prep keyword AND matches food name,
+     *    AND does NOT contain an opposite prep keyword
+     *    (e.g. for prep=["cooked"]: prefers "rice, white, cooked"; penalizes "rice, white, raw")
+     * 3. Contains match (non-conflicting prep first, then all)
+     * 4. Best word overlap (prep keyword gives +1 bonus point)
+     * 5. First result (USDA relevance order)
      */
-    private NutritionInfo pickBestCandidate(String targetName, List<NutritionInfo> candidates) {
+    private NutritionInfo pickBestCandidate(String targetName, List<NutritionInfo> candidates,
+                                            List<String> prepKeywords) {
         String target = targetName.toLowerCase().trim();
-        boolean targetImpliesRaw = target.contains("raw") || target.contains("fresh")
-                || target.contains("uncooked");
 
         // 1. Exact match
         for (NutritionInfo c : candidates) {
@@ -175,26 +212,35 @@ public class NutritionAndDensityService {
             }
         }
 
-        // 2. Cooked-over-raw preference (skip raw candidates when target is a cooked dish)
-        if (!targetImpliesRaw) {
+        // 2. Prep-style match: contains a prep keyword + food name matches + no conflict
+        for (String prep : prepKeywords) {
+            List<String> opposites = OPPOSITE_PREPS.getOrDefault(prep, List.of());
             for (NutritionInfo c : candidates) {
                 if (c.getFoodName() == null) continue;
                 String name = c.getFoodName().toLowerCase();
-                if (name.contains("cooked") && (name.contains(target) || target.contains(name))) {
+                boolean hasPrep = name.contains(prep);
+                boolean hasConflict = opposites.stream().anyMatch(name::contains);
+                boolean nameMatches = name.contains(target) || target.contains(name)
+                        || hasWordOverlap(target, name);
+                if (hasPrep && !hasConflict && nameMatches) {
                     return c;
                 }
             }
         }
 
-        // 3. Contains match (non-raw first, then all)
+        // 3a. Contains match — no conflicting prep
         for (NutritionInfo c : candidates) {
             if (c.getFoodName() == null) continue;
             String name = c.getFoodName().toLowerCase();
-            boolean isRaw = name.contains(", raw") || name.endsWith(" raw");
-            if (!isRaw && (name.contains(target) || target.contains(name))) {
+            boolean hasConflict = prepKeywords.stream()
+                    .flatMap(p -> OPPOSITE_PREPS.getOrDefault(p, List.of()).stream())
+                    .anyMatch(name::contains);
+            if (!hasConflict && (name.contains(target) || target.contains(name))) {
                 return c;
             }
         }
+
+        // 3b. Contains match — any candidate
         for (NutritionInfo c : candidates) {
             if (c.getFoodName() == null) continue;
             String name = c.getFoodName().toLowerCase();
@@ -203,7 +249,7 @@ public class NutritionAndDensityService {
             }
         }
 
-        // 4. Best word overlap (cooked preferred, ignores short stop-words)
+        // 4. Best word overlap (prep keyword gives bonus point)
         String[] targetWords = target.split("\\s+");
         NutritionInfo bestWordMatch = null;
         int bestWordCount = 0;
@@ -214,8 +260,8 @@ public class NutritionAndDensityService {
             for (String word : targetWords) {
                 if (word.length() > 2 && name.contains(word)) matchCount++;
             }
-            // Give cooked a bonus point
-            if (!targetImpliesRaw && name.contains("cooked")) matchCount++;
+            // Bonus for matching prep style
+            if (prepKeywords.stream().anyMatch(name::contains)) matchCount++;
             if (matchCount > bestWordCount) {
                 bestWordCount = matchCount;
                 bestWordMatch = c;
@@ -225,7 +271,14 @@ public class NutritionAndDensityService {
             return bestWordMatch;
         }
 
-        // 5. USDA relevance order — first result
+        // 5. USDA's own relevance order
         return candidates.get(0);
+    }
+
+    private boolean hasWordOverlap(String a, String b) {
+        for (String word : a.split("\\s+")) {
+            if (word.length() > 2 && b.contains(word)) return true;
+        }
+        return false;
     }
 }
