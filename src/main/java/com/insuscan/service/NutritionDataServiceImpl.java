@@ -290,7 +290,7 @@ public class NutritionDataServiceImpl implements NutritionDataService {
             Map<String, Object> requestBody = Map.of(
                     "query", query,
                     // Fetch enough results to ensure the correct item is present
-                    "pageSize", Math.max(maxResults, 20),
+                    "pageSize", maxResults,
                     // ONLY use lab-verified data (No "Branded" or user-submitted data)
                     "dataType", List.of("Foundation", "SR Legacy"),
                     // STRICT MODE: "Apple" should not return "Apple Pie"
