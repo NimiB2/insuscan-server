@@ -28,15 +28,15 @@ public class NutritionDataServiceImpl implements NutritionDataService {
     // Fallback data for common foods when API unavailable
     private static final Map<String, NutritionInfo> FALLBACK_DATA = initFallbackData();
 
-    public NutritionDataServiceImpl(WebClient.Builder webClientBuilder, 
-                                   FoodNameNormalizer foodNameNormalizer,
-                                   ApiLogger apiLogger) {
-    	int bufferSize = 16 * 1024 * 1024; 
+    public NutritionDataServiceImpl(WebClient.Builder webClientBuilder,
+            FoodNameNormalizer foodNameNormalizer,
+            ApiLogger apiLogger) {
+        int bufferSize = 16 * 1024 * 1024;
 
         this.webClient = webClientBuilder
                 .baseUrl(USDA_BASE_URL)
                 .codecs(configurer -> configurer.defaultCodecs()
-                        .maxInMemorySize(bufferSize)) 
+                        .maxInMemorySize(bufferSize))
                 .build();
         this.foodNameNormalizer = foodNameNormalizer;
         this.apiLogger = apiLogger;
@@ -52,7 +52,7 @@ public class NutritionDataServiceImpl implements NutritionDataService {
         // Normalize and prepare search terms
         String normalizedName = foodNameNormalizer.normalize(foodName);
         List<String> searchTerms = foodNameNormalizer.getSearchTerms(normalizedName);
-        
+
         // Log the lookup start
         apiLogger.usdaStart(foodName, normalizedName, searchTerms);
 
@@ -60,7 +60,7 @@ public class NutritionDataServiceImpl implements NutritionDataService {
         if (!isServiceAvailable()) {
             String keyPreview = apiKey != null && apiKey.length() > 5 ? apiKey.substring(0, 5) : "N/A";
             apiLogger.apiKeyStatus("USDA", false, keyPreview);
-            
+
             // No API key - use fallback
             NutritionInfo fallback = getFallbackNutrition(foodName);
             if (fallback.isFound()) {
@@ -85,13 +85,14 @@ public class NutritionDataServiceImpl implements NutritionDataService {
                 if (!results.isEmpty()) {
                     // Log all results
                     for (NutritionInfo r : results) {
-                        log.debug("[USDA]   -> {} (fdcId: {}, carbs: {}g)", 
-                            r.getFoodName(), r.getFdcId(), r.getCarbsPer100g());
+                        log.debug("[USDA]   -> {} (fdcId: {}, carbs: {}g)",
+                                r.getFoodName(), r.getFdcId(), r.getCarbsPer100g());
                     }
 
                     NutritionInfo bestMatch = findBestMatch(normalizedName, results);
                     if (bestMatch != null) {
-                        apiLogger.usdaMatchFound(bestMatch.getFoodName(), bestMatch.getFdcId(), bestMatch.getCarbsPer100g());
+                        apiLogger.usdaMatchFound(bestMatch.getFoodName(), bestMatch.getFdcId(),
+                                bestMatch.getCarbsPer100g());
                         return bestMatch;
                     }
                 }
@@ -104,13 +105,13 @@ public class NutritionDataServiceImpl implements NutritionDataService {
                 apiLogger.usdaFallbackHit(foodName + " (after API miss)", fallback.getCarbsPer100g());
                 return fallback;
             }
-            
+
             apiLogger.usdaNoMatch(foodName, false);
             return NutritionInfo.notFound(foodName);
 
         } catch (Exception e) {
             apiLogger.usdaError(e.getMessage());
-            
+
             // API failed - use fallback
             NutritionInfo fallback = getFallbackNutrition(foodName);
             if (fallback.isFound()) {
@@ -119,7 +120,7 @@ public class NutritionDataServiceImpl implements NutritionDataService {
             return fallback;
         }
     }
-    
+
     @Override
     public NutritionInfo getNutritionInfoById(String fdcId) {
         if (fdcId == null || fdcId.isBlank()) {
@@ -174,9 +175,11 @@ public class NutritionDataServiceImpl implements NutritionDataService {
                             ? (String) nutrientInfo.get("name")
                             : (String) nutrient.get("nutrientName");
                     Number value = (Number) nutrient.get("amount");
-                    if (value == null) value = (Number) nutrient.get("value");
+                    if (value == null)
+                        value = (Number) nutrient.get("value");
 
-                    if (name == null || value == null) continue;
+                    if (name == null || value == null)
+                        continue;
 
                     String lower = name.toLowerCase();
                     if (lower.contains("carbohydrate")) {
@@ -203,7 +206,8 @@ public class NutritionDataServiceImpl implements NutritionDataService {
                 for (Map<String, Object> portion : portions) {
                     Number gramWeight = (Number) portion.get("gramWeight");
                     String desc = (String) portion.get("portionDescription");
-                    if (desc == null) desc = (String) portion.get("modifier");
+                    if (desc == null)
+                        desc = (String) portion.get("modifier");
 
                     if (gramWeight != null && desc != null && gramWeight.floatValue() > 0) {
                         float volumeCm3 = estimateVolumeCm3FromDescription(desc);
@@ -233,14 +237,15 @@ public class NutritionDataServiceImpl implements NutritionDataService {
     }
 
     private NutritionInfo findBestMatch(String normalizedName, List<NutritionInfo> results) {
-        if (results.isEmpty()) return null;
+        if (results.isEmpty())
+            return null;
 
         String normalizedLower = normalizedName.toLowerCase();
 
         // Exact match
         for (NutritionInfo info : results) {
             if (info.getFoodName() != null &&
-                info.getFoodName().toLowerCase().equals(normalizedLower)) {
+                    info.getFoodName().toLowerCase().equals(normalizedLower)) {
                 return info;
             }
         }
@@ -269,7 +274,7 @@ public class NutritionDataServiceImpl implements NutritionDataService {
     @Override
     public List<NutritionInfo> searchFoods(String query, int maxResults) {
         apiLogger.usdaApiCall(query);
-        
+
         if (!isServiceAvailable()) {
             NutritionInfo fallback = getFallbackNutrition(query);
             return fallback.isFound() ? List.of(fallback) : List.of();
@@ -283,21 +288,20 @@ public class NutritionDataServiceImpl implements NutritionDataService {
         try {
             // --- MEDICAL GRADE CONFIGURATION ---
             Map<String, Object> requestBody = Map.of(
-                "query", query,
-                // Fetch enough results to ensure the correct item is present
-                "pageSize", Math.max(maxResults, 20), 
-                // ONLY use lab-verified data (No "Branded" or user-submitted data)
-                "dataType", List.of("Foundation", "SR Legacy"), 
-                // STRICT MODE: "Apple" should not return "Apple Pie"
-                "requireAllWords", true 
-            );
+                    "query", query,
+                    // Fetch enough results to ensure the correct item is present
+                    "pageSize", maxResults,
+                    // ONLY use lab-verified data (No "Branded" or user-submitted data)
+                    "dataType", List.of("Foundation", "SR Legacy"),
+                    // STRICT MODE: "Apple" should not return "Apple Pie"
+                    "requireAllWords", true);
 
             Map response = webClient.post()
-                .uri(USDA_BASE_URL + "/foods/search?api_key=" + apiKey)
-                .bodyValue(requestBody)
-                .retrieve()
-                .bodyToMono(Map.class)
-                .block();
+                    .uri(USDA_BASE_URL + "/foods/search?api_key=" + apiKey)
+                    .bodyValue(requestBody)
+                    .retrieve()
+                    .bodyToMono(Map.class)
+                    .block();
 
             return parseSearchResponse(response);
 
@@ -306,7 +310,7 @@ public class NutritionDataServiceImpl implements NutritionDataService {
             return List.of();
         }
     }
-    
+
     /**
      * MEDICAL GRADE RETRIEVAL:
      * Fetches a pool of high-quality candidates for the Semantic Matcher (Step 3).
@@ -346,7 +350,8 @@ public class NutritionDataServiceImpl implements NutritionDataService {
 
         try {
             List<Map> foods = (List<Map>) response.get("foods");
-            if (foods == null) return results;
+            if (foods == null)
+                return results;
 
             for (Map food : foods) {
                 NutritionInfo info = new NutritionInfo();
@@ -364,7 +369,8 @@ public class NutritionDataServiceImpl implements NutritionDataService {
                         String name = (String) nutrient.get("nutrientName");
                         Number value = (Number) nutrient.get("value");
 
-                        if (name == null || value == null) continue;
+                        if (name == null || value == null)
+                            continue;
 
                         String lower = name.toLowerCase();
                         if (lower.contains("carbohydrate")) {
@@ -399,7 +405,8 @@ public class NutritionDataServiceImpl implements NutritionDataService {
                     for (Map measure : measures) {
                         Number gramWeight = (Number) measure.get("gramWeight");
                         String desc = (String) measure.get("disseminationText");
-                        if (desc == null) desc = (String) measure.get("measureUnitName");
+                        if (desc == null)
+                            desc = (String) measure.get("measureUnitName");
 
                         if (gramWeight != null && desc != null && gramWeight.floatValue() > 0) {
                             float volumeCm3 = estimateVolumeCm3FromDescription(desc);
@@ -453,7 +460,7 @@ public class NutritionDataServiceImpl implements NutritionDataService {
         for (Map.Entry<String, NutritionInfo> entry : FALLBACK_DATA.entrySet()) {
             String fallbackKey = entry.getKey();
             if (key.contains(fallbackKey) || fallbackKey.contains(key) ||
-                normalized.contains(fallbackKey) || fallbackKey.contains(normalized)) {
+                    normalized.contains(fallbackKey) || fallbackKey.contains(normalized)) {
                 return entry.getValue();
             }
         }
@@ -505,26 +512,35 @@ public class NutritionDataServiceImpl implements NutritionDataService {
         info.setFdcId("fallback-" + name);
         return info;
     }
+
     /**
      * Converts common USDA serving descriptions to volume in cm³.
      * "1 cup" = 236.6 cm³, "1 tbsp" = 14.8 cm³, etc.
      */
     private float estimateVolumeCm3FromDescription(String desc) {
-        if (desc == null) return 0f;
+        if (desc == null)
+            return 0f;
         String lower = desc.toLowerCase().trim();
 
         // Standard volume conversions to cm³
-        if (lower.contains("cup")) return 236.6f;
-        if (lower.contains("tablespoon") || lower.contains("tbsp")) return 14.8f;
-        if (lower.contains("teaspoon") || lower.contains("tsp")) return 4.9f;
-        if (lower.contains("fluid oz") || lower.contains("fl oz")) return 29.6f;
-        if (lower.contains("liter") || lower.contains("litre")) return 1000f;
+        if (lower.contains("cup"))
+            return 236.6f;
+        if (lower.contains("tablespoon") || lower.contains("tbsp"))
+            return 14.8f;
+        if (lower.contains("teaspoon") || lower.contains("tsp"))
+            return 4.9f;
+        if (lower.contains("fluid oz") || lower.contains("fl oz"))
+            return 29.6f;
+        if (lower.contains("liter") || lower.contains("litre"))
+            return 1000f;
         if (lower.contains("ml")) {
             // Try to extract the number: "250 ml" → 250
             try {
                 String num = lower.replaceAll("[^0-9.]", "");
-                if (!num.isEmpty()) return Float.parseFloat(num);
-            } catch (NumberFormatException e) { /* ignore */ }
+                if (!num.isEmpty())
+                    return Float.parseFloat(num);
+            } catch (NumberFormatException e) {
+                /* ignore */ }
             return 0f;
         }
 
