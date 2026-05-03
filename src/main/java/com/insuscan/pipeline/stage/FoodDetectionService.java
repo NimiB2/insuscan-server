@@ -88,6 +88,7 @@ public class FoodDetectionService {
             "7. bbox_pct: Bounding box covering the food as percentages of the image (0-100) -> {x, y, width, height}.\n" +
             "8. effective_density_factor: A float between 0.3 and 1.0 representing how much of the food's visual volume is actual solid food vs air. " +
             "For example: solid chicken=1.0, dense rice=0.9, bread/cake=0.65, airy leafy salad=0.35, popcorn=0.3.\n\n" +
+            "9. coverage_percent: Integer 0-100. What percentage of the plate/bowl SURFACE AREA this food item occupies. All items on the plate should sum to approximately 100.\n\n" +
             "Return ONLY a JSON array of food objects with NO markdown formatting:\n" +
             "[\n" +
             "  {\n" +
@@ -98,6 +99,7 @@ public class FoodDetectionService {
             "    \"requires_user_validation\": false,\n" +
             "    \"confidence\": 0.95,\n" +
             "    \"effective_density_factor\": 1.0,\n" +
+            "    \"coverage_percent\": 40,\n" +
             "    \"bbox_pct\": { \"x\": 10, \"y\": 20, \"width\": 30, \"height\": 40 }\n" +
             "  }\n" +
             "]";
@@ -120,7 +122,8 @@ public class FoodDetectionService {
                 item.setRequiresUserValidation(node.path("requires_user_validation").asBoolean(true));
                 item.setDetectionConfidence((float) node.path("confidence").asDouble(0.5));
                 item.setEffectiveDensityFactor((float) node.path("effective_density_factor").asDouble(0.8));
-
+                item.setCoveragePercent((float) node.path("coverage_percent").asDouble(-1));
+                
                 List<String> terms = new ArrayList<>();
                 JsonNode termsNode = node.path("search_terms");
                 if (termsNode.isArray()) {

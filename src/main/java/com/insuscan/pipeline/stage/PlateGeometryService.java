@@ -16,9 +16,13 @@ import java.util.concurrent.CompletableFuture;
 public class PlateGeometryService {
 
     private static final Logger log = LoggerFactory.getLogger(PlateGeometryService.class);
+    
+    private static final boolean DEBUG_OVERRIDE_GEOMETRY = true;
+    private static final float DEBUG_DIAMETER_CM = 22.0f;
+    private static final float DEBUG_DEPTH_CM    = 2.0f;
 
     private static final float DEFAULT_DIAMETER_CM = 22.0f;
-    private static final float DEFAULT_DEPTH_CM    = 2.5f;
+    private static final float DEFAULT_DEPTH_CM    = 2.0f;
     private static final float DEFAULT_FILL_PCT    = 70.0f;
 
     private final GeminiApiClient geminiApiClient;
@@ -37,6 +41,25 @@ public class PlateGeometryService {
     }
 
     public void measurePlate(PipelineContext ctx) {
+    	
+    	// --- DEBUG ONLY: remove before release ---
+    	if (DEBUG_OVERRIDE_GEOMETRY) {
+    	    PipelineContext.PlateGeometry override = new PipelineContext.PlateGeometry();
+    	    override.setContainerType("FLAT_PLATE");
+    	    override.setInnerDiameterCm(DEBUG_DIAMETER_CM);
+    	    override.setInnerDepthCm(DEBUG_DEPTH_CM);
+    	    override.setFillPercent(DEFAULT_FILL_PCT);
+    	    override.setDiameterConfidence(1.0f);
+    	    override.setDepthConfidence(1.0f);
+    	    override.setReasoningNotes("DEBUG override — fixed geometry, not from Gemini");
+    	    ctx.setPlateGeometry(override);
+    	    ctx.recordConfidence("PLATE_GEOMETRY", 1.0f);
+    	    log.info("[PlateGeometry] DEBUG OVERRIDE active — diameter={}cm depth={}cm", DEBUG_DIAMETER_CM, DEBUG_DEPTH_CM);
+    	    return;
+    	}
+    	// --- END DEBUG ---
+    	
+    	
         CompletableFuture<DiameterResult> diameterFuture = CompletableFuture.supplyAsync(
                 () -> fetchDiameter(ctx));
 
