@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import com.insuscan.boundary.ArcoreDepthData;
 
 /**
  * Shared mutable context that flows through all pipeline stages.
@@ -37,7 +38,7 @@ public class PipelineContext {
     private String referenceObjectType;  // e.g. "INSULIN_SYRINGE", "CARD", "SYRINGE_KNIFE"
     private String userId;
     private String systemId;
-
+    private ArcoreDepthData arcoreDepthData;
     // ── Stage 1: Calibration ───────────────────────────────────────────────
 
     /** Pixels per centimeter, derived from reference object in top image. */
@@ -165,6 +166,9 @@ public class PipelineContext {
     public void setUserId(String v) { this.userId = v; }
     public String getSystemId() { return systemId; }
     public void setSystemId(String v) { this.systemId = v; }
+    
+    public ArcoreDepthData getArcoreDepthData() { return arcoreDepthData; }
+    public void setArcoreDepthData(ArcoreDepthData v) { this.arcoreDepthData = v; }
 
     public Float getPixelToCmRatioTop() { return pixelToCmRatioTop; }
     public void setPixelToCmRatioTop(Float v) { this.pixelToCmRatioTop = v; }

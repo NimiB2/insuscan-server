@@ -36,6 +36,8 @@ import java.util.Base64;
 import java.util.Date;
 import java.util.List;
 import java.util.stream.Collectors;
+import com.insuscan.boundary.ArcoreDepthData;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
  * New scan endpoint for the dual-image pipeline (Milestone 7).
@@ -57,7 +59,8 @@ public class ScanPipelineController {
     private final InsulinCalculationService insulinCalculationService;
     private final MealConverter mealConverter;
     private final MealService mealService;
-
+    private final ObjectMapper objectMapper;
+    
     @Value("${spring.application.name}")
     private String systemId;
 
@@ -68,7 +71,8 @@ public class ScanPipelineController {
             MealIdGenerator mealIdGenerator,
             InsulinCalculationService insulinCalculationService,
             MealConverter mealConverter,
-            MealService mealService) {
+            MealService mealService,
+            ObjectMapper objectMapper) {
         this.pipeline = pipeline;
         this.userRepository = userRepository;
         this.mealRepository = mealRepository;
@@ -76,6 +80,7 @@ public class ScanPipelineController {
         this.insulinCalculationService = insulinCalculationService;
         this.mealConverter = mealConverter;
         this.mealService = mealService;
+        this.objectMapper = objectMapper;
     }
 
     @Operation(
@@ -91,7 +96,8 @@ public class ScanPipelineController {
         @RequestPart("topFile")  MultipartFile topFile,
         @RequestPart("sideFile") MultipartFile sideFile,
         @RequestParam("referenceObjectType") String referenceObjectType,
-        @RequestParam(value = "email", required = false, defaultValue = "anonymous") String email
+        @RequestParam(value = "email", required = false, defaultValue = "anonymous") String email,
+        @RequestParam(value = "arcoreData", required = false) String arcoreDataJson
     ) throws IOException {
 
         if (topFile == null || topFile.isEmpty()) {
@@ -113,6 +119,19 @@ public class ScanPipelineController {
         ctx.setReferenceObjectType(referenceObjectType.toUpperCase());
         ctx.setUserId(email);
         ctx.setSystemId(systemId);
+        
+        if (arcoreDataJson != null && !arcoreDataJson.isBlank()) {
+            try {
+                ArcoreDepthData arcoreDepthData = objectMapper.readValue(arcoreDataJson, ArcoreDepthData.class);
+                ctx.setArcoreDepthData(arcoreDepthData);
+                log.info("[ScanV2] ARCore data received: plateDepth={}m, confidence={}, items={}",
+                        arcoreDepthData.getPlateDepthM(),
+                        arcoreDepthData.getArConfidence(),
+                        arcoreDepthData.getItemDepthsM() != null ? arcoreDepthData.getItemDepthsM().size() : 0);
+            } catch (Exception e) {
+                log.warn("[ScanV2] Failed to parse arcoreData JSON, continuing without it: {}", e.getMessage());
+            }
+        }
 
         PipelineResult result = pipeline.run(ctx);
 

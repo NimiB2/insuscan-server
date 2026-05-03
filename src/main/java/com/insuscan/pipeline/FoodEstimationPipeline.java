@@ -2,6 +2,7 @@ package com.insuscan.pipeline;
 
 import com.insuscan.pipeline.model.PipelineContext;
 import com.insuscan.pipeline.model.PipelineResult;
+import com.insuscan.pipeline.stage.ArcoreDepthFusionService;
 import com.insuscan.pipeline.stage.CalibrationService;
 import com.insuscan.pipeline.stage.PlateGeometryService;
 import com.insuscan.pipeline.support.ConfidenceAggregator;
@@ -42,7 +43,8 @@ public class FoodEstimationPipeline {
     private final com.insuscan.pipeline.calculation.WeightCalculator weightCalculator;
     private final com.insuscan.pipeline.calculation.NutritionAggregator nutritionAggregator;
     private final com.insuscan.pipeline.stage.SanityCheckService sanityCheckService;
-
+    private final ArcoreDepthFusionService arcoreDepthFusionService;
+    
     public FoodEstimationPipeline(ConfidenceAggregator confidenceAggregator,
                                    ReferenceObjectRegistry referenceObjectRegistry,
                                    CalibrationService calibrationService,
@@ -54,7 +56,8 @@ public class FoodEstimationPipeline {
                                    com.insuscan.pipeline.stage.NutritionAndDensityService nutritionAndDensityService,
                                    com.insuscan.pipeline.calculation.WeightCalculator weightCalculator,
                                    com.insuscan.pipeline.calculation.NutritionAggregator nutritionAggregator,
-                                   com.insuscan.pipeline.stage.SanityCheckService sanityCheckService) {
+                                   com.insuscan.pipeline.stage.SanityCheckService sanityCheckService,                                
+                                   ArcoreDepthFusionService arcoreDepthFusionService) {
         this.confidenceAggregator = confidenceAggregator;
         this.referenceObjectRegistry = referenceObjectRegistry;
         this.calibrationService = calibrationService;
@@ -67,6 +70,7 @@ public class FoodEstimationPipeline {
         this.weightCalculator = weightCalculator;
         this.nutritionAggregator = nutritionAggregator;
         this.sanityCheckService = sanityCheckService;
+        this.arcoreDepthFusionService = arcoreDepthFusionService;
     }
 
     /**
@@ -107,6 +111,7 @@ public class FoodEstimationPipeline {
 
             runStage4_FoodArea(ctx);
             runStage5_FoodHeight(ctx);
+            runStageArcore_DepthFusion(ctx);
             runStage6_Volume(ctx);
             runStage7_NutritionAndDensity(ctx);
             runStage8_Weight(ctx);
@@ -160,6 +165,12 @@ public class FoodEstimationPipeline {
         long start = System.currentTimeMillis();
         foodHeightService.estimateHeights(ctx);
         ctx.recordTiming("FOOD_HEIGHT", System.currentTimeMillis() - start);
+    }
+    
+    private void runStageArcore_DepthFusion(PipelineContext ctx) {
+        long start = System.currentTimeMillis();
+        arcoreDepthFusionService.fuseDepths(ctx);
+        ctx.recordTiming("ARCORE_FUSION", System.currentTimeMillis() - start);
     }
 
     /** Stage 6 — Milestone 4 */

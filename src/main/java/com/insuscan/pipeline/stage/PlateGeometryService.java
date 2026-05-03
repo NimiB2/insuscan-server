@@ -10,20 +10,14 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
-/**
- * Stage 2 — estimates plate/container geometry using both images and the calibrated scale.
- *
- * <p>Writes to: {@code ctx.plateGeometry}.</p>
- *
- * <p>On API failure, falls back to a default flat-plate geometry with zero confidence
- * rather than stopping the pipeline.</p>
- */
+import java.util.concurrent.CompletableFuture;
+
 @Service
 public class PlateGeometryService {
 
     private static final Logger log = LoggerFactory.getLogger(PlateGeometryService.class);
 
-    private static final float DEFAULT_DIAMETER_CM = 24.0f;
+    private static final float DEFAULT_DIAMETER_CM = 22.0f;
     private static final float DEFAULT_DEPTH_CM    = 2.5f;
     private static final float DEFAULT_FILL_PCT    = 70.0f;
 
@@ -43,28 +37,17 @@ public class PlateGeometryService {
     }
 
     public void measurePlate(PipelineContext ctx) {
-        String prompt = buildPrompt(ctx);
+        CompletableFuture<DiameterResult> diameterFuture = CompletableFuture.supplyAsync(
+                () -> fetchDiameter(ctx));
 
-        PipelineContext.PlateGeometry geometry;
-        float confidence;
+        CompletableFuture<DepthResult> depthFuture = CompletableFuture.supplyAsync(
+                () -> fetchDepth(ctx));
 
-        try {
-            String response = geminiApiClient.callVisionModelWithMultipleImages(
-                prompt, ctx.getImageTopBase64(), ctx.getImageSideBase64());
+        DiameterResult diameterResult = diameterFuture.join();
+        DepthResult depthResult = depthFuture.join();
 
-            if (response == null || response.isBlank()) {
-                log.warn("[PlateGeometry] Empty response, using defaults");
-                geometry = buildDefaultGeometry();
-                confidence = 0.3f;
-            } else {
-                geometry = parseGeometryResponse(response);
-                confidence = (geometry.getDiameterConfidence() + geometry.getDepthConfidence()) / 2f;
-            }
-        } catch (Exception e) {
-            log.warn("[PlateGeometry] API call failed: {}, using defaults", e.getMessage());
-            geometry = buildDefaultGeometry();
-            confidence = 0.3f;
-        }
+        PipelineContext.PlateGeometry geometry = merge(diameterResult, depthResult);
+        float confidence = (diameterResult.confidence + depthResult.confidence) / 2f;
 
         if ("FLAT_PLATE".equals(geometry.getContainerType()) && geometry.getInnerDepthCm() > 3.0f) {
             warningCollector.plateTypeDepthMismatch(ctx, geometry.getContainerType(), geometry.getInnerDepthCm());
@@ -74,77 +57,150 @@ public class PlateGeometryService {
         ctx.recordConfidence("PLATE_GEOMETRY", confidence);
 
         log.info("[PlateGeometry] type={} diameter={}cm depth={}cm fill={}% confidence={}",
-            geometry.getContainerType(),
-            String.format("%.1f", geometry.getInnerDiameterCm()),
-            String.format("%.1f", geometry.getInnerDepthCm()),
-            String.format("%.0f", geometry.getFillPercent()),
-            String.format("%.2f", confidence));
+                geometry.getContainerType(),
+                String.format("%.1f", geometry.getInnerDiameterCm()),
+                String.format("%.1f", geometry.getInnerDepthCm()),
+                String.format("%.0f", geometry.getFillPercent()),
+                String.format("%.2f", confidence));
     }
 
-    private String buildPrompt(PipelineContext ctx) {
-        ReferenceObjectRegistry.Dimensions dims =
-            referenceObjectRegistry.getDimensions(ctx.getReferenceObjectType());
-        String description = referenceObjectRegistry.getDescription(ctx.getReferenceObjectType());
-
-        String topRatio = ctx.getPixelToCmRatioTop() != null
-            ? String.format("%.2f", ctx.getPixelToCmRatioTop())
-            : "not available";
-        String sideRatio = ctx.getPixelToCmRatioSide() != null
-            ? String.format("%.2f", ctx.getPixelToCmRatioSide())
-            : "not available";
-
-        return String.format(
-            "You are measuring a food container in two calibrated images.\n" +
-            "Image 1 (first image) = top-down view.\n" +
-            "Image 2 (second image) = side view.\n\n" +
-            "Scale calibration:\n" +
-            "  Top image:  %s pixels per cm\n" +
-            "  Side image: %s pixels per cm\n\n" +
-            "Reference object visible in images: %s (%.2fcm long x %.2fcm wide)\n" +
-            "Use this reference object as your scale anchor to estimate real-world dimensions.\n\n" +
-            "Estimate the inner dimensions of the plate or bowl.\n\n" +
-            "Return ONLY valid JSON with no markdown or extra text:\n" +
-            "{\n" +
-            "  \"container_type\": \"FLAT_PLATE\" or \"REGULAR_BOWL\" or \"DEEP_BOWL\",\n" +
-            "  \"inner_diameter_cm\": <float>,\n" +
-            "  \"inner_depth_cm\": <float>,\n" +
-            "  \"fill_percent\": <integer 0-100>,\n" +
-            "  \"diameter_confidence\": <float 0.0-1.0>,\n" +
-            "  \"depth_confidence\": <float 0.0-1.0>,\n" +
-            "  \"reasoning_notes\": \"<brief explanation of how you estimated the dimensions>\"\n" +
-            "}",
-            topRatio, sideRatio, description, dims.lengthCm(), dims.widthCm());
-    }
-
-    private PipelineContext.PlateGeometry parseGeometryResponse(String response) {
+    private DiameterResult fetchDiameter(PipelineContext ctx) {
         try {
-            JsonNode root = objectMapper.readTree(response);
-
-            PipelineContext.PlateGeometry g = new PipelineContext.PlateGeometry();
-            g.setContainerType(root.path("container_type").asText("FLAT_PLATE"));
-            g.setInnerDiameterCm((float) root.path("inner_diameter_cm").asDouble(DEFAULT_DIAMETER_CM));
-            g.setInnerDepthCm((float) root.path("inner_depth_cm").asDouble(DEFAULT_DEPTH_CM));
-            g.setFillPercent((float) root.path("fill_percent").asDouble(DEFAULT_FILL_PCT));
-            g.setDiameterConfidence((float) root.path("diameter_confidence").asDouble(0.5));
-            g.setDepthConfidence((float) root.path("depth_confidence").asDouble(0.5));
-            g.setReasoningNotes(root.path("reasoning_notes").asText(""));
-            return g;
-
+            String prompt = buildDiameterPrompt(ctx);
+            String response = geminiApiClient.callVisionModel(prompt, ctx.getImageTopBase64());
+            if (response == null || response.isBlank()) {
+                log.warn("[PlateGeometry] Empty diameter response, using default");
+                return DiameterResult.defaultResult();
+            }
+            return parseDiameterResponse(response);
         } catch (Exception e) {
-            log.warn("[PlateGeometry] Failed to parse response: {}", e.getMessage());
-            return buildDefaultGeometry();
+            log.warn("[PlateGeometry] Diameter call failed: {}", e.getMessage());
+            return DiameterResult.defaultResult();
         }
     }
 
-    private PipelineContext.PlateGeometry buildDefaultGeometry() {
+    private DepthResult fetchDepth(PipelineContext ctx) {
+        try {
+            String prompt = buildDepthPrompt(ctx);
+            String response = geminiApiClient.callVisionModel(prompt, ctx.getImageSideBase64());
+            if (response == null || response.isBlank()) {
+                log.warn("[PlateGeometry] Empty depth response, using default");
+                return DepthResult.defaultResult();
+            }
+            return parseDepthResponse(response);
+        } catch (Exception e) {
+            log.warn("[PlateGeometry] Depth call failed: {}", e.getMessage());
+            return DepthResult.defaultResult();
+        }
+    }
+
+    private String buildDiameterPrompt(PipelineContext ctx) {
+        ReferenceObjectRegistry.Dimensions dims =
+                referenceObjectRegistry.getDimensions(ctx.getReferenceObjectType());
+        String description = referenceObjectRegistry.getDescription(ctx.getReferenceObjectType());
+
+        String topRatio = ctx.getPixelToCmRatioTop() != null
+                ? String.format("%.2f", ctx.getPixelToCmRatioTop())
+                : "not available";
+
+        return String.format(
+                "You are measuring a food container from a TOP-DOWN view.\n\n" +
+                "Scale calibration: %s pixels per cm\n" +
+                "Reference object in image: %s (%.2fcm long x %.2fcm wide)\n\n" +
+                "Estimate ONLY the horizontal dimensions of the plate or bowl.\n" +
+                "Do NOT estimate depth — that will be measured from a side image.\n\n" +
+                "Return ONLY valid JSON with no markdown or extra text:\n" +
+                "{\n" +
+                "  \"container_type\": \"FLAT_PLATE\" or \"REGULAR_BOWL\" or \"DEEP_BOWL\",\n" +
+                "  \"inner_diameter_cm\": <float>,\n" +
+                "  \"fill_percent\": <integer 0-100>,\n" +
+                "  \"diameter_confidence\": <float 0.0-1.0>,\n" +
+                "  \"reasoning_notes\": \"<brief explanation>\"\n" +
+                "}",
+                topRatio, description, dims.lengthCm(), dims.widthCm());
+    }
+
+    private String buildDepthPrompt(PipelineContext ctx) {
+        ReferenceObjectRegistry.Dimensions dims =
+                referenceObjectRegistry.getDimensions(ctx.getReferenceObjectType());
+        String description = referenceObjectRegistry.getDescription(ctx.getReferenceObjectType());
+
+        String sideRatio = ctx.getPixelToCmRatioSide() != null
+                ? String.format("%.2f", ctx.getPixelToCmRatioSide())
+                : "not available";
+
+        return String.format(
+                "You are measuring a food container from a SIDE view.\n\n" +
+                "Scale calibration: %s pixels per cm\n" +
+                "Reference object in image: %s (%.2fcm long x %.2fcm wide)\n\n" +
+                "Estimate ONLY the inner depth of the plate or bowl (from rim to bottom, in cm).\n" +
+                "Do NOT estimate diameter or width — that is measured from a top-down image.\n\n" +
+                "Return ONLY valid JSON with no markdown or extra text:\n" +
+                "{\n" +
+                "  \"inner_depth_cm\": <float>,\n" +
+                "  \"depth_confidence\": <float 0.0-1.0>,\n" +
+                "  \"reasoning_notes\": \"<brief explanation>\"\n" +
+                "}",
+                sideRatio, description, dims.lengthCm(), dims.widthCm());
+    }
+
+    private DiameterResult parseDiameterResponse(String response) {
+        try {
+            JsonNode root = objectMapper.readTree(response);
+            DiameterResult r = new DiameterResult();
+            r.containerType     = root.path("container_type").asText("FLAT_PLATE");
+            r.innerDiameterCm   = (float) root.path("inner_diameter_cm").asDouble(DEFAULT_DIAMETER_CM);
+            r.fillPercent       = (float) root.path("fill_percent").asDouble(DEFAULT_FILL_PCT);
+            r.confidence        = (float) root.path("diameter_confidence").asDouble(0.5);
+            r.reasoningNotes    = root.path("reasoning_notes").asText("");
+            return r;
+        } catch (Exception e) {
+            log.warn("[PlateGeometry] Failed to parse diameter response: {}", e.getMessage());
+            return DiameterResult.defaultResult();
+        }
+    }
+
+    private DepthResult parseDepthResponse(String response) {
+        try {
+            JsonNode root = objectMapper.readTree(response);
+            DepthResult r = new DepthResult();
+            r.innerDepthCm   = (float) root.path("inner_depth_cm").asDouble(DEFAULT_DEPTH_CM);
+            r.confidence     = (float) root.path("depth_confidence").asDouble(0.5);
+            r.reasoningNotes = root.path("reasoning_notes").asText("");
+            return r;
+        } catch (Exception e) {
+            log.warn("[PlateGeometry] Failed to parse depth response: {}", e.getMessage());
+            return DepthResult.defaultResult();
+        }
+    }
+
+    private PipelineContext.PlateGeometry merge(DiameterResult d, DepthResult dep) {
         PipelineContext.PlateGeometry g = new PipelineContext.PlateGeometry();
-        g.setContainerType("FLAT_PLATE");
-        g.setInnerDiameterCm(DEFAULT_DIAMETER_CM);
-        g.setInnerDepthCm(DEFAULT_DEPTH_CM);
-        g.setFillPercent(DEFAULT_FILL_PCT);
-        g.setDiameterConfidence(0.0f);
-        g.setDepthConfidence(0.0f);
-        g.setReasoningNotes("Default values — geometry estimation failed");
+        g.setContainerType(d.containerType);
+        g.setInnerDiameterCm(d.innerDiameterCm);
+        g.setFillPercent(d.fillPercent);
+        g.setDiameterConfidence(d.confidence);
+        g.setInnerDepthCm(dep.innerDepthCm);
+        g.setDepthConfidence(dep.confidence);
+        g.setReasoningNotes(d.reasoningNotes + " | depth: " + dep.reasoningNotes);
         return g;
+    }
+
+    private static class DiameterResult {
+        String containerType  = "FLAT_PLATE";
+        float innerDiameterCm = DEFAULT_DIAMETER_CM;
+        float fillPercent     = DEFAULT_FILL_PCT;
+        float confidence      = 0.0f;
+        String reasoningNotes = "Default values — diameter estimation failed";
+
+        static DiameterResult defaultResult() { return new DiameterResult(); }
+    }
+
+    private static class DepthResult {
+        float innerDepthCm   = DEFAULT_DEPTH_CM;
+        float confidence     = 0.0f;
+        String reasoningNotes = "Default values — depth estimation failed";
+
+        static DepthResult defaultResult() { return new DepthResult(); }
     }
 }
