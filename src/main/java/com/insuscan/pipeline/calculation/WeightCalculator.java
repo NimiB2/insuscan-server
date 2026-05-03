@@ -29,7 +29,7 @@ public class WeightCalculator {
                 float weight = item.getVolumeCm3() * item.getDensityGPerCm3();
                 item.setWeightG(weight);
                 
-                log.info("[Weight] {} -> {:.1f}g", item.getName(), weight);
+                log.info("[Weight] {} -> {}g", item.getName(), String.format("%.1f", weight));
 
                 if (weight < 3f || weight > 500f) {
                     warningCollector.weightOutOfRange(ctx, item.getName(), weight);

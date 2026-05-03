@@ -115,7 +115,7 @@ public class PlateGeometryService {
                 "  \"inner_diameter_cm\": <float>,\n" +
                 "  \"fill_percent\": <integer 0-100>,\n" +
                 "  \"diameter_confidence\": <float 0.0-1.0>,\n" +
-                "  \"reasoning_notes\": \"<brief explanation>\"\n" +
+                "  \"reasoning_notes\": \"<max 20 words>\"\n" +
                 "}",
                 topRatio, description, dims.lengthCm(), dims.widthCm());
     }
@@ -139,14 +139,14 @@ public class PlateGeometryService {
                 "{\n" +
                 "  \"inner_depth_cm\": <float>,\n" +
                 "  \"depth_confidence\": <float 0.0-1.0>,\n" +
-                "  \"reasoning_notes\": \"<brief explanation>\"\n" +
+                "  \"reasoning_notes\": \"<max 20 words>\"\n" +
                 "}",
                 sideRatio, description, dims.lengthCm(), dims.widthCm());
     }
 
     private DiameterResult parseDiameterResponse(String response) {
         try {
-            JsonNode root = objectMapper.readTree(response);
+        	JsonNode root = objectMapper.readTree(sanitizeJson(response));
             DiameterResult r = new DiameterResult();
             r.containerType     = root.path("container_type").asText("FLAT_PLATE");
             r.innerDiameterCm   = (float) root.path("inner_diameter_cm").asDouble(DEFAULT_DIAMETER_CM);
@@ -162,7 +162,7 @@ public class PlateGeometryService {
 
     private DepthResult parseDepthResponse(String response) {
         try {
-            JsonNode root = objectMapper.readTree(response);
+        	JsonNode root = objectMapper.readTree(sanitizeJson(response));
             DepthResult r = new DepthResult();
             r.innerDepthCm   = (float) root.path("inner_depth_cm").asDouble(DEFAULT_DEPTH_CM);
             r.confidence     = (float) root.path("depth_confidence").asDouble(0.5);
@@ -172,6 +172,32 @@ public class PlateGeometryService {
             log.warn("[PlateGeometry] Failed to parse depth response: {}", e.getMessage());
             return DepthResult.defaultResult();
         }
+    }
+    
+    private String sanitizeJson(String raw) {
+        if (raw == null) return "{}";
+        String trimmed = raw.strip();
+        int braceDepth = 0;
+        int lastValidClose = -1;
+        boolean inString = false;
+        boolean escaped = false;
+        for (int i = 0; i < trimmed.length(); i++) {
+            char c = trimmed.charAt(i);
+            if (escaped) { escaped = false; continue; }
+            if (c == '\\' && inString) { escaped = true; continue; }
+            if (c == '"') { inString = !inString; continue; }
+            if (inString) continue;
+            if (c == '{') braceDepth++;
+            else if (c == '}') {
+                braceDepth--;
+                if (braceDepth == 0) lastValidClose = i;
+            }
+        }
+        if (lastValidClose != -1 && lastValidClose < trimmed.length() - 1) {
+            log.warn("[PlateGeometry] JSON was truncated, trimming at position {}", lastValidClose + 1);
+            return trimmed.substring(0, lastValidClose + 1);
+        }
+        return trimmed;
     }
 
     private PipelineContext.PlateGeometry merge(DiameterResult d, DepthResult dep) {

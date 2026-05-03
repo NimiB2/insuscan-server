@@ -32,8 +32,8 @@ public class VolumeCalculator {
                 float volume = item.getAreaCm2() * item.getEffectiveHeightCm();
                 item.setVolumeCm3(volume);
                 totalVolume += volume;
-                log.info("[Volume] {} -> {:.1f} cm³", item.getName(), volume);
-            } else {
+                log.info("[Volume] {} -> {} cm³", item.getName(), String.format("%.1f", volume));
+                } else {
                 log.warn("[Volume] Missing area or height for {}", item.getName());
             }
         }

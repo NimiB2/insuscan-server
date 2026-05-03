@@ -94,7 +94,7 @@ public class FoodAreaService {
             item.setAreaConfidence(0.4f); // Low confidence due to approximation
             
             totalAreaCm2 += estimatedArea;
-            log.info("[FoodArea] {} -> estimated area {:.1f} cm²", item.getName(), estimatedArea);
+            log.info("[FoodArea] {} -> estimated area {:.1f} cm²", item.getName(), String.format("%.1f", estimatedArea));
         }
 
         if (totalAreaCm2 > plateAreaCm2) {

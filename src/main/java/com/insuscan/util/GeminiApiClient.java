@@ -181,7 +181,7 @@ public class GeminiApiClient {
 
         Map<String, Object> generationConfig = new HashMap<>();
         generationConfig.put("temperature", 0.0);
-        generationConfig.put("maxOutputTokens", 2048);
+        generationConfig.put("maxOutputTokens", 4096);
         generationConfig.put("responseMimeType", "application/json");
 
         Map<String, Object> body = new HashMap<>();

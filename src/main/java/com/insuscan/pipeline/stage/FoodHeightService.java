@@ -80,8 +80,8 @@ public class FoodHeightService {
 
                         totalConf += hr.confidence;
                         count++;
-                        log.info("[FoodHeight] {} -> {:.1f}cm (conf: {:.2f})", item.getName(), item.getEffectiveHeightCm(), hr.confidence);
-                    } else {
+                        log.info("[FoodHeight] {} -> {}cm (conf: {})", item.getName(), String.format("%.1f", item.getEffectiveHeightCm()), String.format("%.2f", hr.confidence));
+                        } else {
                         log.warn("[FoodHeight] Model missed item: {}", item.getName());
                         item.setEffectiveHeightCm(2.5f);
                         item.setHeightConfidence(0.1f);

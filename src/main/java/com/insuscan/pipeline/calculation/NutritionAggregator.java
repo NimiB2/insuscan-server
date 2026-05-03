@@ -69,8 +69,8 @@ public class NutritionAggregator {
                     totalFat += fat;
                 }
                 
-                log.info("[Aggregator] {} -> {}g net carbs (weight: {:.1f}g)", 
-                    item.getName(), String.format("%.1f", item.getNetCarbsG()), weight);
+                log.info("[Aggregator] {} -> {}g net carbs (weight: {}g)",
+                        item.getName(), String.format("%.1f", item.getNetCarbsG()), String.format("%.1f", weight));
             }
         }
 
@@ -85,6 +85,6 @@ public class NutritionAggregator {
         totals.setItemsRequiringValidation(itemsRequiringValidation);
 
         ctx.setMealTotals(totals);
-        log.info("[Aggregator] Meal Totals: {:.1f}g Weight, {:.1f}g Net Carbs", totalWeight, totalNetCarbs);
+        log.info("[Aggregator] Meal Totals: {}g Weight, {}g Net Carbs", String.format("%.1f", totalWeight), String.format("%.1f", totalNetCarbs));
     }
 }

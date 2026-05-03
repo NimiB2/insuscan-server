@@ -33,7 +33,7 @@ public class DensityCalculator {
             // However, our volume is the "envelope" volume. If USDA volume is also envelope, they match.
             item.setDensityGPerCm3(usdaDensity);
             item.setDensitySource(PipelineFoodItem.DensitySource.USDA_SERVING);
-            log.info("[Density] {} -> {:.3f} g/cm³ (USDA_SERVING)", item.getName(), usdaDensity);
+            log.info("[Density] {} -> {} g/cm³ (USDA_SERVING)", item.getName(), String.format("%.3f", usdaDensity));
             return;
         }
 
@@ -50,13 +50,13 @@ public class DensityCalculator {
                 float adjustedDensity = proximateDensity * factor;
                 item.setDensityGPerCm3(adjustedDensity);
                 item.setDensitySource(PipelineFoodItem.DensitySource.PROXIMATE_WITH_TEXTURE);
-                log.info("[Density] {} -> {:.3f} g/cm³ (PROXIMATE_WITH_TEXTURE: base {:.3f} * factor {:.2f})", 
-                    item.getName(), adjustedDensity, proximateDensity, factor);
+                log.info("[Density] {} -> {} g/cm³ (PROXIMATE_WITH_TEXTURE: base {} * factor {})", 
+                	    item.getName(), String.format("%.3f", adjustedDensity), String.format("%.3f", proximateDensity), String.format("%.2f", factor));
             } else {
                 // Strategy 3: Pure Proximate (Solid food)
                 item.setDensityGPerCm3(proximateDensity);
                 item.setDensitySource(PipelineFoodItem.DensitySource.PROXIMATE_CALC);
-                log.info("[Density] {} -> {:.3f} g/cm³ (PROXIMATE_CALC)", item.getName(), proximateDensity);
+                log.info("[Density] {} -> {} g/cm³ (PROXIMATE_CALC)", item.getName(), String.format("%.3f", proximateDensity));
             }
             return;
         }
