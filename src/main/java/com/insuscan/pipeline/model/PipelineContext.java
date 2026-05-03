@@ -39,6 +39,12 @@ public class PipelineContext {
     private String userId;
     private String systemId;
     private ArcoreDepthData arcoreDepthData;
+
+    private Integer imageTopWidthPx;
+    private Integer imageTopHeightPx;
+    private Integer imageSideWidthPx;
+    private Integer imageSideHeightPx;
+
     // ── Stage 1: Calibration ───────────────────────────────────────────────
 
     /** Pixels per centimeter, derived from reference object in top image. */
@@ -169,6 +175,15 @@ public class PipelineContext {
     
     public ArcoreDepthData getArcoreDepthData() { return arcoreDepthData; }
     public void setArcoreDepthData(ArcoreDepthData v) { this.arcoreDepthData = v; }
+
+    public Integer getImageTopWidthPx() { return imageTopWidthPx; }
+    public void setImageTopWidthPx(Integer v) { this.imageTopWidthPx = v; }
+    public Integer getImageTopHeightPx() { return imageTopHeightPx; }
+    public void setImageTopHeightPx(Integer v) { this.imageTopHeightPx = v; }
+    public Integer getImageSideWidthPx() { return imageSideWidthPx; }
+    public void setImageSideWidthPx(Integer v) { this.imageSideWidthPx = v; }
+    public Integer getImageSideHeightPx() { return imageSideHeightPx; }
+    public void setImageSideHeightPx(Integer v) { this.imageSideHeightPx = v; }
 
     public Float getPixelToCmRatioTop() { return pixelToCmRatioTop; }
     public void setPixelToCmRatioTop(Float v) { this.pixelToCmRatioTop = v; }

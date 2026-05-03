@@ -16,7 +16,7 @@ public class ReferenceObjectRegistry {
     /**
      * Physical dimensions of a reference object.
      */
-    public record Dimensions(float lengthCm, float widthCm, String description) {}
+    public record Dimensions(float lengthCm, float widthCm, float sideViewDimensionCm, String description) {}
 
     /**
      * Returns the physical dimensions for the given reference object type string.
@@ -28,7 +28,7 @@ public class ReferenceObjectRegistry {
     public Dimensions getDimensions(String serverValue) {
         ReferenceObjectDimensions ref = ReferenceObjectDimensions.fromServerValue(serverValue);
         if (ref == ReferenceObjectDimensions.NONE) return null;
-        return new Dimensions(ref.getLengthCm(), ref.getWidthCm(), ref.getScaleDescription());
+        return new Dimensions(ref.getLengthCm(), ref.getWidthCm(), ref.getSideViewDimensionCm(), ref.getScaleDescription());
     }
 
     /**

@@ -97,8 +97,12 @@ public class ScanPipelineController {
         @RequestPart("sideFile") MultipartFile sideFile,
         @RequestParam("referenceObjectType") String referenceObjectType,
         @RequestParam(value = "email", required = false, defaultValue = "anonymous") String email,
-        @RequestParam(value = "arcoreData", required = false) String arcoreDataJson
-    ) throws IOException {
+        @RequestParam(value = "arcoreData", required = false) String arcoreDataJson,
+        @RequestParam(value = "topImageWidth",   required = false) Integer topImageWidth,
+        @RequestParam(value = "topImageHeight",  required = false) Integer topImageHeight,
+        @RequestParam(value = "sideImageWidth",  required = false) Integer sideImageWidth,
+        @RequestParam(value = "sideImageHeight", required = false) Integer sideImageHeight
+        ) throws IOException {
 
         if (topFile == null || topFile.isEmpty()) {
             return ResponseEntity.badRequest().body("topFile is required");
@@ -119,6 +123,10 @@ public class ScanPipelineController {
         ctx.setReferenceObjectType(referenceObjectType.toUpperCase());
         ctx.setUserId(email);
         ctx.setSystemId(systemId);
+        ctx.setImageTopWidthPx(topImageWidth);
+        ctx.setImageTopHeightPx(topImageHeight);
+        ctx.setImageSideWidthPx(sideImageWidth);
+        ctx.setImageSideHeightPx(sideImageHeight);
         
         if (arcoreDataJson != null && !arcoreDataJson.isBlank()) {
             try {
