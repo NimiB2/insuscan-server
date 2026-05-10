@@ -38,3 +38,29 @@ bin/
 _backup_test/
 src/test/java/com/insuscan/calculation/InsulinCalculatorTest.java
 insuscan_server_log.txt
+
+
+
+# ML model files
+
+*.pt
+
+*.pth
+
+*.onnx
+
+models/
+
+sam-service/models/
+
+
+
+
+# Python virtual environment
+
+.venv/
+
+
+# Python cache files
+__pycache__/
+*.py[cod]
