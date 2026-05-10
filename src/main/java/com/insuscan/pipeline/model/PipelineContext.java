@@ -66,6 +66,11 @@ public class PipelineContext {
 
     private PlateGeometry plateGeometry;
 
+ // ── Stage 2.5: Perspective Correction ─────────────────────────────────────
+
+    private boolean perspectiveCorrectionApplied;
+    private Float perspectiveTiltDegrees;
+    
     // ── Stages 3–9: Food Items (accumulated) ──────────────────────────────
 
     private List<PipelineFoodItem> foodItems = new ArrayList<>();
@@ -209,4 +214,9 @@ public class PipelineContext {
     public List<PipelineWarning> getWarnings() { return warnings; }
     public Map<String, Long> getStepTimingsMs() { return stepTimingsMs; }
     public Map<String, Float> getStepConfidences() { return stepConfidences; }
+    
+    public boolean isPerspectiveCorrectionApplied() { return perspectiveCorrectionApplied; }
+    public void setPerspectiveCorrectionApplied(boolean v) { this.perspectiveCorrectionApplied = v; }
+    public Float getPerspectiveTiltDegrees() { return perspectiveTiltDegrees; }
+    public void setPerspectiveTiltDegrees(Float v) { this.perspectiveTiltDegrees = v; }
 }

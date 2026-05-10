@@ -55,10 +55,9 @@ public class FoodHeightService {
         float confidence = 0f;
 
         try {
-            String response = geminiApiClient.callVisionModel(prompt, ctx.getImageSideBase64());
-
+        	String response = geminiApiClient.callFlashModelWithImage(prompt, ctx.getImageSideBase64());
             if (response != null && !response.isBlank()) {
-                Map<String, HeightResult> parsedHeights = parseResponse(response);
+            	Map<String, HeightResult> parsedHeights = parseResponse(response, foods);
                 
                 float totalConf = 0f;
                 int count = 0;
@@ -131,7 +130,7 @@ public class FoodHeightService {
 
         return String.format(
             "You are estimating the vertical height of food items from a side-angle view.\n\n" +
-            "Scale calibration for this side image: %.2f pixels per cm.\n" +
+            "Scale calibration for this side image: %.4f cm per pixel.\n" +
             "%s\n" +
             "The following food items were detected from the top-down view:\n[%s]\n\n" +
             "For EACH food item in the list, estimate its 'effective height' in cm.\n" +
@@ -144,14 +143,18 @@ public class FoodHeightService {
             "    \"name\": \"<exact name from list>\",\n" +
             "    \"is_visible_in_side_view\": true,\n" +
             "    \"effective_height_cm\": <float>,\n" +
-            "    \"confidence\": <float 0.0-1.0>\n" +
+            "    \"confidence\": <float 0.0-1.0>,\n" +
+            "    \"bbox_side_pct\": { \"x\": <float 0-100>, \"y\": <float 0-100>, \"w\": <float 0-100>, \"h\": <float 0-100> }\n" +
             "  }\n" +
             "]",
             ctx.getPixelToCmRatioSide(), plateContext, foodNamesList);
     }
 
-    private Map<String, HeightResult> parseResponse(String response) {
+    private Map<String, HeightResult> parseResponse(String response, List<PipelineFoodItem> foods) {
         Map<String, HeightResult> results = new HashMap<>();
+        Map<String, PipelineFoodItem> foodsByName = foods.stream()
+            .collect(Collectors.toMap(PipelineFoodItem::getName, f -> f, (a, b) -> a));
+
         try {
             JsonNode root = objectMapper.readTree(response);
             if (!root.isArray()) return results;
@@ -161,7 +164,19 @@ public class FoodHeightService {
                 boolean isVisible = node.path("is_visible_in_side_view").asBoolean(true);
                 float height = (float) node.path("effective_height_cm").asDouble(2.5);
                 float conf = (float) node.path("confidence").asDouble(0.5);
-                
+
+                JsonNode bbox = node.path("bbox_side_pct");
+                if (!bbox.isMissingNode() && foodsByName.containsKey(name)) {
+                    float x = (float) bbox.path("x").asDouble(0);
+                    float y = (float) bbox.path("y").asDouble(0);
+                    float w = (float) bbox.path("w").asDouble(80);
+                    float h = (float) bbox.path("h").asDouble(80);
+                    foodsByName.get(name).setBoundingBoxSidePct(new float[]{x, y, w, h});
+                    log.info("[FoodHeight] {} side bbox: x={} y={} w={} h={}", name,
+                        String.format("%.1f", x), String.format("%.1f", y),
+                        String.format("%.1f", w), String.format("%.1f", h));
+                }
+
                 results.put(name, new HeightResult(isVisible, height, conf));
             }
         } catch (Exception e) {

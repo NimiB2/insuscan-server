@@ -63,22 +63,23 @@ public class FoodAreaService {
 				    item.getName(), 
 				    item.getCoveragePercent() != null ? String.format("%.0f", item.getCoveragePercent()) : "N/A");
 
-			if (item.hasBoundingBox()) {
-				float[] bbox = item.getBoundingBoxPct();
-				
-				log.info("[FoodArea] {} bbox raw: w={}% h={}% -> widthCm={} heightCm={}",
-					    item.getName(),
-					    String.format("%.1f", bbox[2]),
-					    String.format("%.1f", bbox[3]),
-					    String.format("%.2f", (bbox[2] / 100f) * imageWidthPx * ratio),
-					    String.format("%.2f", (bbox[3] / 100f) * imageHeightPx * ratio));
-				
-				float widthCm = (bbox[2] / 100f) * imageWidthPx * ratio;
-				float heightCm = (bbox[3] / 100f) * imageHeightPx * ratio;
-				estimatedArea = widthCm * heightCm * 0.75f;
+			if (item.getMaskPixelCount() != null && item.getImagePixelCount() != null && item.getImagePixelCount() > 0) {
+			    float imageAreaCm2 = (imageWidthPx * ratio) * (imageHeightPx * ratio);
+			    float maskRatio = (float) item.getMaskPixelCount() / item.getImagePixelCount();
+			    estimatedArea = maskRatio * imageAreaCm2;
+			    log.info("[FoodArea] {} using SAM mask: maskPixels={} / totalPixels={} -> area={}cm²",
+			        item.getName(), item.getMaskPixelCount(), item.getImagePixelCount(),
+			        String.format("%.1f", estimatedArea));
+			} else if (item.hasBoundingBox()) {
+			    float[] bbox = item.getBoundingBoxPct();
+			    float widthCm = (bbox[2] / 100f) * imageWidthPx * ratio;
+			    float heightCm = (bbox[3] / 100f) * imageHeightPx * ratio;
+			    estimatedArea = widthCm * heightCm * 0.75f;
+			    log.info("[FoodArea] {} using bbox fallback: area={}cm²",
+			        item.getName(), String.format("%.1f", estimatedArea));
 			} else {
-				estimatedArea = (plateAreaCm2 * 0.70f) / Math.max(1, ctx.getFoodItems().size());
-				log.warn("[FoodArea] {} has no bbox, using plate fallback", item.getName());
+			    estimatedArea = (plateAreaCm2 * 0.70f) / Math.max(1, ctx.getFoodItems().size());
+			    log.warn("[FoodArea] {} has no SAM mask or bbox, using plate fallback", item.getName());
 			}
 
 			estimatedArea = Math.min(estimatedArea, plateAreaCm2);

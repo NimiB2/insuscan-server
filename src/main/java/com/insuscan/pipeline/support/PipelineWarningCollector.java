@@ -26,6 +26,7 @@ public class PipelineWarningCollector {
     public static final String STAGE_WEIGHT         = "WEIGHT";
     public static final String STAGE_AGGREGATION    = "AGGREGATION";
     public static final String STAGE_SANITY_CHECK   = "SANITY_CHECK";
+    public static final String STAGE_PERSPECTIVE_CORRECTION = "PERSPECTIVE_CORRECTION";
 
     public void add(PipelineContext ctx, PipelineWarning warning) {
         ctx.addWarning(warning);

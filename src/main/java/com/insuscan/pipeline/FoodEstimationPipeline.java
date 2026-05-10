@@ -4,7 +4,9 @@ import com.insuscan.pipeline.model.PipelineContext;
 import com.insuscan.pipeline.model.PipelineResult;
 import com.insuscan.pipeline.stage.ArcoreDepthFusionService;
 import com.insuscan.pipeline.stage.CalibrationService;
+import com.insuscan.pipeline.stage.PerspectiveCorrectionService;
 import com.insuscan.pipeline.stage.PlateGeometryService;
+import com.insuscan.pipeline.stage.SamSegmentationService;
 import com.insuscan.pipeline.support.ConfidenceAggregator;
 import com.insuscan.pipeline.support.ReferenceObjectRegistry;
 import org.slf4j.Logger;
@@ -44,6 +46,9 @@ public class FoodEstimationPipeline {
     private final com.insuscan.pipeline.calculation.NutritionAggregator nutritionAggregator;
     private final com.insuscan.pipeline.stage.SanityCheckService sanityCheckService;
     private final ArcoreDepthFusionService arcoreDepthFusionService;
+    private final PerspectiveCorrectionService perspectiveCorrectionService;
+    private final SamSegmentationService samSegmentationService;
+
     
     public FoodEstimationPipeline(ConfidenceAggregator confidenceAggregator,
                                    ReferenceObjectRegistry referenceObjectRegistry,
@@ -57,7 +62,9 @@ public class FoodEstimationPipeline {
                                    com.insuscan.pipeline.calculation.WeightCalculator weightCalculator,
                                    com.insuscan.pipeline.calculation.NutritionAggregator nutritionAggregator,
                                    com.insuscan.pipeline.stage.SanityCheckService sanityCheckService,                                
-                                   ArcoreDepthFusionService arcoreDepthFusionService) {
+                                   ArcoreDepthFusionService arcoreDepthFusionService,
+                                   PerspectiveCorrectionService perspectiveCorrectionService,
+                                   SamSegmentationService samSegmentationService) {
         this.confidenceAggregator = confidenceAggregator;
         this.referenceObjectRegistry = referenceObjectRegistry;
         this.calibrationService = calibrationService;
@@ -71,6 +78,9 @@ public class FoodEstimationPipeline {
         this.nutritionAggregator = nutritionAggregator;
         this.sanityCheckService = sanityCheckService;
         this.arcoreDepthFusionService = arcoreDepthFusionService;
+        this.perspectiveCorrectionService = perspectiveCorrectionService;
+        this.samSegmentationService = samSegmentationService;
+
     }
 
     /**
@@ -106,11 +116,16 @@ public class FoodEstimationPipeline {
             runStage2_PlateGeometry(ctx);
             if (hasFatalWarning(ctx)) return buildResult(ctx, false, "Plate geometry measurement failed");
 
+            runStage2_5_PerspectiveCorrection(ctx);
+
             runStage3_FoodDetection(ctx);
             if (hasFatalWarning(ctx)) return buildResult(ctx, false, "Food detection failed");
 
+            runStage3_5_SamSegmentation(ctx);
+
             runStage4_FoodArea(ctx);
             runStage5_FoodHeight(ctx);
+            runStage5_5_SamSideSegmentation(ctx);
             runStageArcore_DepthFusion(ctx);
             runStage6_Volume(ctx);
             runStage7_NutritionAndDensity(ctx);
@@ -145,6 +160,12 @@ public class FoodEstimationPipeline {
         plateGeometryService.measurePlate(ctx);
         ctx.recordTiming("PLATE_GEOMETRY", System.currentTimeMillis() - start);
     }
+    
+    private void runStage2_5_PerspectiveCorrection(PipelineContext ctx) {
+        long start = System.currentTimeMillis();
+        perspectiveCorrectionService.correctPerspective(ctx);
+        ctx.recordTiming("PERSPECTIVE_CORRECTION", System.currentTimeMillis() - start);
+    }
 
     /** Stage 3 — Milestone 3 */
     private void runStage3_FoodDetection(PipelineContext ctx) {
@@ -153,6 +174,12 @@ public class FoodEstimationPipeline {
         ctx.recordTiming("FOOD_DETECTION", System.currentTimeMillis() - start);
     }
 
+    private void runStage3_5_SamSegmentation(PipelineContext ctx) {
+        long start = System.currentTimeMillis();
+        samSegmentationService.segmentFoodItems(ctx);
+        ctx.recordTiming("SAM_SEGMENTATION", System.currentTimeMillis() - start);
+    }
+    
     /** Stage 4 — Milestone 3 */
     private void runStage4_FoodArea(PipelineContext ctx) {
         long start = System.currentTimeMillis();
@@ -171,6 +198,12 @@ public class FoodEstimationPipeline {
         long start = System.currentTimeMillis();
         arcoreDepthFusionService.fuseDepths(ctx);
         ctx.recordTiming("ARCORE_FUSION", System.currentTimeMillis() - start);
+    }
+    
+    private void runStage5_5_SamSideSegmentation(PipelineContext ctx) {
+        long start = System.currentTimeMillis();
+        samSegmentationService.segmentSideImage(ctx);
+        ctx.recordTiming("SAM_SIDE_SEGMENTATION", System.currentTimeMillis() - start);
     }
 
     /** Stage 6 — Milestone 4 */
