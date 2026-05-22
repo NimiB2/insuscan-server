@@ -57,6 +57,24 @@ public class PipelineWarningCollector {
                 "Images may have been taken from different distances.", gapPct, ratioTop, ratioSide)
         ));
     }
+    
+    public void alternativeObjectUsed(PipelineContext ctx, String imageView, String detectedType) {
+        add(ctx, PipelineWarning.medium(
+            STAGE_CALIBRATION,
+            "ALTERNATIVE_OBJECT_USED_IN_" + imageView.toUpperCase(),
+            "Selected reference object not found in " + imageView + " image. " +
+                "Found '" + detectedType + "' instead — using its known dimensions for calibration."
+        ));
+    }
+
+    public void usingPlateSizeEstimate(PipelineContext ctx, String imageView) {
+        add(ctx, PipelineWarning.high(
+            STAGE_CALIBRATION,
+            "PLATE_SIZE_ESTIMATE_IN_" + imageView.toUpperCase(),
+            "No reference object found in " + imageView + " image. " +
+                "Calibration based on estimated standard plate size (22cm). Results may be less accurate."
+        ));
+    }
 
     // ── Plate geometry warnings ───────────────────────────────────────────
 
@@ -129,4 +147,7 @@ public class PipelineWarningCollector {
                 foodName, weightG)
         ));
     }
+    
+
+   
 }
