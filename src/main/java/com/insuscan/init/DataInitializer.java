@@ -10,7 +10,6 @@ import com.insuscan.crud.UserRepository;
 import com.insuscan.data.MealEntity;
 import com.insuscan.data.UserEntity;
 import com.insuscan.enums.MealStatus;
-import com.insuscan.enums.SyringeType;
 import com.insuscan.enums.UserRole;
 
 import java.util.Arrays;
@@ -73,7 +72,6 @@ public class DataInitializer implements CommandLineRunner {
         daniel.setInsulinCarbRatio(0.1f);   // 1:10 ratio
         daniel.setCorrectionFactor(50f);    // 50 mg/dL per unit
         daniel.setTargetGlucose(100);       // 100 mg/dL target
-        daniel.setSyringeType(SyringeType.SYRINGE_30_UNIT);
         daniel.setCreatedAt(new Date());
         daniel.setUpdatedAt(new Date());
         userRepository.save(daniel);
@@ -88,7 +86,6 @@ public class DataInitializer implements CommandLineRunner {
         nimrod.setInsulinCarbRatio(0.083f); // 1:12 ratio
         nimrod.setCorrectionFactor(40f);
         nimrod.setTargetGlucose(110);
-        nimrod.setSyringeType(SyringeType.INSULIN_PEN);
         nimrod.setCreatedAt(new Date());
         nimrod.setUpdatedAt(new Date());
         userRepository.save(nimrod);

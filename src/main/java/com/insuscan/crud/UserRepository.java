@@ -180,32 +180,16 @@ public class UserRepository {
         // Medical profile
         map.put("insulinCarbRatio", entity.getInsulinCarbRatio());
         map.put("correctionFactor", entity.getCorrectionFactor());
-        map.put("targetGlucose", entity.getTargetGlucose());
-        
-        // Syringe settings
-        map.put("syringeType", entity.getSyringeType() != null ? entity.getSyringeType().name() : null);
-        map.put("customSyringeLength", entity.getCustomSyringeLength());
+        map.put("targetGlucose", entity.getTargetGlucose());     
         
         // Personal info
         map.put("age", entity.getAge());
         map.put("gender", entity.getGender());
-        map.put("pregnant", entity.getPregnant());
-        map.put("dueDate", entity.getDueDate());
-        
-        // Medical info
-        map.put("diabetesType", entity.getDiabetesType());
-        map.put("insulinType", entity.getInsulinType());
-        map.put("activeInsulinTime", entity.getActiveInsulinTime());
+ 
         
         // Dose settings
         map.put("doseRounding", entity.getDoseRounding());
-        
-        // Adjustment factors
-        map.put("sickDayAdjustment", entity.getSickDayAdjustment());
-        map.put("stressAdjustment", entity.getStressAdjustment());
-        map.put("lightExerciseAdjustment", entity.getLightExerciseAdjustment());
-        map.put("intenseExerciseAdjustment", entity.getIntenseExerciseAdjustment());
-        
+
      // Insulin Plans
         if (entity.getInsulinPlans() != null) {
             List<Map<String, Object>> plansList = new ArrayList<>();
@@ -221,10 +205,7 @@ public class UserRepository {
             }
             map.put("insulinPlans", plansList);
         }
-        
-        // Preferences
-        map.put("glucoseUnits", entity.getGlucoseUnits());
-        
+       
         // Timestamps
         map.put("createdAt", entity.getCreatedAt());
         map.put("updatedAt", entity.getUpdatedAt());
@@ -256,47 +237,17 @@ public class UserRepository {
         
         Long targetGlucose = doc.getLong("targetGlucose");
         entity.setTargetGlucose(targetGlucose != null ? targetGlucose.intValue() : null);
-        
-        // Syringe settings
-        String syringeStr = doc.getString("syringeType");
-        if (syringeStr != null) {
-            entity.setSyringeType(com.insuscan.enums.SyringeType.valueOf(syringeStr));
-        }
-        
-        Double customLength = doc.getDouble("customSyringeLength");
-        entity.setCustomSyringeLength(customLength != null ? customLength.floatValue() : null);
+
         
         // Personal info
         Long age = doc.getLong("age");
         entity.setAge(age != null ? age.intValue() : null);
         
         entity.setGender(doc.getString("gender"));
-        entity.setPregnant(doc.getBoolean("pregnant"));
-        entity.setDueDate(doc.getString("dueDate"));
-        
-        // Medical info
-        entity.setDiabetesType(doc.getString("diabetesType"));
-        entity.setInsulinType(doc.getString("insulinType"));
-        
-        Long activeInsulin = doc.getLong("activeInsulinTime");
-        entity.setActiveInsulinTime(activeInsulin != null ? activeInsulin.intValue() : null);
-        
+      
         // Dose settings
         entity.setDoseRounding(doc.getString("doseRounding"));
-        
-        // Adjustment factors
-        Long sickDayAdj = doc.getLong("sickDayAdjustment");
-        entity.setSickDayAdjustment(sickDayAdj != null ? sickDayAdj.intValue() : null);
-        
-        Long stressAdj = doc.getLong("stressAdjustment");
-        entity.setStressAdjustment(stressAdj != null ? stressAdj.intValue() : null);
-        
-        Long lightExAdj = doc.getLong("lightExerciseAdjustment");
-        entity.setLightExerciseAdjustment(lightExAdj != null ? lightExAdj.intValue() : null);
-        
-        Long intenseExAdj = doc.getLong("intenseExerciseAdjustment");
-        entity.setIntenseExerciseAdjustment(intenseExAdj != null ? intenseExAdj.intValue() : null);
-        
+       
      // Insulin Plans
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> plansRaw = (List<Map<String, Object>>) doc.get("insulinPlans");
@@ -317,9 +268,6 @@ public class UserRepository {
             }
             entity.setInsulinPlans(plans);
         }
-        
-        // Preferences
-        entity.setGlucoseUnits(doc.getString("glucoseUnits"));
         
         // Timestamps
         entity.setCreatedAt(doc.getDate("createdAt"));

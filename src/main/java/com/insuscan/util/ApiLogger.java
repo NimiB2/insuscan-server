@@ -149,30 +149,6 @@ public class ApiLogger {
         }
     }
 
-    public void insulinCalcBreakdown(float carbDose, float correctionDose, float baseDose,
-                                      float sickAdj, float stressAdj, float exerciseAdj, float finalDose) {
-        logBoth("--------------------------------------------------------------------------------", (Object[])null);
-        logBoth("[INSULIN] CALCULATION BREAKDOWN", (Object[])null);
-        logBoth("--------------------------------------------------------------------------------", (Object[])null);
-        logBoth("[INSULIN]   1. Carb Dose       : {} units  (carbs / ICR)", String.format("%+.1f", carbDose));
-        logBoth("[INSULIN]   2. Correction Dose : {} units  ((glucose - target) / ISF)", String.format("%+.1f", correctionDose));
-        logBoth("[INSULIN]   ─────────────────────────────────", (Object[])null);
-        logBoth("[INSULIN]   3. Base Dose       : {} units", String.format("%.1f", baseDose));
-        
-        if (sickAdj != 0) {
-            logBoth("[INSULIN]   4. Sick Adjustment : {} units", String.format("%+.1f", sickAdj));
-        }
-        if (stressAdj != 0) {
-            logBoth("[INSULIN]   5. Stress Adjust.  : {} units", String.format("%+.1f", stressAdj));
-        }
-        if (exerciseAdj != 0) {
-            logBoth("[INSULIN]   6. Exercise Adjust.: {} units", String.format("%+.1f", exerciseAdj));
-        }
-        
-        logBoth("[INSULIN]   ═════════════════════════════════", (Object[])null);
-        logBoth("[INSULIN]   FINAL DOSE         : {} units", String.format("%.1f", finalDose));
-    }
-
     public void insulinCalcWarning(String warning) {
         logBoth("[INSULIN] ⚠️ WARNING: {}", warning);
     }
@@ -198,15 +174,11 @@ public class ApiLogger {
         logBoth("[USER] --- Personal ---", (Object[])null);
         logBoth("[USER] Age        : {}", update.getAge());
         logBoth("[USER] Gender     : {}", update.getGender());
-        logBoth("[USER] Pregnant   : {}", update.getPregnant());
         logBoth("[USER] --- Medical ---", (Object[])null);
-        logBoth("[USER] Type       : {}", update.getDiabetesType());
         logBoth("[USER] ICR (Ratio): {}", update.getInsulinCarbRatio());
         logBoth("[USER] ISF        : {}", update.getCorrectionFactor());
         logBoth("[USER] Target     : {}", update.getTargetGlucose());
-        logBoth("[USER] Active Ins : {}", update.getActiveInsulinTime());
         logBoth("[USER] --- Settings ---", (Object[])null);
-        logBoth("[USER] Syringe    : {}", update.getSyringeType());
         logBoth("[USER] Rounding   : {}", update.getDoseRounding());
         logBoth("--------------------------------------------------------------------------------", (Object[])null);
     }
@@ -217,7 +189,6 @@ public class ApiLogger {
         logBoth("[USER] ICR (Float): {}", entity.getInsulinCarbRatio());
         logBoth("[USER] ISF        : {}", entity.getCorrectionFactor());
         logBoth("[USER] Age        : {}", entity.getAge());
-        logBoth("[USER] Sick Adj   : {}", entity.getSickDayAdjustment());
         logBoth("[USER] UpdatedAt  : {}", entity.getUpdatedAt());
         logBoth("--------------------------------------------------------------------------------", (Object[])null);
         logBoth("", (Object[])null);

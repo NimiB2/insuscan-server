@@ -86,9 +86,6 @@ public class MealServiceImpl implements MealService {
         System.out.println("DEBUG SAVE: Saving meal for user: " + entity.getUserId() + " (Email: " + cleanEmail + ")");
         System.out.println("DEBUG SAVE: Carb Dose: " + entity.getCarbDose());
         System.out.println("DEBUG SAVE: Correction Dose: " + entity.getCorrectionDose());
-        System.out.println("DEBUG SAVE: Exercise Adjustment: " + entity.getExerciseAdjustment());
-        System.out.println("DEBUG SAVE: Sick Adjustment: " + entity.getSickAdjustment());
-        System.out.println("DEBUG SAVE: Stress Adjustment: " + entity.getStressAdjustment());
         System.out.println("DEBUG SAVE: Saved Plan Name: " + entity.getSavedPlanName());
 
 
@@ -182,44 +179,26 @@ public class MealServiceImpl implements MealService {
 
         // Store user context at meal time
         meal.setCurrentGlucose(currentGlucose);
-        meal.setActivityLevel(activityLevel);
-        meal.setWasSickMode(sickMode != null && sickMode);
-        meal.setWasStressMode(stressMode != null && stressMode);
 
         // Calculate dose using full calculator
         Float totalCarbs = meal.getTotalCarbs();
         if (totalCarbs != null && totalCarbs > 0) {
 
-            // Get adjustment percentages (only if mode is active)
-            Integer sickPercent = (sickMode != null && sickMode)
-                    ? user.getSickDayAdjustment()
-                    : 0;
-            Integer stressPercent = (stressMode != null && stressMode)
-                    ? user.getStressAdjustment()
-                    : 0;
 
             InsulinCalculator calculator = new InsulinCalculator();
             CalculationParams params = new CalculationParams.Builder()
                     .withTotalCarbs(totalCarbs)
-                    .withInsulinCarbRatio(user.getInsulinCarbRatio()) // uses new Float overload
+                    .withInsulinCarbRatio(user.getInsulinCarbRatio())
                     .withCorrectionFactor(user.getCorrectionFactor())
                     .withTargetGlucose(user.getTargetGlucose())
                     .withCurrentGlucose(currentGlucose)
-                    .withActivityLevel(activityLevel)
-                    .withSickDayPercent(sickPercent)
-                    .withStressPercent(stressPercent)
-                    .withLightExercisePercent(user.getLightExerciseAdjustment())
-                    .withIntenseExercisePercent(user.getIntenseExerciseAdjustment())
                     .build();
-
             CalculationResult result = calculator.calculate(params);
 
             // Store full breakdown for history display
             meal.setCarbDose(result.getCarbDose());
             meal.setCorrectionDose(result.getCorrectionDose());
-            meal.setSickAdjustment(result.getSickAdjustment());
-            meal.setStressAdjustment(result.getStressAdjustment());
-            meal.setExerciseAdjustment(result.getExerciseAdjustment());
+
             meal.setRecommendedDose(result.getRoundedDose());
             meal.setProfileComplete(result.isProfileComplete());
 

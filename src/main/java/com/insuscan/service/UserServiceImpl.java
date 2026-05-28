@@ -119,13 +119,6 @@ public class UserServiceImpl implements UserService {
             existing.setTargetGlucose(update.getTargetGlucose());
         }
 
-        // Update syringe settings if provided
-        if (update.getSyringeType() != null) {
-            existing.setSyringeType(update.getSyringeType());
-        }
-        if (update.getCustomSyringeLength() != null) {
-            existing.setCustomSyringeLength(update.getCustomSyringeLength());
-        }
         
      // Personal info
         if (update.getAge() != null) {
@@ -134,47 +127,14 @@ public class UserServiceImpl implements UserService {
         if (update.getGender() != null) {
             existing.setGender(update.getGender());
         }
-        if (update.getPregnant() != null) {
-            existing.setPregnant(update.getPregnant());
-        }
-        if (update.getDueDate() != null) {
-            existing.setDueDate(update.getDueDate());
-        }
-
-        // Medical info
-        if (update.getDiabetesType() != null) {
-            existing.setDiabetesType(update.getDiabetesType());
-        }
-        if (update.getInsulinType() != null) {
-            existing.setInsulinType(update.getInsulinType());
-        }
-        if (update.getActiveInsulinTime() != null) {
-            existing.setActiveInsulinTime(update.getActiveInsulinTime());
-        }
+      
 
         // Dose settings
         if (update.getDoseRounding() != null) {
             existing.setDoseRounding(update.getDoseRounding());
         }
 
-        // Adjustment factors
-        if (update.getSickDayAdjustment() != null) {
-            existing.setSickDayAdjustment(update.getSickDayAdjustment());
-        }
-        if (update.getStressAdjustment() != null) {
-            existing.setStressAdjustment(update.getStressAdjustment());
-        }
-        if (update.getLightExerciseAdjustment() != null) {
-            existing.setLightExerciseAdjustment(update.getLightExerciseAdjustment());
-        }
-        if (update.getIntenseExerciseAdjustment() != null) {
-            existing.setIntenseExerciseAdjustment(update.getIntenseExerciseAdjustment());
-        }
-
-        // Preferences
-        if (update.getGlucoseUnits() != null) {
-            existing.setGlucoseUnits(update.getGlucoseUnits());
-        }
+       
         
         // Insulin Plans
         if (update.getInsulinPlans() != null) {

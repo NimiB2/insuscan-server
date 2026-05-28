@@ -114,10 +114,7 @@ public class CalculationParams {
                 ? user.getInsulinCarbRatio().toString() : null;
             this.correctionFactor = user.getCorrectionFactor();
             this.targetGlucose = user.getTargetGlucose();
-            this.sickDayPercent = user.getSickDayAdjustment();
-            this.stressPercent = user.getStressAdjustment();
-            this.lightExercisePercent = user.getLightExerciseAdjustment();
-            this.intenseExercisePercent = user.getIntenseExerciseAdjustment();
+
             return this;
         }
         
