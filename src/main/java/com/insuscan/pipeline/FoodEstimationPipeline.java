@@ -100,15 +100,20 @@ public class FoodEstimationPipeline {
             return PipelineResult.failure(validationError);
         }
 
-        // ── Validate reference object is supported ─────────────────────────
+     // ── Validate reference object type ─────────────────────────────────
+        // NONE is allowed (calibration will fall back to standard plate).
+        // Any other unknown type is rejected.
 
-        if (!referenceObjectRegistry.isSupported(ctx.getReferenceObjectType())) {
+        String refType = ctx.getReferenceObjectType();
+        boolean isNone = refType != null && refType.equalsIgnoreCase("NONE");
+        if (!isNone && !referenceObjectRegistry.isSupported(refType)) {
             return PipelineResult.failure(
-                "Unsupported reference object type: " + ctx.getReferenceObjectType() +
-                ". Supported types: INSULIN_SYRINGE, CARD, SYRINGE_KNIFE"
+                "Unsupported reference object type: " + refType +
+                ". Supported types: INSULIN_SYRINGE, CARD, NONE"
             );
         }
-
+        
+        
         try {
             runStage1_Calibration(ctx);
             if (hasFatalWarning(ctx)) return buildResult(ctx, false, "Calibration failed");

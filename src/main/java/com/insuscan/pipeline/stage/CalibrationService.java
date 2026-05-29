@@ -36,15 +36,16 @@ this.objectMapper = objectMapper;
 this.fallbackResolver = fallbackResolver;
 }
 
-	public void calibrate(PipelineContext ctx) {
+public void calibrate(PipelineContext ctx) {
+	    String selectedType = ctx.getReferenceObjectType();
 	    ReferenceObjectRegistry.Dimensions dims =
-	        referenceObjectRegistry.getDimensions(ctx.getReferenceObjectType());
+	        referenceObjectRegistry.getDimensions(selectedType);
 
-	    DetectionResult topResult  = detectTopImage(ctx.getImageTopBase64(), dims, ctx.getReferenceObjectType());
-	    DetectionResult sideResult = detectSideImage(ctx.getImageSideBase64(), dims, ctx.getReferenceObjectType());
+	    DetectionResult topResult  = detectTopImage(ctx.getImageTopBase64(), dims, selectedType);
+	    DetectionResult sideResult = detectSideImage(ctx.getImageSideBase64(), dims, selectedType);
 
-	    CalibrationFallbackResolver.FallbackResolution topResolution  = fallbackResolver.resolve(topResult,  "top");
-	    CalibrationFallbackResolver.FallbackResolution sideResolution = fallbackResolver.resolve(sideResult, "side");
+	    CalibrationFallbackResolver.FallbackResolution topResolution  = fallbackResolver.resolve(topResult, "top", selectedType);
+	    CalibrationFallbackResolver.FallbackResolution sideResolution = fallbackResolver.resolve(sideResult, "side", selectedType);
 
 	    applyFallbackWarnings(ctx, topResolution, sideResolution);
 
@@ -54,40 +55,47 @@ this.fallbackResolver = fallbackResolver;
 	    if (topResult.found())  ctx.setReferenceBoundsTopPx(topResult.bboxPx());
 	    if (sideResult.found()) ctx.setReferenceBoundsSidePx(sideResult.bboxPx());
 
+	    boolean bothFellBackToPlate =
+	        topResolution.source()  == CalibrationFallbackResolver.FallbackSource.PLATE_SIZE_ESTIMATE &&
+	        sideResolution.source() == CalibrationFallbackResolver.FallbackSource.PLATE_SIZE_ESTIMATE;
+	    ctx.setUseStandardPlateFallback(bothFellBackToPlate);
+
 	    float confidence = (topResolution.confidence() + sideResolution.confidence()) / 2f;
 	    ctx.recordConfidence("CALIBRATION", confidence);
 
-	    log.info("[Calibration] top={}({}) side={}({}) confidence={}",
+	    log.info("[Calibration] top={}({}) side={}({}) confidence={} plateFallback={}",
 	        String.format("%.4f", topResolution.pixelToCmRatio()), topResolution.source(),
 	        String.format("%.4f", sideResolution.pixelToCmRatio()), sideResolution.source(),
-	        String.format("%.2f", confidence));
+	        String.format("%.2f", confidence), bothFellBackToPlate);
 	}
 
-	private void applyFallbackWarnings(PipelineContext ctx,
+private void applyFallbackWarnings(PipelineContext ctx,
 	                                   CalibrationFallbackResolver.FallbackResolution top,
 	                                   CalibrationFallbackResolver.FallbackResolution side) {
 	    if (top.source() == CalibrationFallbackResolver.FallbackSource.ALTERNATIVE_OBJECT_DETECTED) {
-	        warningCollector.alternativeObjectUsed(ctx, "top", top.detectedObjectType());
+	        warningCollector.alternativeObjectUsed(ctx, "top", top.selectedType(), top.detectedObjectType());
 	    } else if (top.source() == CalibrationFallbackResolver.FallbackSource.PLATE_SIZE_ESTIMATE) {
-	        warningCollector.usingPlateSizeEstimate(ctx, "top");
+	        warningCollector.usingPlateSizeEstimate(ctx, "top", top.selectedType());
 	    }
 
 	    if (side.source() == CalibrationFallbackResolver.FallbackSource.ALTERNATIVE_OBJECT_DETECTED) {
-	        warningCollector.alternativeObjectUsed(ctx, "side", side.detectedObjectType());
+	        warningCollector.alternativeObjectUsed(ctx, "side", side.selectedType(), side.detectedObjectType());
 	    } else if (side.source() == CalibrationFallbackResolver.FallbackSource.PLATE_SIZE_ESTIMATE) {
-	        warningCollector.usingPlateSizeEstimate(ctx, "side");
+	        warningCollector.usingPlateSizeEstimate(ctx, "side", side.selectedType());
 	    }
 
-	    if (top.source() == CalibrationFallbackResolver.FallbackSource.PLATE_SIZE_ESTIMATE &&
-	        side.source() == CalibrationFallbackResolver.FallbackSource.PLATE_SIZE_ESTIMATE) {
-	        warningCollector.calibrationFailed(ctx,
-	            "No reference object found in either image — using standard plate size estimate for both");
-	    }
+//	    if (top.source() == CalibrationFallbackResolver.FallbackSource.PLATE_SIZE_ESTIMATE &&
+//	        side.source() == CalibrationFallbackResolver.FallbackSource.PLATE_SIZE_ESTIMATE) {
+//	        warningCollector.calibrationFailed(ctx,
+//	            "No reference object found in either image — using standard plate size estimate for both");
+//	    }
 	}
 
 	private DetectionResult detectTopImage(String base64Image, ReferenceObjectRegistry.Dimensions dims,
 			String refType) {
-		String prompt = buildTopPrompt(referenceObjectRegistry.getDescription(refType), dims);
+		String prompt = (dims == null)
+		    ? buildTopPromptNone()
+		    : buildTopPrompt(referenceObjectRegistry.getDescription(refType), dims);
 		try {
 			String response = geminiApiClient.callVisionModel(prompt, base64Image);
 			if (response == null || response.isBlank())
@@ -101,7 +109,9 @@ this.fallbackResolver = fallbackResolver;
 
 	private DetectionResult detectSideImage(String base64Image, ReferenceObjectRegistry.Dimensions dims,
 			String refType) {
-		String prompt = buildSidePrompt(referenceObjectRegistry.getDescription(refType), dims);
+		String prompt = (dims == null)
+		    ? buildSidePromptNone()
+		    : buildSidePrompt(referenceObjectRegistry.getDescription(refType), dims);
 		try {
 			String response = geminiApiClient.callVisionModel(prompt, base64Image);
 			if (response == null || response.isBlank())
@@ -154,6 +164,51 @@ this.fallbackResolver = fallbackResolver;
 	        "}",
 	        description, dims.sideViewDimensionCm(), buildKnownObjectsList());
 	}
+	
+	
+	private String buildTopPromptNone() {
+	    return String.format(
+	        "Find any reference object in this TOP-DOWN image for scale calibration.\n\n" +
+	        "The user did NOT select a primary reference object. " +
+	        "Scan the entire image for any of these known objects:\n%s\n" +
+	        "The object is typically placed OUTSIDE the food container, next to the plate.\n\n" +
+	        "If you find one, set 'found' to false, set 'alternative_object_type' to its exact name, " +
+	        "and fill 'bbox_px' with its bounding box.\n" +
+	        "If you find none, set 'found' to false and 'alternative_object_type' to null.\n\n" +
+	        "Return ONLY valid JSON with no markdown:\n" +
+	        "{\n" +
+	        "  \"found\": false,\n" +
+	        "  \"bbox_px\": { \"x\": <int>, \"y\": <int>, \"width\": <int>, \"height\": <int> },\n" +
+	        "  \"confidence\": <float 0.0-1.0>,\n" +
+	        "  \"detected_object_type\": null,\n" +
+	        "  \"alternative_object_type\": \"<type if found, else null>\",\n" +
+	        "  \"reason_if_not_found\": \"<string>\"\n" +
+	        "}",
+	        buildKnownObjectsList());
+	}
+
+	private String buildSidePromptNone() {
+	    return String.format(
+	        "Find any reference object in this SIDE-VIEW image for scale calibration.\n\n" +
+	        "The user did NOT select a primary reference object. " +
+	        "Scan the entire image for any of these known objects:\n%s\n" +
+	        "The object is typically placed OUTSIDE the food container, next to the plate.\n\n" +
+	        "If you find one, set 'found' to false, set 'alternative_object_type' to its exact name, " +
+	        "and fill 'bbox_px' with its bounding box.\n" +
+	        "If you find none, set 'found' to false and 'alternative_object_type' to null.\n\n" +
+	        "Return ONLY valid JSON with no markdown:\n" +
+	        "{\n" +
+	        "  \"found\": false,\n" +
+	        "  \"bbox_px\": { \"x\": <int>, \"y\": <int>, \"width\": <int>, \"height\": <int> },\n" +
+	        "  \"confidence\": <float 0.0-1.0>,\n" +
+	        "  \"detected_object_type\": null,\n" +
+	        "  \"alternative_object_type\": \"<type if found, else null>\",\n" +
+	        "  \"reason_if_not_found\": \"<string>\"\n" +
+	        "}",
+	        buildKnownObjectsList());
+	}
+	
+	
 
 	private String buildKnownObjectsList() {
 	    StringBuilder sb = new StringBuilder();
@@ -171,6 +226,8 @@ this.fallbackResolver = fallbackResolver;
 			boolean found = root.path("found").asBoolean(false);
 			if (!found) {
 				String reason = root.path("reason_if_not_found").asText("not found");
+				DetectionResult alt = tryParseAlternative(root, reason, "TOP");
+				if (alt != null) return alt;
 				log.warn("[Calibration][TOP] Not found: {}", reason);
 				return DetectionResult.notFound(reason);
 			}
@@ -209,6 +266,8 @@ this.fallbackResolver = fallbackResolver;
 			boolean found = root.path("found").asBoolean(false);
 			if (!found) {
 				String reason = root.path("reason_if_not_found").asText("not found");
+				DetectionResult alt = tryParseAlternative(root, reason, "SIDE");
+				if (alt != null) return alt;
 				log.warn("[Calibration][SIDE] Not found: {}", reason);
 				return DetectionResult.notFound(reason);
 			}
@@ -240,6 +299,24 @@ this.fallbackResolver = fallbackResolver;
 		}
 	}
 
+	private DetectionResult tryParseAlternative(JsonNode root, String reason, String viewTag) {
+	    String altType = root.path("alternative_object_type").asText(null);
+	    if (altType == null || altType.isBlank() || "null".equalsIgnoreCase(altType)) {
+	        return null;
+	    }
+	    JsonNode bbox = root.path("bbox_px");
+	    float bboxX = (float) bbox.path("x").asDouble(0);
+	    float bboxY = (float) bbox.path("y").asDouble(0);
+	    float bboxW = (float) bbox.path("width").asDouble(0);
+	    float bboxH = (float) bbox.path("height").asDouble(0);
+	    if (bboxW <= 0 || bboxH <= 0) return null;
+	    float altConfidence = (float) root.path("confidence").asDouble(0.5);
+	    log.info("[Calibration][{}] Primary not found, alternative '{}' detected: bbox=[{},{},{},{}]",
+	        viewTag, altType, (int) bboxX, (int) bboxY, (int) bboxW, (int) bboxH);
+	    return new DetectionResult(false, new float[]{bboxX, bboxY, bboxW, bboxH},
+	        0f, altConfidence, reason, null, altType);
+	}
+	
 
 	public record DetectionResult(boolean found, float[] bboxPx, float pixelToCmRatio, float confidence,
 			String reasonIfNotFound, String detectedObjectType, String alternativeObjectType) {

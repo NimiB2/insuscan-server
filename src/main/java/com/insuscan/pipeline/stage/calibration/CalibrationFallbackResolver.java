@@ -7,15 +7,13 @@ import com.insuscan.pipeline.support.ReferenceObjectRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
+import com.insuscan.pipeline.support.StandardPlateConfig;
 
 @Component
 public class CalibrationFallbackResolver {
 
     private static final Logger log = LoggerFactory.getLogger(CalibrationFallbackResolver.class);
-
-    private static final float STANDARD_PLATE_DIAMETER_CM     = 22.0f;
     private static final float STANDARD_PLATE_PIXELS_ESTIMATE = 700f;
-    private static final float PLATE_FALLBACK_CONFIDENCE      = 0.3f;
 
     private final ReferenceObjectRegistry referenceObjectRegistry;
 
@@ -30,20 +28,22 @@ public class CalibrationFallbackResolver {
     }
 
     public record FallbackResolution(
-        float pixelToCmRatio,
-        FallbackSource source,
-        float confidence,
-        String detectedObjectType,
-        String description
-    ) {}
+            float pixelToCmRatio,
+            FallbackSource source,
+            float confidence,
+            String detectedObjectType,
+            String selectedType,
+            String description
+        ) {}
 
-    public FallbackResolution resolve(DetectionResult result, String imageView) {
-        if (result.found()) {
+    public FallbackResolution resolve(DetectionResult result, String imageView, String selectedType) {
+    	if (result.found()) {
             return new FallbackResolution(
                 result.pixelToCmRatio(),
                 FallbackSource.OBJECT_FOUND,
                 result.confidence(),
                 result.detectedObjectType(),
+                selectedType,
                 "Selected object detected in " + imageView + " image"
             );
         }
@@ -57,27 +57,29 @@ public class CalibrationFallbackResolver {
                     log.info("[CalibrationFallback][{}] Alternative '{}' detected, ratio={}",
                         imageView, result.alternativeObjectType(), ratio);
                     return new FallbackResolution(
-                        ratio,
-                        FallbackSource.ALTERNATIVE_OBJECT_DETECTED,
-                        result.confidence(),
-                        result.alternativeObjectType(),
-                        "Alternative object '" + result.alternativeObjectType() +
-                            "' used in " + imageView + " image"
-                    );
+                            ratio,
+                            FallbackSource.ALTERNATIVE_OBJECT_DETECTED,
+                            result.confidence(),
+                            result.alternativeObjectType(),
+                            selectedType,
+                            "Alternative object '" + result.alternativeObjectType() +
+                                "' used in " + imageView + " image"
+                        );
                 }
             }
         }
 
-        float estimatedRatio = STANDARD_PLATE_PIXELS_ESTIMATE / STANDARD_PLATE_DIAMETER_CM;
+        float estimatedRatio = STANDARD_PLATE_PIXELS_ESTIMATE / StandardPlateConfig.DIAMETER_CM;
         log.warn("[CalibrationFallback][{}] No object found, using plate-size estimate ratio={}",
             imageView, estimatedRatio);
         return new FallbackResolution(
             estimatedRatio,
             FallbackSource.PLATE_SIZE_ESTIMATE,
-            PLATE_FALLBACK_CONFIDENCE,
+            StandardPlateConfig.FALLBACK_CONFIDENCE,
             null,
+            selectedType,
             "No reference object found in " + imageView +
-                " — using standard " + STANDARD_PLATE_DIAMETER_CM + "cm plate estimate"
+                " — using standard " + StandardPlateConfig.DIAMETER_CM + "cm plate estimate"
         );
     }
 

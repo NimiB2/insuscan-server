@@ -61,6 +61,11 @@ public class PipelineContext {
 
     /** Bounding box of the plate in the top image [x, y, w, h] as pixel coords, if found. */
     private float[] plateBoundsTopPx;
+    
+    /** True when calibration fell back to standard plate estimate in BOTH images.
+     *  Signals later stages (notably PlateGeometryService) to override Gemini's
+     *  plate dimensions with the standard plate config. */
+    private boolean useStandardPlateFallback = false;
 
     // ── Stage 2: Plate Geometry ────────────────────────────────────────────
 
@@ -195,6 +200,9 @@ public class PipelineContext {
     public Float getPixelToCmRatioSide() { return pixelToCmRatioSide; }
     public void setPixelToCmRatioSide(Float v) { this.pixelToCmRatioSide = v; }
 
+    public boolean isUseStandardPlateFallback() { return useStandardPlateFallback; }
+    public void setUseStandardPlateFallback(boolean v) { this.useStandardPlateFallback = v; }
+    
     public float[] getReferenceBoundsTopPx() { return referenceBoundsTopPx; }
     public void setReferenceBoundsTopPx(float[] v) { this.referenceBoundsTopPx = v; }
     public float[] getReferenceBoundsSidePx() { return referenceBoundsSidePx; }

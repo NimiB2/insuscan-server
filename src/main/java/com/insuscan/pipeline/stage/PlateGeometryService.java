@@ -9,6 +9,7 @@ import com.insuscan.util.GeminiApiClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import com.insuscan.pipeline.support.StandardPlateConfig;
 
 import java.util.concurrent.CompletableFuture;
 
@@ -71,6 +72,18 @@ public class PlateGeometryService {
 
         PipelineContext.PlateGeometry geometry = merge(diameterResult, depthResult);
         float confidence = (diameterResult.confidence + depthResult.confidence) / 2f;
+
+        if (ctx.isUseStandardPlateFallback()) {
+            geometry.setInnerDiameterCm(StandardPlateConfig.DIAMETER_CM);
+            geometry.setInnerDepthCm(StandardPlateConfig.DEPTH_CM);
+            geometry.setDiameterConfidence(StandardPlateConfig.FALLBACK_CONFIDENCE);
+            geometry.setDepthConfidence(StandardPlateConfig.FALLBACK_CONFIDENCE);
+            geometry.setReasoningNotes(geometry.getReasoningNotes()
+                + " | size overridden to standard plate (no reference object)");
+            confidence = StandardPlateConfig.FALLBACK_CONFIDENCE;
+            log.info("[PlateGeometry] Standard plate fallback active — overriding diameter={}cm depth={}cm",
+                StandardPlateConfig.DIAMETER_CM, StandardPlateConfig.DEPTH_CM);
+        }
 
         if ("FLAT_PLATE".equals(geometry.getContainerType()) && geometry.getInnerDepthCm() > 3.0f) {
             warningCollector.plateTypeDepthMismatch(ctx, geometry.getContainerType(), geometry.getInnerDepthCm());

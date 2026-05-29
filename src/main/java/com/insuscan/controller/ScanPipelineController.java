@@ -199,10 +199,10 @@ public class ScanPipelineController {
         }
         meal.setFoodItems(foodItems);
 
-        // Map warnings
+     // Map warnings — prefix each message with its code so the client can route by code.
         if (result.getWarnings() != null && !result.getWarnings().isEmpty()) {
             List<String> textWarnings = result.getWarnings().stream()
-                .map(PipelineWarning::getMessage)
+                .map(w -> "[" + w.getCode() + "] " + w.getMessage())
                 .collect(Collectors.toList());
             meal.setReviewWarnings(textWarnings);
         }
