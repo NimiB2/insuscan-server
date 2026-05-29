@@ -80,6 +80,7 @@ public class MealBoundary {
     private List<String> missingProfileFields; // List of missing fields if incomplete
     private String insulinMessage; // Warnings or info messages
     private String savedPlanName; // The insulin plan selected at the time of the meal
+    private List<String> reviewWarnings; // Warnings or notices from the pipeline
 
     public MealBoundary() {
     }
@@ -369,6 +370,14 @@ public class MealBoundary {
 
     public void setSavedPlanName(String savedPlanName) {
         this.savedPlanName = savedPlanName;
+    }
+
+    public List<String> getReviewWarnings() {
+        return reviewWarnings;
+    }
+
+    public void setReviewWarnings(List<String> reviewWarnings) {
+        this.reviewWarnings = reviewWarnings;
     }
 
     @Override

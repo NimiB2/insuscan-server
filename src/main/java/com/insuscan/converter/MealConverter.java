@@ -116,6 +116,8 @@ public class MealConverter {
 
         // Insulin plan used at meal time
         boundary.setSavedPlanName(entity.getSavedPlanName());
+        
+        boundary.setReviewWarnings(entity.getReviewWarnings());
 
         return boundary;
     }
@@ -200,6 +202,8 @@ public class MealConverter {
 
         // Insulin plan used at meal time
         entity.setSavedPlanName(boundary.getSavedPlanName());
+        
+        entity.setReviewWarnings(boundary.getReviewWarnings());
 
         return entity;
     }
