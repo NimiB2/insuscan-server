@@ -49,21 +49,23 @@ public class CalculationParams {
     private Float parseRatio(String ratioStr) {
         if (ratioStr == null) return null;
         try {
-            float val;
-            if (ratioStr.contains(":")) {
-                val = Float.parseFloat(ratioStr.split(":")[1]);
-            } else {
-                val = Float.parseFloat(ratioStr);
-            }
-            
-            if (val > 0 && val < 1.0f) {
-                log.warn("[ICR] Received ICR value {} which is < 1.0. Using as-is (grams per unit). "
-                       + "If this was meant as units-per-gram, caller should convert before passing.", val);
-            }
-            return val;
+            float val = ratioStr.contains(":")
+                ? Float.parseFloat(ratioStr.split(":")[1])
+                : Float.parseFloat(ratioStr);
+            return normalizeRatio(val);
         } catch (Exception e) {
             return null;
         }
+    }
+
+    private Float normalizeRatio(float val) {
+        if (val <= 0) return val;
+        if (val < 1.0f) {
+            float corrected = 1.0f / val;
+            log.warn("[ICR] Inverted ratio detected ({} units/g). Auto-correcting to {} g/unit.", val, corrected);
+            return corrected;
+        }
+        return val;
     }
 
     // Getters

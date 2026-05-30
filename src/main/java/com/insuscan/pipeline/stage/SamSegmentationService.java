@@ -86,7 +86,8 @@ public class SamSegmentationService {
             applyResults(response.body(), items, ctx);
 
         } catch (Exception e) {
-            log.warn("[SAM] Failed to call SAM service: {}", e.getMessage());
+            String errorDetails = formatException(e);
+            log.warn("[SAM] Failed to call SAM service at {}: {}", samServiceUrl, errorDetails);
             warningCollector.add(ctx, PipelineWarning.medium(
                 "SAM_SEGMENTATION", "SAM_UNAVAILABLE",
                 "SAM service unavailable. Using bbox fallback for area calculation."
@@ -190,7 +191,7 @@ public class SamSegmentationService {
             applySideResults(response.body(), items);
 
         } catch (Exception e) {
-            log.warn("[SAM-SIDE] Failed to call SAM side service: {}", e.getMessage());
+            log.warn("[SAM-SIDE] Failed to call SAM side service at {}: {}", samServiceUrl, formatException(e));
         }
     }
 
@@ -224,35 +225,83 @@ public class SamSegmentationService {
         try {
             JsonNode root = objectMapper.readTree(responseBody);
             JsonNode heights = root.path("heights");
-
             if (!heights.isArray() || heights.size() != items.size()) {
                 log.warn("[SAM-SIDE] Response size mismatch: expected {} got {}", items.size(), heights.size());
                 return;
             }
-
             for (int i = 0; i < items.size(); i++) {
-                JsonNode h = heights.get(i);
-                float heightCm = (float) h.path("height_cm").asDouble(0);
-                int maskPixels = h.path("mask_pixel_count").asInt(0);
-                int imagePixels = h.path("image_pixel_count").asInt(0);
-
-                items.get(i).setMaskSidePixelCount(maskPixels);
-                items.get(i).setImageSidePixelCount(imagePixels);
-
-                if (heightCm > 0) {
-                    items.get(i).setEffectiveHeightCm(heightCm);
-                    items.get(i).setHeightConfidence(0.92f);
-                    log.info("[SAM-SIDE] {} -> heightCm={} (from mask, {} pixels)",
-                        items.get(i).getName(),
-                        String.format("%.2f", heightCm),
-                        maskPixels);
-                } else {
-                    log.warn("[SAM-SIDE] {} -> height=0, keeping Gemini estimate", items.get(i).getName());
-                }
+                applySideResultForItem(heights.get(i), items.get(i));
             }
-
         } catch (Exception e) {
             log.warn("[SAM-SIDE] Failed to parse side SAM response: {}", e.getMessage());
         }
+    }
+
+    private void applySideResultForItem(JsonNode heightNode, PipelineFoodItem item) {
+        float samHeightCm = (float) heightNode.path("height_cm").asDouble(0);
+        int maskPixels = heightNode.path("mask_pixel_count").asInt(0);
+        int imagePixels = heightNode.path("image_pixel_count").asInt(0);
+
+        item.setMaskSidePixelCount(maskPixels);
+        item.setImageSidePixelCount(imagePixels);
+
+        float geminiHeightCm = item.getEffectiveHeightCm();
+        HeightFusionResult fused = fuseHeights(geminiHeightCm, samHeightCm, item.getName());
+
+        item.setEffectiveHeightCm(fused.height());
+        item.setHeightConfidence(fused.confidence());
+    }
+
+    private HeightFusionResult fuseHeights(float geminiHeightCm, float samHeightCm, String itemName) {
+        boolean hasGemini = geminiHeightCm > 0;
+        boolean hasSam = samHeightCm > 0;
+
+        if (!hasGemini && !hasSam) {
+            log.warn("[SAM-SIDE] {} -> both heights are 0, defaulting to 1cm", itemName);
+            return new HeightFusionResult(1.0f, 0.3f, "FALLBACK_DEFAULT");
+        }
+
+        if (!hasSam) {
+            log.info("[SAM-SIDE] {} -> SAM=0, keeping Gemini={:.2f}cm", itemName, geminiHeightCm);
+            return new HeightFusionResult(geminiHeightCm, 0.85f, "GEMINI_ONLY");
+        }
+
+        if (!hasGemini) {
+            log.info("[SAM-SIDE] {} -> Gemini=0, using SAM={}cm", itemName, String.format("%.2f", samHeightCm));
+            return new HeightFusionResult(samHeightCm, 0.85f, "SAM_ONLY");
+        }
+
+        // Both available — compare them
+        float ratio = Math.max(geminiHeightCm, samHeightCm) / Math.min(geminiHeightCm, samHeightCm);
+
+        if (ratio < AGREEMENT_RATIO_THRESHOLD) {
+            // They agree — use weighted average
+            float avg = (geminiHeightCm + samHeightCm) / 2f;
+            log.info("[SAM-SIDE] {} -> Gemini={}cm, SAM={}cm, AGREE (ratio={}) -> fused={}cm",
+                itemName,
+                String.format("%.2f", geminiHeightCm),
+                String.format("%.2f", samHeightCm),
+                String.format("%.2f", ratio),
+                String.format("%.2f", avg));
+            return new HeightFusionResult(avg, 0.95f, "FUSED_AGREE");
+        }
+
+        // They disagree — trust Gemini (it knows "effective" height)
+        log.warn("[SAM-SIDE] {} -> Gemini={}cm, SAM={}cm, DISAGREE (ratio={}) -> preferring Gemini",
+            itemName,
+            String.format("%.2f", geminiHeightCm),
+            String.format("%.2f", samHeightCm),
+            String.format("%.2f", ratio));
+        return new HeightFusionResult(geminiHeightCm, 0.80f, "GEMINI_PREFERRED");
+    }
+
+    private static final float AGREEMENT_RATIO_THRESHOLD = 1.5f;
+
+    private record HeightFusionResult(float height, float confidence, String source) {}
+    
+    private String formatException(Exception e) {
+        String msg = e.getMessage();
+        String type = e.getClass().getSimpleName();
+        return (msg != null && !msg.isBlank()) ? type + ": " + msg : type + " (no message)";
     }
 }

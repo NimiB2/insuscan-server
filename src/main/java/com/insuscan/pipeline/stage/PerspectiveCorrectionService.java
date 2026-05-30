@@ -9,7 +9,6 @@ import com.insuscan.util.GeminiApiClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
-import com.insuscan.pipeline.support.PipelineWarningCollector;
 
 import java.util.Base64;
 
@@ -38,8 +37,13 @@ public class PerspectiveCorrectionService {
     public void correctPerspective(PipelineContext ctx) {
         if (ctx.getImageTopBase64() == null || ctx.getPlateGeometry() == null) {
             log.warn("[Perspective] Missing image or plate geometry, skipping.");
-            ctx.setPerspectiveCorrectionApplied(false);
-            ctx.recordConfidence("PERSPECTIVE_CORRECTION", 1.0f);
+            markSkipped(ctx, 1.0f);
+            return;
+        }
+
+        if (SKIP_THRESHOLD_DEG >= 90.0f) {
+            log.info("[Perspective] Skip threshold is {}° — skipping tilt estimation entirely.", SKIP_THRESHOLD_DEG);
+            markSkipped(ctx, 1.0f);
             return;
         }
 
@@ -76,6 +80,11 @@ public class PerspectiveCorrectionService {
         ctx.recordConfidence("PERSPECTIVE_CORRECTION", corrected ? 0.9f : 0.5f);
 
         log.info("[Perspective] Correction applied={}", corrected);
+    }
+    
+    private void markSkipped(PipelineContext ctx, float confidence) {
+        ctx.setPerspectiveCorrectionApplied(false);
+        ctx.recordConfidence("PERSPECTIVE_CORRECTION", confidence);
     }
 
     private TiltResult estimateTilt(PipelineContext ctx) {

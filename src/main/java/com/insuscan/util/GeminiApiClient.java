@@ -179,14 +179,9 @@ public class GeminiApiClient {
         List<Map<String, Object>> contents = new ArrayList<>();
         contents.add(Map.of("parts", parts));
 
-        Map<String, Object> generationConfig = new HashMap<>();
-        generationConfig.put("temperature", 0.0);
-        generationConfig.put("maxOutputTokens", 4096);
-        generationConfig.put("responseMimeType", "application/json");
-
         Map<String, Object> body = new HashMap<>();
         body.put("contents", contents);
-        body.put("generationConfig", generationConfig);
+        body.put("generationConfig", buildGenerationConfig(0.0));
 
         return body;
     }
@@ -207,14 +202,9 @@ public class GeminiApiClient {
         List<Map<String, Object>> contents = new ArrayList<>();
         contents.add(Map.of("role", "user", "parts", parts));
 
-        Map<String, Object> generationConfig = new HashMap<>();
-        generationConfig.put("temperature", temperature);
-        generationConfig.put("maxOutputTokens", 2048);
-        generationConfig.put("responseMimeType", "application/json");
-
         Map<String, Object> body = new HashMap<>();
         body.put("contents", contents);
-        body.put("generationConfig", generationConfig);
+        body.put("generationConfig", buildGenerationConfig(temperature));
 
         if (systemPrompt != null && !systemPrompt.isBlank()) {
             body.put("systemInstruction", Map.of(
@@ -265,5 +255,14 @@ public class GeminiApiClient {
             log.error("[GEMINI] Failed to parse response: {}", e.getMessage());
             return null;
         }
+    }
+    
+    private Map<String, Object> buildGenerationConfig(double temperature) {
+        Map<String, Object> config = new HashMap<>();
+        config.put("temperature", temperature);
+        config.put("maxOutputTokens", 8192);
+        config.put("responseMimeType", "application/json");
+        config.put("thinkingConfig", Map.of("thinkingBudget", 128));
+        return config;
     }
 }

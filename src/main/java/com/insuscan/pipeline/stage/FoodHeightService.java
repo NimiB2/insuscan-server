@@ -1,7 +1,6 @@
 package com.insuscan.pipeline.stage;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+
 import com.insuscan.pipeline.model.PipelineContext;
 import com.insuscan.pipeline.model.PipelineFoodItem;
 import com.insuscan.pipeline.support.PipelineWarningCollector;
@@ -9,8 +8,8 @@ import com.insuscan.util.GeminiApiClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
-
-import java.util.HashMap;
+import com.insuscan.pipeline.stage.height.HeightResponseParser;
+import com.insuscan.pipeline.stage.height.HeightResult;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -31,13 +30,13 @@ public class FoodHeightService {
 
 	private final GeminiApiClient geminiApiClient;
 	private final PipelineWarningCollector warningCollector;
-	private final ObjectMapper objectMapper;
+	private final HeightResponseParser responseParser;
 
 	public FoodHeightService(GeminiApiClient geminiApiClient, PipelineWarningCollector warningCollector,
-			ObjectMapper objectMapper) {
-		this.geminiApiClient = geminiApiClient;
-		this.warningCollector = warningCollector;
-		this.objectMapper = objectMapper;
+	        HeightResponseParser responseParser) {
+	    this.geminiApiClient = geminiApiClient;
+	    this.warningCollector = warningCollector;
+	    this.responseParser = responseParser;
 	}
 
 	public void estimateHeights(PipelineContext ctx) {
@@ -59,7 +58,7 @@ public class FoodHeightService {
 		try {
 			String response = geminiApiClient.callFlashModelWithImage(prompt, ctx.getImageSideBase64());
 			if (response != null && !response.isBlank()) {
-				Map<String, HeightResult> parsedHeights = parseResponse(response, foods);
+				Map<String, HeightResult> parsedHeights = responseParser.parse(response, foods);
 
 				float totalConf = 0f;
 				int count = 0;
@@ -67,26 +66,26 @@ public class FoodHeightService {
 				for (PipelineFoodItem item : foods) {
 					HeightResult hr = parsedHeights.get(item.getName());
 					if (hr != null) {
-						item.setEffectiveHeightCm(hr.heightCm);
-						item.setHeightConfidence(hr.confidence);
+						item.setEffectiveHeightCm(hr.heightCm());
+						item.setHeightConfidence(hr.confidence());
 
-						if (!hr.isVisible) {
+						if (!hr.isVisible()) {
 							warningCollector.heightNotVisible(ctx, item.getName());
 							// Fallback to plate depth if not visible
 							float defaultH = ctx.getPlateGeometry() != null ? ctx.getPlateGeometry().getInnerDepthCm()
 									: 2.5f;
 							item.setEffectiveHeightCm(defaultH);
 						} else if (ctx.getPlateGeometry() != null
-								&& hr.heightCm > ctx.getPlateGeometry().getInnerDepthCm() * 1.5f) {
-							warningCollector.heightExceedsPlateDepth(ctx, item.getName(), hr.heightCm,
-									ctx.getPlateGeometry().getInnerDepthCm());
+						        && hr.heightCm() > ctx.getPlateGeometry().getInnerDepthCm() * 1.5f) {
+						    warningCollector.heightExceedsPlateDepth(ctx, item.getName(), hr.heightCm(),
+						            ctx.getPlateGeometry().getInnerDepthCm());
 						}
 
-						totalConf += hr.confidence;
+						totalConf += hr.confidence();
 						count++;
 						log.info("[FoodHeight] {} -> {}cm (conf: {})", item.getName(),
-								String.format("%.1f", item.getEffectiveHeightCm()),
-								String.format("%.2f", hr.confidence));
+						        String.format("%.1f", item.getEffectiveHeightCm()),
+						        String.format("%.2f", hr.confidence()));
 					} else {
 						log.warn("[FoodHeight] Model missed item: {}", item.getName());
 						item.setEffectiveHeightCm(2.5f);
@@ -138,48 +137,14 @@ public class FoodHeightService {
 				+ "Effective height is the height of a perfect cylinder that would contain the same volume as the food item, given its 2D surface area.\n"
 				+ "For flat/spread foods (like sauce or a thin layer of rice), this will be small (e.g. 1.0cm).\n"
 				+ "For domed foods (like a chicken breast), imagine flattening it out over its footprint.\n\n"
-				+ "Return ONLY a JSON array of objects with NO markdown formatting:\n" + "[\n" + "  {\n"
+				+ "CRITICAL: Return ONLY a valid JSON array. NO markdown, NO code fences, NO explanations. "
+				+ "Start with [ and end with ]. Include ALL food items from the list above.\n"
+				+ "Format:\n" + "[\n" + "  {\n"
 				+ "    \"name\": \"<exact name from list>\",\n" + "    \"is_visible_in_side_view\": true,\n"
 				+ "    \"effective_height_cm\": <float>,\n" + "    \"confidence\": <float 0.0-1.0>,\n"
 				+ "    \"bbox_side_pct\": { \"x\": <float 0-100>, \"y\": <float 0-100>, \"w\": <float 0-100>, \"h\": <float 0-100> }\n"
 				+ "  }\n" + "]", ctx.getPixelToCmRatioSide(), plateContext, foodNamesList);
 	}
 
-	private Map<String, HeightResult> parseResponse(String response, List<PipelineFoodItem> foods) {
-		Map<String, HeightResult> results = new HashMap<>();
-		Map<String, PipelineFoodItem> foodsByName = foods.stream()
-				.collect(Collectors.toMap(PipelineFoodItem::getName, f -> f, (a, b) -> a));
-
-		try {
-			JsonNode root = objectMapper.readTree(response);
-			if (!root.isArray())
-				return results;
-
-			for (JsonNode node : root) {
-				String name = node.path("name").asText();
-				boolean isVisible = node.path("is_visible_in_side_view").asBoolean(true);
-				float height = (float) node.path("effective_height_cm").asDouble(2.5);
-				float conf = (float) node.path("confidence").asDouble(0.5);
-
-				JsonNode bbox = node.path("bbox_side_pct");
-				if (!bbox.isMissingNode() && foodsByName.containsKey(name)) {
-					float x = (float) bbox.path("x").asDouble(0);
-					float y = (float) bbox.path("y").asDouble(0);
-					float w = (float) bbox.path("w").asDouble(80);
-					float h = (float) bbox.path("h").asDouble(80);
-					foodsByName.get(name).setBoundingBoxSidePct(new float[] { x, y, w, h });
-					log.info("[FoodHeight] {} side bbox: x={} y={} w={} h={}", name, String.format("%.1f", x),
-							String.format("%.1f", y), String.format("%.1f", w), String.format("%.1f", h));
-				}
-
-				results.put(name, new HeightResult(isVisible, height, conf));
-			}
-		} catch (Exception e) {
-			log.error("[FoodHeight] Failed to parse response: {}", e.getMessage());
-		}
-		return results;
-	}
-
-	private record HeightResult(boolean isVisible, float heightCm, float confidence) {
-	}
+	
 }
