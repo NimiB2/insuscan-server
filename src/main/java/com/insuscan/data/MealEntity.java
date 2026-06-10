@@ -25,7 +25,7 @@ public class MealEntity {
     private Float plateDepthCm;
     private Float analysisConfidence; // 0.0 to 1.0
     private Boolean referenceDetected; // Was reference object found
-    private String referenceObjectType; // Selected type: INSULIN_SYRINGE, SYRINGE_KNIFE, CARD, NONE
+    private String referenceObjectType; // Selected type: INSULIN_PEN, CARD, NONE
     private String containerType; // FLAT_PLATE, REGULAR_BOWL, DEEP_BOWL — used for history-based learning
 
     // --- User Context (State at meal time) ---

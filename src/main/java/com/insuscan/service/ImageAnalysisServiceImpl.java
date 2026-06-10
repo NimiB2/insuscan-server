@@ -347,10 +347,10 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
 							+ ". It is definitely there. Use these dimensions as your primary scale anchor."
 
 					: (isSyringe
-							? "SYSTEM ALERT: local detection found a "
-									+ ReferenceObjectDimensions.INSULIN_SYRINGE.getScaleDescription()
-									+ ". It is definitely there. Use these dimensions as your primary scale anchor."
-							: "Identify the container size (diameter/depth) using standard plate sizes or nearby objects for scale.");
+        ? "SYSTEM ALERT: local detection found a "
+                + ReferenceObjectDimensions.INSULIN_PEN.getScaleDescription()
+                + ". It is definitely there. Use these dimensions as your primary scale anchor."
+        : "Identify the container size (diameter/depth) using standard plate sizes or nearby objects for scale.");
 
 			return """
 					You are a professional nutritionist's assistant AI.
@@ -401,8 +401,8 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
 		} else if (referenceObjectType != null && (referenceObjectType.toLowerCase().contains("syringe")
 				|| referenceObjectType.toLowerCase().contains("pen"))) {
 			referenceInstruction = "- REFERENCE OBJECT: Look for an INSULIN SYRINGE or PEN near the food. Known dimensions: "
-					+ ReferenceObjectDimensions.INSULIN_SYRINGE.getLengthCm() + "cm length × "
-					+ ReferenceObjectDimensions.INSULIN_SYRINGE.getWidthCm()
+					   + ReferenceObjectDimensions.INSULIN_PEN.getLengthCm() + "cm length × "
+			            + ReferenceObjectDimensions.INSULIN_PEN.getWidthCm()
 					+ "cm width. Use this known size to accurately estimate food volume.";
 		} else {
 			referenceInstruction = "- REFERENCE OBJECT: Look for any known-size object near the food (pen, card, cutlery). IF FOUND, use it as a scale reference.";

@@ -22,7 +22,7 @@ public class ReferenceObjectRegistry {
      * Returns the physical dimensions for the given reference object type string.
      * Returns null if the type is unknown or NONE.
      *
-     * @param serverValue e.g. "INSULIN_SYRINGE", "CARD", "SYRINGE_KNIFE"
+     * @param serverValue e.g. "INSULIN_PEN", "CARD"
      * @return dimensions, or null if type not supported
      */
     public Dimensions getDimensions(String serverValue) {

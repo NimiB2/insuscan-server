@@ -35,7 +35,7 @@ public class PipelineContext {
 
     private String imageTopBase64;
     private String imageSideBase64;
-    private String referenceObjectType;  // e.g. "INSULIN_SYRINGE", "CARD", "SYRINGE_KNIFE"
+    private String referenceObjectType;  // e.g. "INSULIN_PEN", "CARD"
     private String userId;
     private String systemId;
     private ArcoreDepthData arcoreDepthData;

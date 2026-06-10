@@ -109,7 +109,7 @@ public class FoodEstimationPipeline {
         if (!isNone && !referenceObjectRegistry.isSupported(refType)) {
             return PipelineResult.failure(
                 "Unsupported reference object type: " + refType +
-                ". Supported types: INSULIN_SYRINGE, CARD, NONE"
+                ". Supported types: INSULIN_PEN, CARD, NONE"
             );
         }
         

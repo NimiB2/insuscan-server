@@ -83,12 +83,6 @@ private void applyFallbackWarnings(PipelineContext ctx,
 	    } else if (side.source() == CalibrationFallbackResolver.FallbackSource.PLATE_SIZE_ESTIMATE) {
 	        warningCollector.usingPlateSizeEstimate(ctx, "side", side.selectedType());
 	    }
-
-//	    if (top.source() == CalibrationFallbackResolver.FallbackSource.PLATE_SIZE_ESTIMATE &&
-//	        side.source() == CalibrationFallbackResolver.FallbackSource.PLATE_SIZE_ESTIMATE) {
-//	        warningCollector.calibrationFailed(ctx,
-//	            "No reference object found in either image — using standard plate size estimate for both");
-//	    }
 	}
 
 	private DetectionResult detectTopImage(String base64Image, ReferenceObjectRegistry.Dimensions dims,
@@ -164,8 +158,8 @@ private void applyFallbackWarnings(PipelineContext ctx,
 	        "}",
 	        description, dims.sideViewDimensionCm(), buildKnownObjectsList());
 	}
-	
-	
+
+
 	private String buildTopPromptNone() {
 	    return String.format(
 	        "Find any reference object in this TOP-DOWN image for scale calibration.\n\n" +
@@ -207,8 +201,7 @@ private void applyFallbackWarnings(PipelineContext ctx,
 	        "}",
 	        buildKnownObjectsList());
 	}
-	
-	
+
 
 	private String buildKnownObjectsList() {
 	    StringBuilder sb = new StringBuilder();
@@ -316,7 +309,7 @@ private void applyFallbackWarnings(PipelineContext ctx,
 	    return new DetectionResult(false, new float[]{bboxX, bboxY, bboxW, bboxH},
 	        0f, altConfidence, reason, null, altType);
 	}
-	
+
 
 	public record DetectionResult(boolean found, float[] bboxPx, float pixelToCmRatio, float confidence,
 			String reasonIfNotFound, String detectedObjectType, String alternativeObjectType) {
