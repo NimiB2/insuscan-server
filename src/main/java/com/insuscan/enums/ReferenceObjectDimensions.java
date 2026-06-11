@@ -3,8 +3,8 @@ package com.insuscan.enums;
 
 public enum ReferenceObjectDimensions {
 
-	INSULIN_PEN("INSULIN_PEN", 16.0f, 1.25f, 1.25f,
-		    "INSULIN PEN — a slim cylindrical medical pen (like a NovoPen or FlexPen), approximately 16.0cm long and 1.25cm in diameter. It looks like a thick marker or a large pen, placed next to the plate."),
+	INSULIN_PEN("INSULIN_PEN", 15.5f, 1.5f, 1.5f,
+		    "INSULIN PEN — a slim cylindrical medical pen (like a NovoPen or FlexPen), approximately 15.5cm long and 1.5cm in diameter. It looks like a thick marker or a large pen, placed next to the plate."),
     CARD("CARD", 8.56f, 5.398f, 5.398f,
         "CREDIT CARD / ID CARD — width=8.56cm, height=5.398cm"),
     NONE("NONE", 0f, 0f, 0f, "");

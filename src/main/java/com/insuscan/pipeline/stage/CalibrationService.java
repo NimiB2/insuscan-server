@@ -11,6 +11,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import com.insuscan.enums.ReferenceObjectDimensions;
 import com.insuscan.pipeline.stage.calibration.CalibrationFallbackResolver;
+import com.insuscan.pipeline.model.PipelineWarning;
+import com.insuscan.pipeline.stage.calibration.ReferenceObjectCvDetector;
+import org.springframework.beans.factory.annotation.Value;
 
 @Service
 public class CalibrationService {
@@ -22,18 +25,27 @@ public class CalibrationService {
 	private final PipelineWarningCollector warningCollector;
 	private final ObjectMapper objectMapper;
 	private final CalibrationFallbackResolver fallbackResolver;
+	private final ReferenceObjectCvDetector cvDetector;
+	
+	@Value("${calibration.crosscheck.max-gap:0.25}")
+	private float crosscheckMaxGap;
 
-
+	@Value("${calibration.cv.min-confidence:0.5}")
+	private float cvMinConfidence;
+	
+	
 	public CalibrationService(GeminiApiClient geminiApiClient,
             ReferenceObjectRegistry referenceObjectRegistry,
             PipelineWarningCollector warningCollector,
             ObjectMapper objectMapper,
-            CalibrationFallbackResolver fallbackResolver) {
+            CalibrationFallbackResolver fallbackResolver,
+            ReferenceObjectCvDetector cvDetector) {
 this.geminiApiClient = geminiApiClient;
 this.referenceObjectRegistry = referenceObjectRegistry;
 this.warningCollector = warningCollector;
 this.objectMapper = objectMapper;
 this.fallbackResolver = fallbackResolver;
+this.cvDetector = cvDetector;
 }
 
 public void calibrate(PipelineContext ctx) {
@@ -41,9 +53,9 @@ public void calibrate(PipelineContext ctx) {
 	    ReferenceObjectRegistry.Dimensions dims =
 	        referenceObjectRegistry.getDimensions(selectedType);
 
-	    DetectionResult topResult  = detectTopImage(ctx.getImageTopBase64(), dims, selectedType);
-	    DetectionResult sideResult = detectSideImage(ctx.getImageSideBase64(), dims, selectedType);
-
+	    DetectionResult topResult  = detectWithCvFirst(ctx, ctx.getImageTopBase64(), dims, selectedType, true);
+	    DetectionResult sideResult = detectWithCvFirst(ctx, ctx.getImageSideBase64(), dims, selectedType, false);
+	    
 	    CalibrationFallbackResolver.FallbackResolution topResolution  = fallbackResolver.resolve(topResult, "top", selectedType);
 	    CalibrationFallbackResolver.FallbackResolution sideResolution = fallbackResolver.resolve(sideResult, "side", selectedType);
 
@@ -316,5 +328,98 @@ private void applyFallbackWarnings(PipelineContext ctx,
 		static DetectionResult notFound(String reason) {
 			return new DetectionResult(false, null, 0f, 0f, reason, null, null);
 		}
+	}
+	
+	private DetectionResult detectWithCvFirst(PipelineContext ctx, String base64Image,
+			ReferenceObjectRegistry.Dimensions dims, String refType, boolean isTop) {
+
+		String viewTag = isTop ? "TOP" : "SIDE";
+
+		if (base64Image == null || base64Image.isBlank()) {
+			return DetectionResult.notFound("No image provided");
+		}
+
+		if (dims == null) {
+			return isTop ? detectTopImage(base64Image, null, refType)
+					: detectSideImage(base64Image, null, refType);
+		}
+
+		ReferenceObjectCvDetector.DetectionMode mode =
+				ReferenceObjectCvDetector.DetectionMode.fromReferenceType(refType);
+
+		com.insuscan.pipeline.stage.calibration.CvDetectionResult cvResult =
+				cvDetector.detect(base64Image, mode, dims.lengthCm(), dims.widthCm());
+
+		if (cvResult.isFound() && cvResult.getConfidence() >= cvMinConfidence) {
+			log.info("[Calibration][{}] CV detection succeeded: ratio={} conf={}",
+					viewTag, String.format("%.5f", cvResult.getPixelToCmRatio()),
+					String.format("%.2f", cvResult.getConfidence()));
+			return toDetectionResult(cvResult, refType);
+		}
+
+		log.info("[Calibration][{}] CV detection failed ({}), falling back to Gemini",
+				viewTag, cvResult.getFailureReason());
+
+		DetectionResult geminiResult = isTop
+				? detectTopImage(base64Image, dims, refType)
+				: detectSideImage(base64Image, dims, refType);
+
+		if (!geminiResult.found() || geminiResult.bboxPx() == null) {
+			return geminiResult;
+		}
+
+		com.insuscan.pipeline.stage.calibration.CvDetectionResult regionResult =
+				cvDetector.detectInRegion(base64Image, mode, dims.lengthCm(), dims.widthCm(),
+						geminiResult.bboxPx());
+
+		if (!regionResult.isFound() || regionResult.getConfidence() < cvMinConfidence) {
+			log.info("[Calibration][{}] Region CV failed, keeping Gemini result", viewTag);
+			return geminiResult;
+		}
+
+		return crossCheck(ctx, regionResult, geminiResult, refType, viewTag);
+	}
+
+	private DetectionResult crossCheck(PipelineContext ctx,
+			com.insuscan.pipeline.stage.calibration.CvDetectionResult cvResult,
+			DetectionResult geminiResult, String refType, String viewTag) {
+
+		float cvRatio = cvResult.getPixelToCmRatio();
+		float geminiRatio = geminiResult.pixelToCmRatio();
+		float gap = Math.abs(cvRatio - geminiRatio) / Math.max(cvRatio, geminiRatio);
+
+		float confidence;
+		if (gap <= crosscheckMaxGap) {
+			confidence = Math.max(cvResult.getConfidence(), geminiResult.confidence());
+			log.info("[Calibration][{}] Cross-check agreed (gap={}%), cv={} gemini={}",
+					viewTag, String.format("%.0f", gap * 100),
+					String.format("%.5f", cvRatio), String.format("%.5f", geminiRatio));
+		} else {
+			confidence = Math.min(cvResult.getConfidence(), geminiResult.confidence());
+			log.warn("[Calibration][{}] Cross-check disagreement (gap={}%), cv={} gemini={}",
+					viewTag, String.format("%.0f", gap * 100),
+					String.format("%.5f", cvRatio), String.format("%.5f", geminiRatio));
+			warningCollector.add(ctx, PipelineWarning.medium(
+					"CALIBRATION", "CALIBRATION_CROSSCHECK_GAP",
+					String.format("Calibration sources disagree by %.0f%% in %s image",
+							gap * 100, viewTag.toLowerCase())));
+		}
+
+		return new DetectionResult(true, toBboxArray(cvResult), cvRatio, confidence,
+				null, refType, null);
+	}
+
+	private DetectionResult toDetectionResult(
+			com.insuscan.pipeline.stage.calibration.CvDetectionResult cvResult, String refType) {
+		return new DetectionResult(true, toBboxArray(cvResult),
+				cvResult.getPixelToCmRatio(), cvResult.getConfidence(), null, refType, null);
+	}
+
+	private float[] toBboxArray(com.insuscan.pipeline.stage.calibration.CvDetectionResult cvResult) {
+		return new float[] {
+				cvResult.getBoundingBox().x,
+				cvResult.getBoundingBox().y,
+				cvResult.getBoundingBox().width,
+				cvResult.getBoundingBox().height };
 	}
 }

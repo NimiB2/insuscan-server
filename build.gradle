@@ -35,6 +35,9 @@ dependencies {
     // Dev tools for hot reload
     developmentOnly 'org.springframework.boot:spring-boot-devtools'
     
+    // OpenCv
+    implementation 'org.openpnp:opencv:4.9.0-0'
+    
     // OpenAPI/Swagger documentation
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.8'
     
