@@ -31,6 +31,7 @@ public class ArcoreDepthFusionService {
         float visionWeight = 1f - arcoreWeight;
 
         fusePlateDepth(ctx, arcore, arcoreWeight, visionWeight);
+        fusePlateDiameter(ctx, arcore, arcoreWeight, visionWeight);
         fuseFoodHeights(ctx, arcore, arcoreWeight, visionWeight);
 
         log.info("[ArcoreFusion] Fusion complete. arcoreConf={} arcoreWeight={}",
@@ -54,6 +55,29 @@ public class ArcoreDepthFusionService {
         ctx.getPlateGeometry().setInnerDepthCm(fusedDepthCm);
         ctx.getPlateGeometry().setDepthConfidence(
                 Math.min(1.0f, ctx.getPlateGeometry().getDepthConfidence() + (arcoreWeight * 0.2f)));
+    }
+
+    private void fusePlateDiameter(PipelineContext ctx, ArcoreDepthData arcore,
+                                   float arcoreWeight, float visionWeight) {
+        if (ctx.getPlateGeometry() == null || arcore.getPlateDiameterCm() == null
+                || arcore.getPlateDiameterCm() <= 0f) return;
+
+        float arcoreDiameterCm = arcore.getPlateDiameterCm();
+        float visionDiameterCm = ctx.getPlateGeometry().getInnerDiameterCm();
+        float fusedDiameterCm  = (arcoreDiameterCm * arcoreWeight) + (visionDiameterCm * visionWeight);
+
+        float gap = Math.abs(arcoreDiameterCm - visionDiameterCm)
+                / Math.max(arcoreDiameterCm, visionDiameterCm);
+
+        log.info("[ArcoreFusion] Plate diameter: arcore={}cm vision={}cm fused={}cm gap={}%",
+                String.format("%.2f", arcoreDiameterCm),
+                String.format("%.2f", visionDiameterCm),
+                String.format("%.2f", fusedDiameterCm),
+                String.format("%.0f", gap * 100));
+
+        ctx.getPlateGeometry().setInnerDiameterCm(fusedDiameterCm);
+        ctx.getPlateGeometry().setDiameterConfidence(
+                Math.min(1.0f, ctx.getPlateGeometry().getDiameterConfidence() + (arcoreWeight * 0.2f)));
     }
 
     private void fuseFoodHeights(PipelineContext ctx, ArcoreDepthData arcore,

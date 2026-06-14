@@ -69,7 +69,7 @@ public class CalibrationFallbackResolver {
             }
         }
 
-        float estimatedRatio = STANDARD_PLATE_PIXELS_ESTIMATE / StandardPlateConfig.DIAMETER_CM;
+        float estimatedRatio = StandardPlateConfig.DIAMETER_CM / STANDARD_PLATE_PIXELS_ESTIMATE;
         log.warn("[CalibrationFallback][{}] No object found, using plate-size estimate ratio={}",
             imageView, estimatedRatio);
         return new FallbackResolution(
@@ -88,8 +88,8 @@ public class CalibrationFallbackResolver {
         float widthPx  = bboxPx[2];
         float heightPx = bboxPx[3];
         if (widthPx <= 0 || heightPx <= 0) return 0f;
-        float ratioFromLength = widthPx  / dims.lengthCm();
-        float ratioFromWidth  = heightPx / dims.widthCm();
+        float ratioFromLength = dims.lengthCm() / widthPx;
+        float ratioFromWidth  = dims.widthCm()  / heightPx;
         return (ratioFromLength + ratioFromWidth) / 2f;
     }
 }

@@ -131,11 +131,6 @@ public CvDetectionResult detectInRegion(String base64Image, DetectionMode mode,
             dumpDebugImages(cropped, edges, contours);
             cropped.release();
 
-            double innerX = regionPx[0] - x;
-            double innerY = regionPx[1] - y;
-            double innerRight = innerX + regionPx[2];
-            double innerBottom = innerY + regionPx[3];
-
             List<Point> cloudPoints = new ArrayList<>();
             for (MatOfPoint contour : contours) {
                 Rect contourBox = Imgproc.boundingRect(contour);

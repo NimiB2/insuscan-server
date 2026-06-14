@@ -357,8 +357,11 @@ private void applyFallbackWarnings(PipelineContext ctx,
 			return toDetectionResult(cvResult, refType);
 		}
 
-		log.info("[Calibration][{}] CV detection failed ({}), falling back to Gemini",
-				viewTag, cvResult.getFailureReason());
+		String cvReason = cvResult.isFound()
+				? String.format("candidate below confidence gate (conf=%.2f < min=%.2f)",
+						cvResult.getConfidence(), cvMinConfidence)
+				: "detection failed (" + cvResult.getFailureReason() + ")";
+		log.info("[Calibration][{}] CV {}, falling back to Gemini", viewTag, cvReason);
 
 		DetectionResult geminiResult = isTop
 				? detectTopImage(base64Image, dims, refType)
