@@ -32,6 +32,12 @@ public class PlateGeometryService {
     @Value("${plate.geometry.debug.depth:2.0}")
     private float debugDepthCm;
 
+    @Value("${plate.geometry.force-diameter.enabled:false}")
+    private boolean forceDiameterEnabled;
+
+    @Value("${plate.geometry.force-diameter.cm:22.0}")
+    private float forceDiameterCm;
+
     private final GeminiApiClient geminiApiClient;
     private final ReferenceObjectRegistry referenceObjectRegistry;
     private final PipelineWarningCollector warningCollector;
@@ -74,6 +80,10 @@ public class PlateGeometryService {
             confidence = StandardPlateConfig.FALLBACK_CONFIDENCE;
         }
 
+        if (forceDiameterEnabled) {
+            applyForcedDiameter(geometry);
+        }
+
         if ("FLAT_PLATE".equals(geometry.getContainerType()) && geometry.getInnerDepthCm() > 3.0f) {
             warningCollector.plateTypeDepthMismatch(ctx, geometry.getContainerType(), geometry.getInnerDepthCm());
         }
@@ -88,6 +98,8 @@ public class PlateGeometryService {
                 String.format("%.0f", geometry.getFillPercent()),
                 String.format("%.2f", confidence));
     }
+    
+    
 
     private void applyDebugOverride(PipelineContext ctx) {
         PipelineContext.PlateGeometry override = new PipelineContext.PlateGeometry();
@@ -113,6 +125,16 @@ public class PlateGeometryService {
                 + " | size overridden to standard plate (no reference object)");
         log.info("[PlateGeometry] Standard plate fallback active — overriding diameter={}cm depth={}cm",
                 StandardPlateConfig.DIAMETER_CM, StandardPlateConfig.DEPTH_CM);
+    }
+
+    private void applyForcedDiameter(PipelineContext.PlateGeometry geometry) {
+        float original = geometry.getInnerDiameterCm();
+        geometry.setInnerDiameterCm(forceDiameterCm);
+        geometry.setReasoningNotes(geometry.getReasoningNotes()
+                + " | TEST: diameter forced from " + String.format("%.2f", original)
+                + "cm to " + String.format("%.2f", forceDiameterCm) + "cm");
+        log.info("[PlateGeometry] TEST force-diameter active — overriding diameter {}cm -> {}cm",
+                String.format("%.2f", original), String.format("%.2f", forceDiameterCm));
     }
 
     private DiameterResult fetchDiameter(PipelineContext ctx) {

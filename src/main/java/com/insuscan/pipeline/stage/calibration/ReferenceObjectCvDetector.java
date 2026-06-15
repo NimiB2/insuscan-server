@@ -52,6 +52,9 @@ public class ReferenceObjectCvDetector {
     @Value("${calibration.debug.dump-dir:}")
     private String debugDumpDir;
 
+    @Value("${calibration.cv.cluster-merge-ratio:0.05}")
+    private double clusterMergeRatio;
+    
     public enum DetectionMode {
         STRICT,
         CARD;
@@ -131,25 +134,23 @@ public CvDetectionResult detectInRegion(String base64Image, DetectionMode mode,
             dumpDebugImages(cropped, edges, contours);
             cropped.release();
 
-            List<Point> cloudPoints = new ArrayList<>();
+            List<List<Point>> fragments = new ArrayList<>();
             for (MatOfPoint contour : contours) {
                 Rect contourBox = Imgproc.boundingRect(contour);
                 boolean touchesBorder = contourBox.x <= 1 || contourBox.y <= 1
                         || contourBox.x + contourBox.width >= w - 1
                         || contourBox.y + contourBox.height >= h - 1;
                 if (!touchesBorder) {
-                    cloudPoints.addAll(contour.toList());
+                    fragments.add(contour.toList());
                 }
             }
 
-            if (cloudPoints.size() < MIN_CLOUD_POINTS) {
-                return CvDetectionResult.notFound("Too few edge points in region ("
-                        + cloudPoints.size() + ")");
-            }
+            List<List<Point>> clusters = clusterFragments(fragments, w, h);
+            RotatedRect cloudRect = selectBestCluster(clusters, expectedLengthCm / expectedWidthCm);
 
-            MatOfPoint2f cloud2f = new MatOfPoint2f(cloudPoints.toArray(new Point[0]));
-            RotatedRect cloudRect = Imgproc.minAreaRect(cloud2f);
-            cloud2f.release();
+            if (cloudRect == null) {
+                return CvDetectionResult.notFound("No pen-like cluster found in region");
+            }
 
             double length = Math.max(cloudRect.size.width, cloudRect.size.height);
             double thickness = Math.min(cloudRect.size.width, cloudRect.size.height);
@@ -172,11 +173,11 @@ public CvDetectionResult detectInRegion(String base64Image, DetectionMode mode,
             float confidence = (float) (0.9 * (1.0 - aspectDeviation / strictAspectTolerance));
             float pixelToCmRatio = (float) (expectedLengthCm / length);
 
-            log.info("[CvDetector][Region] Point cloud measured: points={} length={}px aspect={} deviation={}% confidence={} ratio={}",
-                    cloudPoints.size(), (int) length, String.format("%.2f", aspectRatio),
+            log.info("[CvDetector][Region] Point cloud measured: length={}px aspect={} deviation={}% confidence={} ratio={}",
+                    (int) length, String.format("%.2f", aspectRatio),
                     String.format("%.0f", aspectDeviation * 100), String.format("%.2f", confidence),
                     String.format("%.5f", pixelToCmRatio));
-
+            
             Rect adjustedBox = new Rect((int) (cloudRect.boundingRect().x + x),
                     (int) (cloudRect.boundingRect().y + y),
                     cloudRect.boundingRect().width, cloudRect.boundingRect().height);
@@ -192,6 +193,75 @@ public CvDetectionResult detectInRegion(String base64Image, DetectionMode mode,
             hierarchy.release();
         }
     }
+
+
+private List<List<Point>> clusterFragments(List<List<Point>> fragments, int w, int h) {
+    double mergeDistance = Math.max(w, h) * clusterMergeRatio;
+    List<List<Point>> clusters = new ArrayList<>();
+    List<Point[]> clusterBounds = new ArrayList<>();
+
+    for (List<Point> fragment : fragments) {
+        if (fragment.isEmpty()) {
+            continue;
+        }
+        Rect box = Imgproc.boundingRect(new MatOfPoint(fragment.toArray(new Point[0])));
+        Point center = new Point(box.x + box.width / 2.0, box.y + box.height / 2.0);
+
+        int target = -1;
+        for (int i = 0; i < clusterBounds.size(); i++) {
+            Point existing = clusterBounds.get(i)[0];
+            double dist = Math.hypot(center.x - existing.x, center.y - existing.y);
+            if (dist <= mergeDistance) {
+                target = i;
+                break;
+            }
+        }
+
+        if (target >= 0) {
+            clusters.get(target).addAll(fragment);
+            List<Point> merged = clusters.get(target);
+            Rect mergedBox = Imgproc.boundingRect(new MatOfPoint(merged.toArray(new Point[0])));
+            clusterBounds.get(target)[0] = new Point(
+                    mergedBox.x + mergedBox.width / 2.0,
+                    mergedBox.y + mergedBox.height / 2.0);
+        } else {
+            List<Point> newCluster = new ArrayList<>(fragment);
+            clusters.add(newCluster);
+            clusterBounds.add(new Point[] { center });
+        }
+    }
+
+    return clusters;
+}
+
+private RotatedRect selectBestCluster(List<List<Point>> clusters, double expectedAspect) {
+    RotatedRect best = null;
+    double bestDeviation = Double.MAX_VALUE;
+
+    for (List<Point> cluster : clusters) {
+        if (cluster.size() < MIN_CLOUD_POINTS) {
+            continue;
+        }
+        MatOfPoint2f cloud2f = new MatOfPoint2f(cluster.toArray(new Point[0]));
+        RotatedRect rect = Imgproc.minAreaRect(cloud2f);
+        cloud2f.release();
+
+        double length = Math.max(rect.size.width, rect.size.height);
+        double thickness = Math.min(rect.size.width, rect.size.height);
+        if (thickness <= 0) {
+            continue;
+        }
+
+        double aspect = length / thickness;
+        double deviation = Math.abs(aspect - expectedAspect) / expectedAspect;
+        if (deviation < bestDeviation) {
+            bestDeviation = deviation;
+            best = rect;
+        }
+    }
+
+    return best;
+}
 
     private CvDetectionResult runDetection(Mat image, DetectionMode mode,
             float expectedLengthCm, float expectedWidthCm) {

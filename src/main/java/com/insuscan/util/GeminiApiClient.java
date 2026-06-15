@@ -231,6 +231,11 @@ public class GeminiApiClient {
 
             JsonNode candidates = root.get("candidates");
             if (candidates != null && candidates.isArray() && !candidates.isEmpty()) {
+                JsonNode finishReason = candidates.get(0).get("finishReason");
+                JsonNode usage = root.get("usageMetadata");
+                log.info("[GEMINI] finishReason={} usage={}",
+                        finishReason != null ? finishReason.asText() : "none",
+                        usage != null ? usage.toString() : "none");
                 JsonNode content = candidates.get(0).get("content");
                 if (content != null) {
                     JsonNode responseParts = content.get("parts");
