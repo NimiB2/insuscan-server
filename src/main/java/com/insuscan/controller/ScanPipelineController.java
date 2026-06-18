@@ -14,6 +14,8 @@ import com.insuscan.pipeline.model.PipelineContext;
 import com.insuscan.pipeline.model.PipelineFoodItem;
 import com.insuscan.pipeline.model.PipelineResult;
 import com.insuscan.pipeline.model.PipelineWarning;
+import com.insuscan.service.DoseGateDecision;
+import com.insuscan.service.DoseGateEvaluator;
 import com.insuscan.service.InsulinCalculationService;
 import com.insuscan.service.MealService;
 import com.insuscan.util.MealIdGenerator;
@@ -60,7 +62,8 @@ public class ScanPipelineController {
     private final MealConverter mealConverter;
     private final MealService mealService;
     private final ObjectMapper objectMapper;
-    
+    private final DoseGateEvaluator doseGateEvaluator;
+
     @Value("${spring.application.name}")
     private String systemId;
 
@@ -72,7 +75,9 @@ public class ScanPipelineController {
             InsulinCalculationService insulinCalculationService,
             MealConverter mealConverter,
             MealService mealService,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+    		DoseGateEvaluator doseGateEvaluator) {
+
         this.pipeline = pipeline;
         this.userRepository = userRepository;
         this.mealRepository = mealRepository;
@@ -81,6 +86,8 @@ public class ScanPipelineController {
         this.mealConverter = mealConverter;
         this.mealService = mealService;
         this.objectMapper = objectMapper;
+        this.doseGateEvaluator = doseGateEvaluator;
+
     }
 
     @Operation(
@@ -207,20 +214,33 @@ public class ScanPipelineController {
             meal.setReviewWarnings(textWarnings);
         }
 
-        // 3. Insulin Calculation
+     // 3. Dose gate — block dose recommendation on unreliable/invalid results
+        Float gateWeight = ctx.getMealTotals() != null ? ctx.getMealTotals().getTotalWeightG() : null;
+        Float gateCarbs  = ctx.getMealTotals() != null ? ctx.getMealTotals().getTotalNetCarbsG() : null;
+        DoseGateDecision gateDecision = doseGateEvaluator.evaluate(result.getWarnings(), gateWeight, gateCarbs);
+
+        // 4. Insulin Calculation (skipped when blocked)
         UserEntity user = userRepository.findById(userDocId).orElse(null);
-        if (user != null) {
+        if (gateDecision.blocked()) {
+            meal.setRecommendedDose(null);
+            meal.setCarbDose(null);
+            meal.setCorrectionDose(null);
+            meal.setRequiresManualReview(true);
+            meal.setInsulinMessage("Dose recommendation withheld — please review manually. Reason: "
+                    + gateDecision.summary());
+            log.warn("[ScanV2] Dose recommendation blocked for meal {}: {}", meal.getId(), gateDecision.summary());
+        } else if (user != null) {
             try {
                 UserIdBoundary userIdBoundary = new UserIdBoundary();
                 userIdBoundary.setSystemId(systemId);
                 userIdBoundary.setEmail(email);
-                
+
                 InsulinCalculationBoundary calc = insulinCalculationService.calculateDose(
-                    meal.getTotalCarbs() != null ? meal.getTotalCarbs() : 0f, 
-                    null, 
+                    meal.getTotalCarbs() != null ? meal.getTotalCarbs() : 0f,
+                    null,
                     userIdBoundary
                 );
-                
+
                 meal.setRecommendedDose(calc.getTotalRecommendedDose());
                 meal.setCarbDose(calc.getCarbDose());
                 meal.setCorrectionDose(calc.getCorrectionDose());
@@ -243,12 +263,12 @@ public class ScanPipelineController {
             meal.setInsulinMessage("User profile not found. Please log in.");
         }
 
-        // 4. Save to DB
+        // 5. Save to DB
         mealRepository.save(meal);
         log.info("[ScanV2] Saved MealEntity (id={}) with totalCarbs={}, estimatedWeight={}", 
             meal.getId(), meal.getTotalCarbs(), meal.getEstimatedWeight());
 
-        // 5. Convert to Boundary and return
+        // 6. Convert to Boundary and return
         MealBoundary boundary = mealConverter.toBoundary(meal);
         return ResponseEntity.ok(boundary);
     }

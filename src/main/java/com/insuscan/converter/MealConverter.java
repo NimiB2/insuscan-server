@@ -118,6 +118,7 @@ public class MealConverter {
         boundary.setSavedPlanName(entity.getSavedPlanName());
         
         boundary.setReviewWarnings(entity.getReviewWarnings());
+        boundary.setRequiresManualReview(entity.isRequiresManualReview());
 
         return boundary;
     }
@@ -204,6 +205,7 @@ public class MealConverter {
         entity.setSavedPlanName(boundary.getSavedPlanName());
         
         entity.setReviewWarnings(boundary.getReviewWarnings());
+        entity.setRequiresManualReview(boundary.isRequiresManualReview());
 
         return entity;
     }

@@ -80,6 +80,7 @@ public class MealBoundary {
 	private String insulinMessage; // Warnings or info messages
 	private String savedPlanName; // The insulin plan selected at the time of the meal
 	private List<String> reviewWarnings; // Warnings or notices from the pipeline
+	private boolean requiresManualReview; // Dose recommendation withheld needs manual review
 
 	public MealBoundary() {
 	}
@@ -377,6 +378,13 @@ public class MealBoundary {
 
 	public void setReviewWarnings(List<String> reviewWarnings) {
 		this.reviewWarnings = reviewWarnings;
+	}
+	public boolean isRequiresManualReview() {
+		return requiresManualReview;
+	}
+
+	public void setRequiresManualReview(boolean requiresManualReview) {
+		this.requiresManualReview = requiresManualReview;
 	}
 
 	@Override

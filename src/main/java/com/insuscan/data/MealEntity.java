@@ -42,6 +42,8 @@ public class MealEntity {
     // --- Final Results ---
     private Float recommendedDose;
     private Float actualDose; // User override
+    private boolean requiresManualReview;
+
 
     // --- Status & Timestamps ---
     private MealStatus status;
@@ -460,6 +462,14 @@ public class MealEntity {
 
     public void setSavedPlanName(String savedPlanName) {
         this.savedPlanName = savedPlanName;
+    }
+    
+    public boolean isRequiresManualReview() {
+        return requiresManualReview;
+    }
+
+    public void setRequiresManualReview(boolean requiresManualReview) {
+        this.requiresManualReview = requiresManualReview;
     }
     
     @Override
