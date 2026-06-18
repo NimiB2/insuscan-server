@@ -48,53 +48,67 @@ this.fallbackResolver = fallbackResolver;
 this.cvDetector = cvDetector;
 }
 
-public void calibrate(PipelineContext ctx) {
+	public void calibrate(PipelineContext ctx) {
 	    String selectedType = ctx.getReferenceObjectType();
 	    ReferenceObjectRegistry.Dimensions dims =
 	        referenceObjectRegistry.getDimensions(selectedType);
+	    boolean noneSelected = dims == null;
 
 	    DetectionResult topResult  = detectWithCvFirst(ctx, ctx.getImageTopBase64(), dims, selectedType, true);
 	    DetectionResult sideResult = detectWithCvFirst(ctx, ctx.getImageSideBase64(), dims, selectedType, false);
-	    
+
 	    CalibrationFallbackResolver.FallbackResolution topResolution  = fallbackResolver.resolve(topResult, "top", selectedType);
 	    CalibrationFallbackResolver.FallbackResolution sideResolution = fallbackResolver.resolve(sideResult, "side", selectedType);
 
-	    applyFallbackWarnings(ctx, topResolution, sideResolution);
+	    applySideCalibration(ctx, sideResult, sideResolution);
+	    applyTopCalibration(ctx, topResult, topResolution, noneSelected);
 
-	    ctx.setPixelToCmRatioTop(topResolution.pixelToCmRatio());
-	    ctx.setPixelToCmRatioSide(sideResolution.pixelToCmRatio());
-
-	    if (topResult.found())  ctx.setReferenceBoundsTopPx(topResult.bboxPx());
-	    if (sideResult.found()) ctx.setReferenceBoundsSidePx(sideResult.bboxPx());
-
-	    boolean bothFellBackToPlate =
-	        topResolution.source()  == CalibrationFallbackResolver.FallbackSource.PLATE_SIZE_ESTIMATE &&
-	        sideResolution.source() == CalibrationFallbackResolver.FallbackSource.PLATE_SIZE_ESTIMATE;
-	    ctx.setUseStandardPlateFallback(bothFellBackToPlate);
+	    ctx.setUseStandardPlateFallback(false);
 
 	    float confidence = (topResolution.confidence() + sideResolution.confidence()) / 2f;
 	    ctx.recordConfidence("CALIBRATION", confidence);
 
-	    log.info("[Calibration] top={}({}) side={}({}) confidence={} plateFallback={}",
-	        String.format("%.4f", topResolution.pixelToCmRatio()), topResolution.source(),
+	    String topRatioStr = ctx.getPixelToCmRatioTop() == null
+	        ? "none" : String.format("%.4f", ctx.getPixelToCmRatioTop());
+	    log.info("[Calibration] top={}({}) side={}({}) confidence={}",
+	        topRatioStr, topResolution.source(),
 	        String.format("%.4f", sideResolution.pixelToCmRatio()), sideResolution.source(),
-	        String.format("%.2f", confidence), bothFellBackToPlate);
+	        String.format("%.2f", confidence));
 	}
 
-private void applyFallbackWarnings(PipelineContext ctx,
-	                                   CalibrationFallbackResolver.FallbackResolution top,
-	                                   CalibrationFallbackResolver.FallbackResolution side) {
-	    if (top.source() == CalibrationFallbackResolver.FallbackSource.ALTERNATIVE_OBJECT_DETECTED) {
-	        warningCollector.alternativeObjectUsed(ctx, "top", top.selectedType(), top.detectedObjectType());
-	    } else if (top.source() == CalibrationFallbackResolver.FallbackSource.PLATE_SIZE_ESTIMATE) {
-	        warningCollector.usingPlateSizeEstimate(ctx, "top", top.selectedType());
-	    }
+	private void applyTopCalibration(PipelineContext ctx, DetectionResult topResult,
+			CalibrationFallbackResolver.FallbackResolution topResolution, boolean noneSelected) {
 
-	    if (side.source() == CalibrationFallbackResolver.FallbackSource.ALTERNATIVE_OBJECT_DETECTED) {
-	        warningCollector.alternativeObjectUsed(ctx, "side", side.selectedType(), side.detectedObjectType());
-	    } else if (side.source() == CalibrationFallbackResolver.FallbackSource.PLATE_SIZE_ESTIMATE) {
-	        warningCollector.usingPlateSizeEstimate(ctx, "side", side.selectedType());
-	    }
+		switch (topResolution.source()) {
+			case OBJECT_FOUND -> {
+				ctx.setPixelToCmRatioTop(topResolution.pixelToCmRatio());
+				if (topResult.found()) ctx.setReferenceBoundsTopPx(topResult.bboxPx());
+			}
+			case ALTERNATIVE_OBJECT_DETECTED -> {
+				ctx.setPixelToCmRatioTop(topResolution.pixelToCmRatio());
+				warningCollector.alternativeObjectUsed(ctx, "top",
+						topResolution.selectedType(), topResolution.detectedObjectType());
+			}
+			case PLATE_SIZE_ESTIMATE -> {
+				ctx.setPixelToCmRatioTop(null);
+				if (noneSelected) warningCollector.noReferenceObjectEstimate(ctx);
+				else warningCollector.referenceObjectNotMeasured(ctx);
+			}
+		}
+	}
+
+	private void applySideCalibration(PipelineContext ctx, DetectionResult sideResult,
+			CalibrationFallbackResolver.FallbackResolution sideResolution) {
+
+		ctx.setPixelToCmRatioSide(sideResolution.pixelToCmRatio());
+		if (sideResult.found()) ctx.setReferenceBoundsSidePx(sideResult.bboxPx());
+
+		if (sideResolution.source() == CalibrationFallbackResolver.FallbackSource.ALTERNATIVE_OBJECT_DETECTED) {
+			warningCollector.alternativeObjectUsed(ctx, "side",
+					sideResolution.selectedType(), sideResolution.detectedObjectType());
+		} else if (sideResolution.source() == CalibrationFallbackResolver.FallbackSource.PLATE_SIZE_ESTIMATE) {
+			warningCollector.usingPlateSizeEstimate(ctx, "side", sideResolution.selectedType());
+		}
 	}
 
 	private DetectionResult detectTopImage(String base64Image, ReferenceObjectRegistry.Dimensions dims,
@@ -375,12 +389,25 @@ private void applyFallbackWarnings(PipelineContext ctx,
 				cvDetector.detectInRegion(base64Image, mode, dims.lengthCm(), dims.widthCm(),
 						geminiResult.bboxPx());
 
-		if (!regionResult.isFound() || regionResult.getConfidence() < cvMinConfidence) {
-			log.info("[Calibration][{}] Region CV failed, keeping Gemini result", viewTag);
-			return geminiResult;
+		if (regionResult.isFound() && regionResult.getConfidence() >= cvMinConfidence) {
+			DetectionResult crossChecked = crossCheck(ctx, regionResult, geminiResult, refType, viewTag);
+			if (crossChecked != null) {
+				return crossChecked;
+			}
+		} else {
+			log.info("[Calibration][{}] Region CV failed", viewTag);
 		}
 
-		return crossCheck(ctx, regionResult, geminiResult, refType, viewTag);
+		return handleUnmeasuredReference(isTop, geminiResult, viewTag);
+	}
+
+	private DetectionResult handleUnmeasuredReference(boolean isTop, DetectionResult geminiResult, String viewTag) {
+		if (isTop) {
+			log.info("[Calibration][TOP] No trustworthy reference measurement — discarding Gemini bbox ratio, switching to no-reference estimate");
+			return DetectionResult.notFound("Reference object present but not reliably measured");
+		}
+		log.info("[Calibration][{}] Keeping Gemini result", viewTag);
+		return geminiResult;
 	}
 
 	private DetectionResult crossCheck(PipelineContext ctx,
@@ -391,22 +418,21 @@ private void applyFallbackWarnings(PipelineContext ctx,
 		float geminiRatio = geminiResult.pixelToCmRatio();
 		float gap = Math.abs(cvRatio - geminiRatio) / Math.max(cvRatio, geminiRatio);
 
-		float confidence;
-		if (gap <= crosscheckMaxGap) {
-			confidence = Math.max(cvResult.getConfidence(), geminiResult.confidence());
-			log.info("[Calibration][{}] Cross-check agreed (gap={}%), cv={} gemini={}",
-					viewTag, String.format("%.0f", gap * 100),
-					String.format("%.5f", cvRatio), String.format("%.5f", geminiRatio));
-		} else {
-			confidence = Math.min(cvResult.getConfidence(), geminiResult.confidence());
-			log.warn("[Calibration][{}] Cross-check disagreement (gap={}%), cv={} gemini={}",
+		if (gap > crosscheckMaxGap) {
+			log.warn("[Calibration][{}] Cross-check disagreement (gap={}%), cv={} gemini={} — rejecting CV",
 					viewTag, String.format("%.0f", gap * 100),
 					String.format("%.5f", cvRatio), String.format("%.5f", geminiRatio));
 			warningCollector.add(ctx, PipelineWarning.medium(
 					"CALIBRATION", "CALIBRATION_CROSSCHECK_GAP",
 					String.format("Calibration sources disagree by %.0f%% in %s image",
 							gap * 100, viewTag.toLowerCase())));
+			return null;
 		}
+
+		float confidence = Math.max(cvResult.getConfidence(), geminiResult.confidence());
+		log.info("[Calibration][{}] Cross-check agreed (gap={}%), cv={} gemini={}",
+				viewTag, String.format("%.0f", gap * 100),
+				String.format("%.5f", cvRatio), String.format("%.5f", geminiRatio));
 
 		return new DetectionResult(true, toBboxArray(cvResult), cvRatio, confidence,
 				null, refType, null);

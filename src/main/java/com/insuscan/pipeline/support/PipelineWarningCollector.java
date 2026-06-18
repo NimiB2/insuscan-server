@@ -79,6 +79,16 @@ public class PipelineWarningCollector {
             message
         ));
     }
+	
+	public void noReferenceObjectEstimate(PipelineContext ctx) {
+		add(ctx, PipelineWarning.medium(STAGE_CALIBRATION, "NO_REFERENCE_OBJECT",
+				"No reference object was selected. Plate size was estimated visually — please review the result."));
+	}
+
+	public void referenceObjectNotMeasured(PipelineContext ctx) {
+		add(ctx, PipelineWarning.high(STAGE_CALIBRATION, "REFERENCE_OBJECT_NOT_MEASURED",
+				"The selected reference object was not reliably detected in the photo. Plate size was estimated visually — consider retaking the photo with the reference object clearly visible."));
+	}
 
 	// ── Plate geometry warnings ───────────────────────────────────────────
 
