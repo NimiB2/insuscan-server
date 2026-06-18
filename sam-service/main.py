@@ -35,6 +35,7 @@ class SegmentRequest(BaseModel):
 
 class SegmentResult(BaseModel):
     mask_pixel_counts: List[int]
+    mask_scores: List[float]
     image_pixel_count: int
 
 
@@ -66,8 +67,8 @@ def run_sam(image_np, bbox, W, H):
     x2 = ((bbox.x_pct + bbox.w_pct) / 100.0) * W
     y2 = ((bbox.y_pct + bbox.h_pct) / 100.0) * H
     box = np.array([x1, y1, x2, y2])
-    masks, _, _ = predictor.predict(box=box, multimask_output=False)
-    return masks[0]
+    masks, scores, _ = predictor.predict(box=box, multimask_output=False)
+    return masks[0], float(scores[0])
 
 
 @app.post("/segment", response_model=SegmentResult)
@@ -79,15 +80,39 @@ def segment(request: SegmentRequest):
 
     predictor.set_image(image_np)
 
-    mask_pixel_counts = []
+    masks = []
+    scores = []
     for bbox in request.bboxes:
-        mask = run_sam(image_np, bbox, W, H)
-        mask_pixel_counts.append(int(mask.sum()))
+        mask, score = run_sam(image_np, bbox, W, H)
+        masks.append(mask)
+        scores.append(score)
+
+    counts = resolve_exclusive_counts(masks, scores, H, W)
 
     return SegmentResult(
-        mask_pixel_counts=mask_pixel_counts,
+        mask_pixel_counts=counts,
+        mask_scores=[round(s, 4) for s in scores],
         image_pixel_count=image_pixel_count
     )
+
+
+def resolve_exclusive_counts(masks, scores, H, W):
+    if not masks:
+        return []
+
+    owner = np.full((H, W), -1, dtype=np.int32)
+    best_score = np.full((H, W), -1.0, dtype=np.float32)
+
+    for idx, mask in enumerate(masks):
+        m = mask.astype(bool)
+        takeover = m & (scores[idx] > best_score)
+        owner[takeover] = idx
+        best_score[takeover] = scores[idx]
+
+    counts = []
+    for idx in range(len(masks)):
+        counts.append(int(np.count_nonzero(owner == idx)))
+    return counts
 
 
 @app.post("/segment_side", response_model=SideSegmentResult)
@@ -100,7 +125,7 @@ def segment_side(request: SideSegmentRequest):
 
     heights = []
     for bbox in request.bboxes:
-        mask = run_sam(image_np, bbox, W, H)
+        mask, _ = run_sam(image_np, bbox, W, H)
 
         rows = np.any(mask, axis=1)
         if rows.any():

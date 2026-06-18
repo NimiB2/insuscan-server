@@ -133,12 +133,20 @@ public class SamSegmentationService {
                 return;
             }
 
+            JsonNode scores = root.path("mask_scores");
             for (int i = 0; i < items.size(); i++) {
                 int maskPixels = counts.get(i).asInt(0);
                 items.get(i).setMaskPixelCount(maskPixels);
                 items.get(i).setImagePixelCount(imagePixelCount);
-                log.info("[SAM] {} -> maskPixels={} / totalPixels={}",
-                    items.get(i).getName(), maskPixels, imagePixelCount);
+
+                if (scores.isArray() && i < scores.size()) {
+                    items.get(i).setSamMaskScore((float) scores.get(i).asDouble(0));
+                }
+
+                log.info("[SAM] {} -> maskPixels={} / totalPixels={} score={}",
+                    items.get(i).getName(), maskPixels, imagePixelCount,
+                    items.get(i).getSamMaskScore() != null
+                        ? String.format("%.3f", items.get(i).getSamMaskScore()) : "N/A");
             }
 
             ctx.recordConfidence("SAM_SEGMENTATION", 0.9f);

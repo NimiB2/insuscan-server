@@ -199,12 +199,12 @@ public class ApiLogger {
 
     // ... (rest of the file as needed, but minimal changes to avoid breaking anything)
     
-     public void openaiStart(String model, int imageSizeBytes) {
+    public void openaiStart(String model, int imageBase64Chars) {
         logBoth("--------------------------------------------------------------------------------", (Object[])null);
         logBoth("[GEMINI] REQUEST", (Object[])null);
         logBoth("--------------------------------------------------------------------------------", (Object[])null);
         logBoth("[GEMINI] Model       : {}", model);
-        logBoth("[GEMINI] Image Size  : {} KB", imageSizeBytes / 1024);
+        logBoth("[GEMINI] Image Size  : {} KB", (int) (imageBase64Chars * 0.75 / 1024));
         logBoth("[GEMINI] Status      : Sending to Gemini...", (Object[])null);
     }
 

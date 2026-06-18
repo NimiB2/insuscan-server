@@ -20,6 +20,9 @@ import org.springframework.stereotype.Service;
 public class FoodAreaService {
 
 	private static final Logger log = LoggerFactory.getLogger(FoodAreaService.class);
+	private static final float SAM_AREA_CONFIDENCE = 0.7f;
+	private static final float BBOX_AREA_CONFIDENCE = 0.5f;
+	private static final float PLATE_FALLBACK_AREA_CONFIDENCE = 0.3f;
 
 	private final PipelineWarningCollector warningCollector;
 
@@ -86,7 +89,7 @@ public class FoodAreaService {
 
 			item.setAreaCm2(estimatedArea);
 			item.setCoveragePercent((estimatedArea / plateAreaCm2) * 100f);
-			item.setAreaConfidence(0.7f);
+			item.setAreaConfidence(resolveAreaConfidence(item));
 
 			totalAreaCm2 += estimatedArea;
 			log.info("[FoodArea] {} -> area={} cm², coverage={}%", item.getName(), String.format("%.1f", estimatedArea),
@@ -98,6 +101,23 @@ public class FoodAreaService {
 		}
 
 		ctx.recordConfidence("FOOD_AREA", 0.7f);
+	}
+	
+	private float resolveAreaConfidence(PipelineFoodItem item) {
+		boolean usedSamMask = item.getMaskPixelCount() != null
+				&& item.getImagePixelCount() != null
+				&& item.getImagePixelCount() > 0;
+
+		if (usedSamMask && item.getSamMaskScore() != null) {
+			return item.getSamMaskScore();
+		}
+		if (usedSamMask) {
+			return SAM_AREA_CONFIDENCE;
+		}
+		if (item.hasBoundingBox()) {
+			return BBOX_AREA_CONFIDENCE;
+		}
+		return PLATE_FALLBACK_AREA_CONFIDENCE;
 	}
 
 }

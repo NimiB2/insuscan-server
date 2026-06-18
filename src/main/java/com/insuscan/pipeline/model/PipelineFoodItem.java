@@ -62,7 +62,8 @@ public class PipelineFoodItem {
 
 	private Integer maskPixelCount;
 	private Integer imagePixelCount;
-	
+	private Float samMaskScore;
+
 	private float[] boundingBoxSidePct;
 	private Integer maskSidePixelCount;
 	private Integer imageSidePixelCount;
@@ -392,12 +393,40 @@ public class PipelineFoodItem {
 	public void setImagePixelCount(Integer v) {
 		this.imagePixelCount = v;
 	}
-	
-	public float[] getBoundingBoxSidePct() { return boundingBoxSidePct; }
-	public void setBoundingBoxSidePct(float[] v) { this.boundingBoxSidePct = v; }
-	public boolean hasSideBoundingBox() { return boundingBoxSidePct != null && boundingBoxSidePct.length == 4; }
-	public Integer getMaskSidePixelCount() { return maskSidePixelCount; }
-	public void setMaskSidePixelCount(Integer v) { this.maskSidePixelCount = v; }
-	public Integer getImageSidePixelCount() { return imageSidePixelCount; }
-	public void setImageSidePixelCount(Integer v) { this.imageSidePixelCount = v; }
+
+	public Float getSamMaskScore() {
+		return samMaskScore;
+	}
+
+	public void setSamMaskScore(Float v) {
+		this.samMaskScore = v;
+	}
+
+	public float[] getBoundingBoxSidePct() {
+		return boundingBoxSidePct;
+	}
+
+	public void setBoundingBoxSidePct(float[] v) {
+		this.boundingBoxSidePct = v;
+	}
+
+	public boolean hasSideBoundingBox() {
+		return boundingBoxSidePct != null && boundingBoxSidePct.length == 4;
+	}
+
+	public Integer getMaskSidePixelCount() {
+		return maskSidePixelCount;
+	}
+
+	public void setMaskSidePixelCount(Integer v) {
+		this.maskSidePixelCount = v;
+	}
+
+	public Integer getImageSidePixelCount() {
+		return imageSidePixelCount;
+	}
+
+	public void setImageSidePixelCount(Integer v) {
+		this.imageSidePixelCount = v;
+	}
 }

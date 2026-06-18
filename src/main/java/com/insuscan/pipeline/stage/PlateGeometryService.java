@@ -38,6 +38,9 @@ public class PlateGeometryService {
     @Value("${plate.geometry.force-diameter.cm:22.0}")
     private float forceDiameterCm;
 
+    @Value("${plate.geometry.no-reference.assumed-plate-pixel-fraction:0.6}")
+    private float assumedPlatePixelFraction;
+    
     private final GeminiApiClient geminiApiClient;
     private final ReferenceObjectRegistry referenceObjectRegistry;
     private final PipelineWarningCollector warningCollector;
@@ -91,6 +94,10 @@ public class PlateGeometryService {
         ctx.setPlateGeometry(geometry);
         ctx.recordConfidence("PLATE_GEOMETRY", confidence);
 
+        if (ctx.getPixelToCmRatioTop() == null || ctx.getPixelToCmRatioTop() <= 0) {
+            deriveTopRatioFromDiameter(ctx, geometry.getInnerDiameterCm(), diameterResult.diameterPx);
+        }
+
         log.info("[PlateGeometry] type={} diameter={}cm depth={}cm fill={}% confidence={}",
                 geometry.getContainerType(),
                 String.format("%.1f", geometry.getInnerDiameterCm()),
@@ -99,7 +106,30 @@ public class PlateGeometryService {
                 String.format("%.2f", confidence));
     }
     
-    
+    private void deriveTopRatioFromDiameter(PipelineContext ctx, float diameterCm, float diameterPx) {
+        float effectivePx = diameterPx;
+
+        if (effectivePx <= 0) {
+            Integer imageHeightPx = ctx.getImageTopHeightPx();
+            if (imageHeightPx == null || imageHeightPx <= 0) {
+                log.warn("[PlateGeometry] Cannot derive top ratio — no plate pixels and no image height");
+                return;
+            }
+            effectivePx = imageHeightPx * assumedPlatePixelFraction;
+            log.warn("[PlateGeometry] No plate pixels from Gemini — assuming plate spans {}% of image height -> {}px",
+                    String.format("%.0f", assumedPlatePixelFraction * 100), (int) effectivePx);
+        }
+
+        if (diameterCm <= 0 || effectivePx <= 0) {
+            log.warn("[PlateGeometry] Cannot derive top ratio — invalid diameter or pixels");
+            return;
+        }
+
+        float ratio = diameterCm / effectivePx;
+        ctx.setPixelToCmRatioTop(ratio);
+        log.info("[PlateGeometry] Derived top ratio from no-reference diameter: {}cm / {}px = {}",
+                String.format("%.1f", diameterCm), (int) effectivePx, String.format("%.5f", ratio));
+    }
 
     private void applyDebugOverride(PipelineContext ctx) {
         PipelineContext.PlateGeometry override = new PipelineContext.PlateGeometry();
@@ -212,11 +242,15 @@ public class PlateGeometryService {
                 "- Standard (%.0fcm): regular dinner plate\n" +
                 "- Large (%.0fcm): large dinner plate / serving plate\n\n" +
                 "Estimate the diameter as accurately as possible, and rate your confidence honestly.\n" +
-                "Higher confidence is appropriate only when visual cues strongly suggest a specific size.\n\n" +
+                "Also identify the plate's vertical pixel extent so the system can derive scale:\n" +
+                "- top_y_px: pixel Y coordinate of the TOP edge of the plate rim.\n" +
+                "- bottom_y_px: pixel Y coordinate of the BOTTOM edge of the plate rim.\n\n" +
                 "Return ONLY valid JSON with no markdown or extra text:\n" +
                 "{\n" +
                 "  \"container_type\": \"FLAT_PLATE\" or \"REGULAR_BOWL\" or \"DEEP_BOWL\",\n" +
                 "  \"inner_diameter_cm\": <float>,\n" +
+                "  \"top_y_px\": <integer>,\n" +
+                "  \"bottom_y_px\": <integer>,\n" +
                 "  \"fill_percent\": <integer 0-100>,\n" +
                 "  \"diameter_confidence\": <float 0.0-1.0>,\n" +
                 "  \"reasoning_notes\": \"<max 20 words>\"\n" +
@@ -290,6 +324,10 @@ public class PlateGeometryService {
             r.fillPercent     = (float) root.path("fill_percent").asDouble(DEFAULT_FILL_PCT);
             r.confidence      = (float) root.path("diameter_confidence").asDouble(0.5);
             r.reasoningNotes  = root.path("reasoning_notes").asText("");
+
+            float topY    = (float) root.path("top_y_px").asDouble(0);
+            float bottomY = (float) root.path("bottom_y_px").asDouble(0);
+            r.diameterPx  = Math.abs(bottomY - topY);
 
             float originalDiameter = r.innerDiameterCm;
             float threshold = standardPlateConfig.getConfidenceThreshold();
@@ -372,6 +410,7 @@ public class PlateGeometryService {
     private static class DiameterResult {
         String containerType  = "FLAT_PLATE";
         float innerDiameterCm = DEFAULT_DIAMETER_CM;
+        float diameterPx      = 0f;
         float fillPercent     = DEFAULT_FILL_PCT;
         float confidence      = 0.0f;
         String reasoningNotes = "Default values — diameter estimation failed";
@@ -386,4 +425,6 @@ public class PlateGeometryService {
 
         static DepthResult defaultResult() { return new DepthResult(); }
     }
+    
+    
 }

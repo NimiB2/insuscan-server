@@ -89,7 +89,9 @@ public class GeminiApiClient {
 
         String uri = String.format("/models/%s:generateContent?key=%s", model, geminiApiKey);
 
-        apiLogger.openaiStart(model, prompt.length());
+        int imgChars = (base64Image1 != null ? base64Image1.length() : 0)
+                + (base64Image2 != null ? base64Image2.length() : 0);
+        apiLogger.openaiStart(model, imgChars);
         long startTime = System.currentTimeMillis();
 
         try {
@@ -125,7 +127,7 @@ public class GeminiApiClient {
 
         String uri = String.format("/models/%s:generateContent?key=%s", model, geminiApiKey);
 
-        apiLogger.openaiStart(model, prompt.length());
+        apiLogger.openaiStart(model, base64Image != null ? base64Image.length() : 0);
         long startTime = System.currentTimeMillis();
 
         try {
@@ -160,7 +162,6 @@ public class GeminiApiClient {
 
         parts.add(Map.of("text", prompt));
 
-        // First image (top-down view)
         if (base64Image1 != null && !base64Image1.isBlank()) {
             parts.add(Map.of(
                     "inlineData", Map.of(
@@ -168,7 +169,6 @@ public class GeminiApiClient {
                             "data", base64Image1)));
         }
 
-        // Second image (side view)
         if (base64Image2 != null && !base64Image2.isBlank()) {
             parts.add(Map.of(
                     "inlineData", Map.of(
@@ -261,7 +261,7 @@ public class GeminiApiClient {
             return null;
         }
     }
-    
+
     private Map<String, Object> buildGenerationConfig(double temperature) {
         Map<String, Object> config = new HashMap<>();
         config.put("temperature", temperature);
