@@ -181,8 +181,8 @@ public class PlateGeometryService {
             }
 
             return hasReferenceRatio
-                    ? parseDiameterResponseWithReference(response, ctx.getPixelToCmRatioTop())
-                    : parseDiameterResponseNoReference(response);
+            ? parseDiameterResponseWithReference(response, ctx.getPixelToCmRatioTop(), ctx)
+            : parseDiameterResponseNoReference(response, ctx);
 
         } catch (Exception e) {
             log.warn("[PlateGeometry] Diameter call failed: {}", e.getMessage());
@@ -217,6 +217,7 @@ public class PlateGeometryService {
                 "TASK: Identify the vertical extent of the plate in the image.\n" +
                 "- top_y_px: pixel Y coordinate of the TOP edge of the plate (highest point of the plate rim).\n" +
                 "- bottom_y_px: pixel Y coordinate of the BOTTOM edge of the plate (lowest point of the plate rim).\n" +
+                "- plate_center_x_px: pixel X coordinate of the horizontal center of the plate.\n" +
                 "Use the VERTICAL axis (Y) because the reference object lies horizontally next to the plate " +
                 "and would interfere with horizontal (X) measurements.\n\n" +
                 "Also identify the container type and fill percentage.\n\n" +
@@ -225,6 +226,7 @@ public class PlateGeometryService {
                 "  \"container_type\": \"FLAT_PLATE\" or \"REGULAR_BOWL\" or \"DEEP_BOWL\",\n" +
                 "  \"top_y_px\": <integer>,\n" +
                 "  \"bottom_y_px\": <integer>,\n" +
+                "  \"plate_center_x_px\": <integer>,\n" +
                 "  \"fill_percent\": <integer 0-100>,\n" +
                 "  \"diameter_confidence\": <float 0.0-1.0>,\n" +
                 "  \"reasoning_notes\": \"<max 20 words>\"\n" +
@@ -242,15 +244,17 @@ public class PlateGeometryService {
                 "- Standard (%.0fcm): regular dinner plate\n" +
                 "- Large (%.0fcm): large dinner plate / serving plate\n\n" +
                 "Estimate the diameter as accurately as possible, and rate your confidence honestly.\n" +
-                "Also identify the plate's vertical pixel extent so the system can derive scale:\n" +
+                "Also identify the plate's pixel geometry so the system can derive scale:\n" +
                 "- top_y_px: pixel Y coordinate of the TOP edge of the plate rim.\n" +
-                "- bottom_y_px: pixel Y coordinate of the BOTTOM edge of the plate rim.\n\n" +
+                "- bottom_y_px: pixel Y coordinate of the BOTTOM edge of the plate rim.\n" +
+                "- plate_center_x_px: pixel X coordinate of the horizontal center of the plate.\n\n" +
                 "Return ONLY valid JSON with no markdown or extra text:\n" +
                 "{\n" +
                 "  \"container_type\": \"FLAT_PLATE\" or \"REGULAR_BOWL\" or \"DEEP_BOWL\",\n" +
                 "  \"inner_diameter_cm\": <float>,\n" +
                 "  \"top_y_px\": <integer>,\n" +
                 "  \"bottom_y_px\": <integer>,\n" +
+                "  \"plate_center_x_px\": <integer>,\n" +
                 "  \"fill_percent\": <integer 0-100>,\n" +
                 "  \"diameter_confidence\": <float 0.0-1.0>,\n" +
                 "  \"reasoning_notes\": \"<max 20 words>\"\n" +
@@ -284,7 +288,7 @@ public class PlateGeometryService {
                 sideRatio, description, dims.lengthCm(), dims.widthCm());
     }
 
-    private DiameterResult parseDiameterResponseWithReference(String response, float pixelToCmRatio) {
+    private DiameterResult parseDiameterResponseWithReference(String response, float pixelToCmRatio, PipelineContext ctx) {
         try {
             JsonNode root = objectMapper.readTree(sanitizeJson(response));
             DiameterResult r = new DiameterResult();
@@ -295,6 +299,7 @@ public class PlateGeometryService {
 
             float topY    = (float) root.path("top_y_px").asDouble(0);
             float bottomY = (float) root.path("bottom_y_px").asDouble(0);
+            float centerX = (float) root.path("plate_center_x_px").asDouble(0);
             float diameterPx = Math.abs(bottomY - topY);
 
             if (diameterPx <= 0) {
@@ -306,6 +311,16 @@ public class PlateGeometryService {
                         (int) topY, (int) bottomY, (int) diameterPx,
                         String.format("%.4f", pixelToCmRatio),
                         String.format("%.2f", r.innerDiameterCm));
+
+                float cy = (topY + bottomY) / 2f;
+                float radius = diameterPx / 2f;
+                if (centerX > 0) {
+                    ctx.setPlateCircleTopPx(new float[]{centerX, cy, radius});
+                    log.info("[PlateGeometry] Plate circle: cx={}px, cy={}px, r={}px",
+                            (int) centerX, (int) cy, (int) radius);
+                } else {
+                    log.warn("[PlateGeometry] No plate_center_x_px from Gemini — plate circle not set");
+                }
             }
 
             return r;
@@ -315,7 +330,7 @@ public class PlateGeometryService {
         }
     }
 
-    private DiameterResult parseDiameterResponseNoReference(String response) {
+    private DiameterResult parseDiameterResponseNoReference(String response, PipelineContext ctx) {
         try {
             JsonNode root = objectMapper.readTree(sanitizeJson(response));
             DiameterResult r = new DiameterResult();
@@ -327,7 +342,19 @@ public class PlateGeometryService {
 
             float topY    = (float) root.path("top_y_px").asDouble(0);
             float bottomY = (float) root.path("bottom_y_px").asDouble(0);
+            float centerX = (float) root.path("plate_center_x_px").asDouble(0);
             r.diameterPx  = Math.abs(bottomY - topY);
+
+            if (r.diameterPx > 0 && centerX > 0) {
+                float cy = (topY + bottomY) / 2f;
+                float radius = r.diameterPx / 2f;
+                ctx.setPlateCircleTopPx(new float[]{centerX, cy, radius});
+                log.info("[PlateGeometry] Plate circle (no-ref): cx={}px, cy={}px, r={}px",
+                        (int) centerX, (int) cy, (int) radius);
+            } else {
+                log.warn("[PlateGeometry] No-ref: incomplete plate geometry (diameterPx={}, centerX={}) — plate circle not set",
+                        (int) r.diameterPx, (int) centerX);
+            }
 
             float originalDiameter = r.innerDiameterCm;
             float threshold = standardPlateConfig.getConfidenceThreshold();

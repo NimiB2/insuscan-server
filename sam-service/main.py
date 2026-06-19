@@ -4,7 +4,7 @@ import io
 import numpy as np
 from fastapi import FastAPI
 from pydantic import BaseModel
-from typing import List
+from typing import List, Optional
 from PIL import Image
 import torch
 from mobile_sam import sam_model_registry, SamPredictor
@@ -28,9 +28,16 @@ class BoundingBox(BaseModel):
     h_pct: float
 
 
+class PlateCircle(BaseModel):
+    cx: float
+    cy: float
+    r: float
+
+
 class SegmentRequest(BaseModel):
     image_base64: str
     bboxes: List[BoundingBox]
+    plate_circle: Optional[PlateCircle] = None
 
 
 class SegmentResult(BaseModel):
@@ -71,29 +78,12 @@ def run_sam(image_np, bbox, W, H):
     return masks[0], float(scores[0])
 
 
-@app.post("/segment", response_model=SegmentResult)
-def segment(request: SegmentRequest):
-    image, image_np = decode_image(request.image_base64)
-    W = image.width
-    H = image.height
-    image_pixel_count = W * H
-
-    predictor.set_image(image_np)
-
-    masks = []
-    scores = []
-    for bbox in request.bboxes:
-        mask, score = run_sam(image_np, bbox, W, H)
-        masks.append(mask)
-        scores.append(score)
-
-    counts = resolve_exclusive_counts(masks, scores, H, W)
-
-    return SegmentResult(
-        mask_pixel_counts=counts,
-        mask_scores=[round(s, 4) for s in scores],
-        image_pixel_count=image_pixel_count
-    )
+def build_plate_mask(plate_circle, H, W):
+    if plate_circle is None or plate_circle.r <= 0:
+        return None
+    yy, xx = np.ogrid[:H, :W]
+    dist_sq = (xx - plate_circle.cx) ** 2 + (yy - plate_circle.cy) ** 2
+    return dist_sq <= (plate_circle.r ** 2)
 
 
 def resolve_exclusive_counts(masks, scores, H, W):
@@ -113,6 +103,35 @@ def resolve_exclusive_counts(masks, scores, H, W):
     for idx in range(len(masks)):
         counts.append(int(np.count_nonzero(owner == idx)))
     return counts
+
+
+@app.post("/segment", response_model=SegmentResult)
+def segment(request: SegmentRequest):
+    image, image_np = decode_image(request.image_base64)
+    W = image.width
+    H = image.height
+    image_pixel_count = W * H
+
+    predictor.set_image(image_np)
+
+    plate_mask = build_plate_mask(request.plate_circle, H, W)
+
+    masks = []
+    scores = []
+    for bbox in request.bboxes:
+        mask, score = run_sam(image_np, bbox, W, H)
+        if plate_mask is not None:
+            mask = mask & plate_mask
+        masks.append(mask)
+        scores.append(score)
+
+    counts = resolve_exclusive_counts(masks, scores, H, W)
+
+    return SegmentResult(
+        mask_pixel_counts=counts,
+        mask_scores=[round(s, 4) for s in scores],
+        image_pixel_count=image_pixel_count
+    )
 
 
 @app.post("/segment_side", response_model=SideSegmentResult)

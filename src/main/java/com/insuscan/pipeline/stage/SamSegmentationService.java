@@ -226,6 +226,18 @@ public class SamSegmentationService {
             bboxes.add(bbox);
         }
         root.set("bboxes", bboxes);
+
+        float[] circle = ctx.getPlateCircleTopPx();
+        if (circle != null && circle.length == 3 && circle[2] > 0) {
+            ObjectNode plate = objectMapper.createObjectNode();
+            plate.put("cx", circle[0]);
+            plate.put("cy", circle[1]);
+            plate.put("r", circle[2]);
+            root.set("plate_circle", plate);
+            log.info("[SAM] Sending plate circle: cx={} cy={} r={}",
+                (int) circle[0], (int) circle[1], (int) circle[2]);
+        }
+
         return objectMapper.writeValueAsString(root);
     }
 

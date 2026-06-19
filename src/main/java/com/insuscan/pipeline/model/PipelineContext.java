@@ -62,6 +62,9 @@ public class PipelineContext {
     /** Bounding box of the plate in the top image [x, y, w, h] as pixel coords, if found. */
     private float[] plateBoundsTopPx;
     
+    /** Plate circle in the top image as pixel coords [cx, cy, r], if measured. */
+    private float[] plateCircleTopPx;
+    
     /** True when calibration fell back to standard plate estimate in BOTH images.
      *  Signals later stages (notably PlateGeometryService) to override Gemini's
      *  plate dimensions with the standard plate config. */
@@ -209,6 +212,8 @@ public class PipelineContext {
     public void setReferenceBoundsSidePx(float[] v) { this.referenceBoundsSidePx = v; }
     public float[] getPlateBoundsTopPx() { return plateBoundsTopPx; }
     public void setPlateBoundsTopPx(float[] v) { this.plateBoundsTopPx = v; }
+    public float[] getPlateCircleTopPx() { return plateCircleTopPx; }
+    public void setPlateCircleTopPx(float[] v) { this.plateCircleTopPx = v; }
 
     public PlateGeometry getPlateGeometry() { return plateGeometry; }
     public void setPlateGeometry(PlateGeometry v) { this.plateGeometry = v; }
