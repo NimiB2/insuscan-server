@@ -49,6 +49,8 @@ public class PipelineFoodItem {
 	private List<String> searchTerms = new ArrayList<>(); // ordered specific→generic
 	private float detectionConfidence;
 	private boolean requiresUserValidation;
+	private Float geminiCoveragePercent;
+
 
 	/**
 	 * Effective density factor (0.3–1.0) estimated by the vision model. Represents
@@ -428,5 +430,13 @@ public class PipelineFoodItem {
 
 	public void setImageSidePixelCount(Integer v) {
 		this.imageSidePixelCount = v;
+	}
+	
+	public Float getGeminiCoveragePercent() {
+		return geminiCoveragePercent;
+	}
+
+	public void setGeminiCoveragePercent(Float v) {
+		this.geminiCoveragePercent = v;
 	}
 }

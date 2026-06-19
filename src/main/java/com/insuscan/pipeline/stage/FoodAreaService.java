@@ -23,6 +23,9 @@ public class FoodAreaService {
 	private static final float SAM_AREA_CONFIDENCE = 0.7f;
 	private static final float BBOX_AREA_CONFIDENCE = 0.5f;
 	private static final float PLATE_FALLBACK_AREA_CONFIDENCE = 0.3f;
+	private static final float SAM_SCORE_CONFIDENCE_CAP = 0.9f;
+	private static final float COVERAGE_DISAGREEMENT_RATIO = 1.5f;
+
 
 	private final PipelineWarningCollector warningCollector;
 
@@ -64,7 +67,7 @@ public class FoodAreaService {
 			
 			log.info("[FoodArea] {} gemini_coverage={}%", 
 				    item.getName(), 
-				    item.getCoveragePercent() != null ? String.format("%.0f", item.getCoveragePercent()) : "N/A");
+				    item.getGeminiCoveragePercent() != null ? String.format("%.0f", item.getGeminiCoveragePercent()) : "N/A");
 
 			if (item.getMaskPixelCount() != null && item.getImagePixelCount() != null && item.getImagePixelCount() > 0) {
 			    float imageAreaCm2 = (imageWidthPx * ratio) * (imageHeightPx * ratio);
@@ -91,16 +94,41 @@ public class FoodAreaService {
 			item.setCoveragePercent((estimatedArea / plateAreaCm2) * 100f);
 			item.setAreaConfidence(resolveAreaConfidence(item));
 
+			crossCheckCoverage(ctx, item);
+
+			
 			totalAreaCm2 += estimatedArea;
 			log.info("[FoodArea] {} -> area={} cm², coverage={}%", item.getName(), String.format("%.1f", estimatedArea),
 					String.format("%.1f", item.getCoveragePercent()));
 		}
 
-		if (totalAreaCm2 > plateAreaCm2) {
+		if (totalAreaCm2 > plateAreaCm2 && totalAreaCm2 > 0) {
 			warningCollector.foodAreaExceedsPlate(ctx, totalAreaCm2, plateAreaCm2);
+			normalizeAreasToPlate(ctx, totalAreaCm2, plateAreaCm2);
 		}
 
 		ctx.recordConfidence("FOOD_AREA", 0.7f);
+	}
+
+	private void normalizeAreasToPlate(PipelineContext ctx, float totalAreaCm2, float plateAreaCm2) {
+		float scale = plateAreaCm2 / totalAreaCm2;
+		log.warn("[FoodArea] Total area {}cm² exceeds plate {}cm² — normalizing all areas by factor {}",
+				String.format("%.1f", totalAreaCm2),
+				String.format("%.1f", plateAreaCm2),
+				String.format("%.3f", scale));
+
+		for (PipelineFoodItem item : ctx.getFoodItems()) {
+			if (item.getAreaCm2() == null) {
+				continue;
+			}
+			float scaled = item.getAreaCm2() * scale;
+			item.setAreaCm2(scaled);
+			item.setCoveragePercent((scaled / plateAreaCm2) * 100f);
+			log.info("[FoodArea] {} normalized -> area={}cm², coverage={}%",
+					item.getName(),
+					String.format("%.1f", scaled),
+					String.format("%.1f", item.getCoveragePercent()));
+		}
 	}
 	
 	private float resolveAreaConfidence(PipelineFoodItem item) {
@@ -108,9 +136,9 @@ public class FoodAreaService {
 				&& item.getImagePixelCount() != null
 				&& item.getImagePixelCount() > 0;
 
-		if (usedSamMask && item.getSamMaskScore() != null) {
-			return item.getSamMaskScore();
-		}
+				if (usedSamMask && item.getSamMaskScore() != null) {
+					return Math.min(item.getSamMaskScore(), SAM_SCORE_CONFIDENCE_CAP);
+				}
 		if (usedSamMask) {
 			return SAM_AREA_CONFIDENCE;
 		}
@@ -118,6 +146,34 @@ public class FoodAreaService {
 			return BBOX_AREA_CONFIDENCE;
 		}
 		return PLATE_FALLBACK_AREA_CONFIDENCE;
+	}
+	
+	private void crossCheckCoverage(PipelineContext ctx, PipelineFoodItem item) {
+		Float gemini = item.getGeminiCoveragePercent();
+		Float sam = item.getCoveragePercent();
+
+		if (gemini == null || gemini <= 0 || sam == null || sam <= 0) {
+			return;
+		}
+
+		float ratio = Math.max(gemini, sam) / Math.min(gemini, sam);
+		if (ratio >= COVERAGE_DISAGREEMENT_RATIO) {
+			float reduced = item.getAreaConfidence() != null ? item.getAreaConfidence() * 0.7f : 0.5f;
+			item.setAreaConfidence(reduced);
+			log.warn("[FoodArea] {} coverage mismatch: SAM={}% vs Gemini={}% (ratio={}) — lowering area confidence to {}",
+					item.getName(),
+					String.format("%.0f", sam),
+					String.format("%.0f", gemini),
+					String.format("%.2f", ratio),
+					String.format("%.2f", reduced));
+			warningCollector.coverageMismatch(ctx, item.getName(), sam, gemini);
+		} else {
+			log.info("[FoodArea] {} coverage agree: SAM={}% vs Gemini={}% (ratio={})",
+					item.getName(),
+					String.format("%.0f", sam),
+					String.format("%.0f", gemini),
+					String.format("%.2f", ratio));
+		}
 	}
 
 }

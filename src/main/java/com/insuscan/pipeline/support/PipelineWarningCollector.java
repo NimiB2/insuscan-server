@@ -104,6 +104,14 @@ public class PipelineWarningCollector {
 				String.format("Total food area %.1fcm² > plate area %.1fcm². Calibration or segmentation may be wrong.",
 						totalAreaCm2, plateAreaCm2)));
 	}
+	
+	public void coverageMismatch(PipelineContext ctx, String foodName, float samCoverage, float geminiCoverage) {
+		add(ctx, PipelineWarning.medium(STAGE_FOOD_AREA, "COVERAGE_MISMATCH",
+				String.format(
+						"'%s' coverage disagreement: SAM mask %.0f%% vs visual estimate %.0f%%. "
+								+ "Segmentation may be inaccurate — please review.",
+						foodName, samCoverage, geminiCoverage)));
+	}
 
 	// ── Height warnings ───────────────────────────────────────────────────
 

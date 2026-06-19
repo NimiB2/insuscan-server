@@ -122,7 +122,7 @@ public class FoodDetectionService {
                 item.setRequiresUserValidation(node.path("requires_user_validation").asBoolean(true));
                 item.setDetectionConfidence((float) node.path("confidence").asDouble(0.5));
                 item.setEffectiveDensityFactor((float) node.path("effective_density_factor").asDouble(0.8));
-                item.setCoveragePercent((float) node.path("coverage_percent").asDouble(-1));
+                item.setGeminiCoveragePercent((float) node.path("coverage_percent").asDouble(-1));
                 
                 List<String> terms = new ArrayList<>();
                 JsonNode termsNode = node.path("search_terms");
