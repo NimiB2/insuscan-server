@@ -12,7 +12,10 @@ services:
       - sam-service
 
   sam-service:
-    build: ./sam-service
-    container_name: sam-service
-    ports:
-      - "8001:8001"
+      build: ./sam-service
+      container_name: sam-service
+      ports:
+        - "8001:8001"
+      environment:
+        SAM_DEBUG_ENABLED: "true"
+        SAM_DEBUG_DIR: /app/debug/masks
