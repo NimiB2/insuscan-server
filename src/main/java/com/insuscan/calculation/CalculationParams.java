@@ -82,16 +82,24 @@ public class CalculationParams {
     
  // Profile completeness check
     public boolean isProfileComplete() {
-        return insulinCarbRatio != null 
-            && correctionFactor != null 
-            && targetGlucose != null;
+        return isValid(insulinCarbRatio)
+            && isValid(correctionFactor)
+            && isValid(targetGlucose);
+    }
+
+    private boolean isValid(Float value) {
+        return value != null && value > 0;
+    }
+
+    private boolean isValid(Integer value) {
+        return value != null && value > 0;
     }
 
     public List<String> getMissingFields() {
         List<String> missing = new java.util.ArrayList<>();
-        if (insulinCarbRatio == null) missing.add("Insulin:Carb Ratio");
-        if (correctionFactor == null) missing.add("Correction Factor");
-        if (targetGlucose == null) missing.add("Target Glucose");
+        if (!isValid(insulinCarbRatio)) missing.add("Insulin:Carb Ratio");
+        if (!isValid(correctionFactor)) missing.add("Correction Factor");
+        if (!isValid(targetGlucose)) missing.add("Target Glucose");
         return missing;
     }
 
