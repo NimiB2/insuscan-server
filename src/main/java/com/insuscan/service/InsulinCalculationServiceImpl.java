@@ -44,44 +44,51 @@ public class InsulinCalculationServiceImpl implements InsulinCalculationService 
 		// Call full method with no adjustments
 		return calculateDoseWithAdjustments(totalCarbs, currentGlucose, "normal", false, false, userId);
 	}
-
+	
 	@Override
+	public InsulinCalculationBoundary calculateDose(Float totalCarbs, Integer currentGlucose, UserIdBoundary userId,
+			Float planIcr, Float planIsf, Integer planTargetGlucose) {
+		return executeCalculation(totalCarbs, currentGlucose, "normal", false, false, userId,
+				planIcr, planIsf, planTargetGlucose);
+	}
+
+@Override
 	public InsulinCalculationBoundary calculateDoseWithAdjustments(Float totalCarbs, Integer currentGlucose,
 			String activityLevel, Boolean sickModeEnabled, Boolean stressModeEnabled, UserIdBoundary userId) {
+		return executeCalculation(totalCarbs, currentGlucose, activityLevel, sickModeEnabled, stressModeEnabled, userId,
+				null, null, null);
+	}
+
+	private InsulinCalculationBoundary executeCalculation(Float totalCarbs, Integer currentGlucose, String activityLevel,
+			Boolean sickModeEnabled, Boolean stressModeEnabled, UserIdBoundary userId,
+			Float planIcr, Float planIsf, Integer planTargetGlucose) {
 
 		long startTime = System.currentTimeMillis();
 
-		// 1. Validate inputs
 		if (totalCarbs == null || totalCarbs < 0) {
 			String msg = "Total carbs must be provided and >= 0";
 			apiLogger.insulinCalcError(msg);
 			throw new IllegalArgumentException(msg);
 		}
 
-		// 2. Log start
 		String userEmail = userId != null ? userId.getEmail() : null;
 		apiLogger.insulinCalcStart(totalCarbs, currentGlucose, activityLevel, sickModeEnabled, stressModeEnabled,
 				userEmail);
 
-		// 3. Load user profile
 		UserEntity user = loadUserProfile(userId);
 
-		// 4. Build Calculation Params (Context)
-		// This merges User Profile settings + Request specific data (Carbs, Glucose,
-		// Activity)
 		CalculationParams.Builder builder = new CalculationParams.Builder().fromUser(user).withTotalCarbs(totalCarbs)
 				.withCurrentGlucose(currentGlucose).withActivityLevel(activityLevel);
 
+		applyPlanOverrides(builder, planIcr, planIsf, planTargetGlucose);
 
 		CalculationParams params = builder.build();
 
-		// 5. Execute Calculation (Delegated to Domain Logic)
 		InsulinCalculator calculator = new InsulinCalculator();
 		CalculationResult result = calculator.calculate(params);
 
-		// 6. Log Complete Breakdown
 		apiLogger.insulinCalcBreakdown(result.getCarbDose(), result.getCorrectionDose(),
-		        result.getBaseDose(), result.getTotalDose(), result.getRoundedDose());
+				result.getBaseDose(), result.getTotalDose(), result.getRoundedDose());
 
 		if (result.getWarning() != null && !result.getWarning().isEmpty()) {
 			apiLogger.insulinCalcWarning(result.getWarning());
@@ -90,8 +97,20 @@ public class InsulinCalculationServiceImpl implements InsulinCalculationService 
 		long totalTime = System.currentTimeMillis() - startTime;
 		apiLogger.insulinCalcComplete(result.getTotalDose(), result.getRoundedDose(), totalTime);
 
-		// 7. Map to Response Boundary
 		return mapToBoundary(params, result);
+	}
+
+	private void applyPlanOverrides(CalculationParams.Builder builder, Float planIcr, Float planIsf,
+			Integer planTargetGlucose) {
+		if (planIcr != null) {
+			builder.withInsulinCarbRatio(planIcr);
+		}
+		if (planIsf != null) {
+			builder.withCorrectionFactor(planIsf);
+		}
+		if (planTargetGlucose != null) {
+			builder.withTargetGlucose(planTargetGlucose);
+		}
 	}
 
 	private InsulinCalculationBoundary mapToBoundary(CalculationParams params, CalculationResult result) {

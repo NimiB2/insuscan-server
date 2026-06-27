@@ -86,7 +86,10 @@ public class InsulinController {
         InsulinCalculationBoundary result = insulinCalculationService.calculateDose(
                 request.getTotalCarbs(),
                 currentGlucose,
-                request.getUserId());
+                request.getUserId(),
+                request.getPlanIcr(),
+                request.getPlanIsf(),
+                request.getPlanTargetGlucose());
 
         return ResponseEntity.ok(result);
     }

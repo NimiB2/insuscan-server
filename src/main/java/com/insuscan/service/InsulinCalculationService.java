@@ -1,13 +1,10 @@
 package com.insuscan.service;
-
 import com.insuscan.boundary.InsulinCalculationBoundary;
 import com.insuscan.boundary.UserIdBoundary;
-
 /**
  * Service for calculating insulin doses based on carbs, glucose, and adjustments.
  * Implements standard bolus calculation formulas used in diabetes management.
  */
-
 public interface InsulinCalculationService {
 	 /**
      * Calculate insulin dose - simple version (backwards compatible)
@@ -16,7 +13,15 @@ public interface InsulinCalculationService {
             Float totalCarbs,
             Integer currentGlucose,
             UserIdBoundary userId);
-    
+
+    InsulinCalculationBoundary calculateDose(
+            Float totalCarbs,
+            Integer currentGlucose,
+            UserIdBoundary userId,
+            Float planIcr,
+            Float planIsf,
+            Integer planTargetGlucose);
+
     /**
      * Calculate insulin dose - full version with all adjustments
      * 

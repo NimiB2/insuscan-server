@@ -10,6 +10,10 @@ public class InsulinCalculationBoundary {
     private Float currentGlucose;       // Optional: for correction dose
     private UserIdBoundary userId;      // To fetch user's medical profile
     
+    private Float planIcr;
+    private Float planIsf;
+    private Integer planTargetGlucose;
+    
     // Output
     private Float carbDose;             // Dose for carbs coverage
     private Float correctionDose;       // Dose for glucose correction
@@ -63,6 +67,30 @@ public class InsulinCalculationBoundary {
 
     public void setUserId(UserIdBoundary userId) {
         this.userId = userId;
+    }
+    
+    public Float getPlanIcr() {
+        return planIcr;
+    }
+
+    public void setPlanIcr(Float planIcr) {
+        this.planIcr = planIcr;
+    }
+
+    public Float getPlanIsf() {
+        return planIsf;
+    }
+
+    public void setPlanIsf(Float planIsf) {
+        this.planIsf = planIsf;
+    }
+
+    public Integer getPlanTargetGlucose() {
+        return planTargetGlucose;
+    }
+
+    public void setPlanTargetGlucose(Integer planTargetGlucose) {
+        this.planTargetGlucose = planTargetGlucose;
     }
 
     public Float getCarbDose() {
