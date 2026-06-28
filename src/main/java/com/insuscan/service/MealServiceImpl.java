@@ -118,6 +118,10 @@ public class MealServiceImpl implements MealService {
         return mealRepository.findById(id)
                 .map(mealConverter::toBoundary);
     }
+    
+    private String userIdFor(String email) {
+        return systemId + "_" + email.toLowerCase().trim();
+    }
 
     @Override
     public List<MealBoundary> getMealsByUser(String systemId, String email, int page, int size) {
@@ -312,7 +316,7 @@ public class MealServiceImpl implements MealService {
         InputValidators.validateSystemId(systemId);
         InputValidators.validateEmail(email);
 
-        String userId = systemId + "_" + email;
+        String userId = userIdFor(email);
 
         return mealRepository.findRecentByUserId(userId, count)
                 .stream()
@@ -326,7 +330,7 @@ public class MealServiceImpl implements MealService {
         InputValidators.validateSystemId(systemId);
         InputValidators.validateEmail(email);
 
-        String userId = systemId + "_" + email;
+        String userId = userIdFor(email);
         return mealRepository.countByUserId(userId);
     }
 
@@ -352,7 +356,7 @@ public class MealServiceImpl implements MealService {
         InputValidators.validateSystemId(systemId);
         InputValidators.validateEmail(email);
 
-        String userId = systemId + "_" + email;
+        String userId = userIdFor(email);
 
         // Convert dates to timestamps
         Date fromDate = Date.from(from.atStartOfDay(ZoneId.systemDefault()).toInstant());

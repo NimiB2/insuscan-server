@@ -15,7 +15,7 @@ public class InputValidators {
     private static final Pattern emailPattern = Pattern.compile(EMAIL_PATTERN);
 
     // Insulin ratio pattern: "1:X" where X is a number
-    private static final String RATIO_PATTERN = "^\\d+:\\d+$";
+    private static final String RATIO_PATTERN = "^\\d+:\\d+(\\.\\d+)?$";
     private static final Pattern ratioPattern = Pattern.compile(RATIO_PATTERN);
 
     // Validate email format

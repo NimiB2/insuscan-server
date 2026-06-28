@@ -139,8 +139,10 @@ public class UserConverter {
         if (ratio == null || ratio <= 0) {
             return null;
         }
-        // Convert to "1:X" format
-        int carbsPerUnit = Math.round(1 / ratio);
+        float carbsPerUnit = Math.round((1f / ratio) * 10f) / 10f;
+        if (carbsPerUnit == Math.floor(carbsPerUnit)) {
+            return "1:" + (int) carbsPerUnit;
+        }
         return "1:" + carbsPerUnit;
     }
 }
