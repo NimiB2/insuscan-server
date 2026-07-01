@@ -13,6 +13,11 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * HTTP client for OpenAI's chat completions endpoint.
+ * Currently only exposes the multi-image call used by GeometryFusionServiceImpl
+ * for top-and-side view depth estimation; other OpenAI usages have migrated to Gemini.
+ */
 @Component
 public class OpenAiApiClient {
 
@@ -39,80 +44,12 @@ public class OpenAiApiClient {
         this.apiLogger = apiLogger;
     }
 
-    public boolean isServiceAvailable() {
-        return openAiApiKey != null && !openAiApiKey.isBlank();
-    }
-
-    public String getKeyPreview() {
-        return (openAiApiKey != null && openAiApiKey.length() > 5)
-                ? openAiApiKey.substring(0, 5)
-                : "N/A";
-    }
-
     public String getModel() {
         return openAiModel;
     }
 
-    public String callChatModel(String prompt, String base64Image) {
-        return callChatModel(openAiModel, prompt, base64Image, null, 0.0);
-    }
-
-    public String callChatModel(String model, String prompt, String base64Image, String systemPrompt,
-            double temperature) {
-        Map<String, Object> requestBody = buildRequestBody(model, prompt, base64Image, systemPrompt, temperature);
-
-        apiLogger.openaiStart(model, prompt.length());
-        long startTime = System.currentTimeMillis();
-
-        try {
-            String response = webClient.post()
-                    .uri("/chat/completions")
-                    .header("Authorization", "Bearer " + openAiApiKey)
-                    .header("Content-Type", "application/json")
-                    .bodyValue(requestBody)
-                    .retrieve()
-                    .onStatus(status -> status.is4xxClientError() || status.is5xxServerError(),
-                            clientResponse -> clientResponse.bodyToMono(String.class)
-                                    .map(body -> new RuntimeException("OpenAI API error: " + body)))
-                    .bodyToMono(String.class)
-                    .block();
-
-            long elapsed = System.currentTimeMillis() - startTime;
-            apiLogger.openaiResponseReceived(elapsed, response != null ? response.length() : 0);
-
-            return extractContentFromResponse(response);
-
-        } catch (RuntimeException e) {
-            apiLogger.openaiError("OpenAI call", e.getMessage());
-            if (e.getMessage() != null && e.getMessage().contains("429")) {
-                throw new RuntimeException("OpenAI rate limit exceeded. Please wait.");
-            }
-            throw e;
-        }
-    }
-
     public String callModelWithMultipleImages(String model, String prompt, String base64Image1, String base64Image2) {
-        List<Map<String, Object>> contentParts = new ArrayList<>();
-        contentParts.add(Map.of("type", "text", "text", prompt));
-
-        if (base64Image1 != null && !base64Image1.isBlank()) {
-            contentParts.add(
-                    Map.of("type", "image_url", "image_url", Map.of("url", "data:image/jpeg;base64," + base64Image1)));
-        }
-        if (base64Image2 != null && !base64Image2.isBlank()) {
-            contentParts.add(
-                    Map.of("type", "image_url", "image_url", Map.of("url", "data:image/jpeg;base64," + base64Image2)));
-        }
-
-        Map<String, Object> message = new HashMap<>();
-        message.put("role", "user");
-        message.put("content", contentParts);
-
-        Map<String, Object> requestBody = new HashMap<>();
-        requestBody.put("model", model);
-        requestBody.put("messages", List.of(message));
-        requestBody.put("temperature", 0.0);
-        requestBody.put("response_format", Map.of("type", "json_object"));
+        Map<String, Object> requestBody = buildMultiImageRequestBody(model, prompt, base64Image1, base64Image2);
 
         apiLogger.openaiStart(model, prompt.length());
         long startTime = System.currentTimeMillis();
@@ -141,36 +78,33 @@ public class OpenAiApiClient {
         }
     }
 
-    private Map<String, Object> buildRequestBody(String model, String prompt, String base64Image, String systemPrompt,
-            double temperature) {
-        List<Map<String, Object>> messages = new ArrayList<>();
-
-        if (systemPrompt != null && !systemPrompt.isBlank()) {
-            messages.add(Map.of("role", "system", "content", systemPrompt));
-        }
-
+    private Map<String, Object> buildMultiImageRequestBody(String model, String prompt,
+            String base64Image1, String base64Image2) {
         List<Map<String, Object>> contentParts = new ArrayList<>();
         contentParts.add(Map.of("type", "text", "text", prompt));
 
-        if (base64Image != null && !base64Image.isBlank()) {
-            contentParts.add(
-                    Map.of("type", "image_url", "image_url", Map.of("url", "data:image/jpeg;base64," + base64Image)));
+        if (base64Image1 != null && !base64Image1.isBlank()) {
+            contentParts.add(Map.of("type", "image_url", "image_url",
+                    Map.of("url", "data:image/jpeg;base64," + base64Image1)));
         }
-
-        messages.add(Map.of("role", "user", "content", contentParts));
+        if (base64Image2 != null && !base64Image2.isBlank()) {
+            contentParts.add(Map.of("type", "image_url", "image_url",
+                    Map.of("url", "data:image/jpeg;base64," + base64Image2)));
+        }
 
         Map<String, Object> body = new HashMap<>();
         body.put("model", model);
-        body.put("messages", messages);
-        body.put("temperature", temperature);
+        body.put("messages", List.of(Map.of("role", "user", "content", contentParts)));
+        body.put("temperature", 0.0);
         body.put("response_format", Map.of("type", "json_object"));
 
         return body;
     }
 
     private String extractContentFromResponse(String response) {
-        if (response == null || response.isBlank())
+        if (response == null || response.isBlank()) {
             return null;
+        }
         try {
             JsonNode root = objectMapper.readTree(response);
             return root.path("choices").path(0).path("message").path("content").asText();

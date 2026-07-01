@@ -1,6 +1,7 @@
 package com.insuscan.util;
 
 import org.springframework.stereotype.Component;
+
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
@@ -8,8 +9,8 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
 /**
- * Writes logs to a local file "insuscan_server_log.txt" for easy retrieval/debugging.
- * This is IN ADDITION to standard SLF4J logging.
+ * Appends timestamped log lines to insuscan_server_log.txt in the working directory.
+ * Used by ApiLogger to keep a persistent copy of every SLF4J message on disk.
  */
 @Component
 public class ServerFileLogger {
@@ -24,10 +25,5 @@ public class ServerFileLogger {
         } catch (IOException e) {
             System.err.println("Failed to write to log file: " + e.getMessage());
         }
-    }
-    
-    public void log(String format, Object... args) {
-        String msg = String.format(format.replace("{}", "%s"), args);
-        append(msg);
     }
 }

@@ -9,8 +9,10 @@ import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 /**
- * Centralized API logging for debugging external service calls.
- * Provides structured, readable logs for OpenAI and USDA interactions.
+ * Centralized logging for the InsuScan server.
+ * Covers meal insulin calculation, user profile updates, and external API calls
+ * to Gemini, OpenAI, and USDA. Every message goes to both the SLF4J console
+ * and the on-disk file logger so we have a persistent audit trail.
  */
 @Component
 public class ApiLogger {
@@ -24,74 +26,37 @@ public class ApiLogger {
         this.fileLogger = fileLogger;
     }
 
+    // Writes an empty separator line to visually break log sections
+    private void blank() {
+        logBoth("");
+    }
+
+    // Overload for messages without arguments, avoids the ugly (Object[])null cast
+    private void logBoth(String message) {
+        logBoth(message, (Object[]) null);
+    }
+
+    // Writes to SLF4J console and file logger. File writes never break the caller
     private void logBoth(String format, Object... args) {
-        // format for SLF4J
         log.info(format, args);
-        // format for File
         try {
-            // Very basic formatter for our file logger which expects similar to SLF4J
             String msg = format;
-            for (Object arg : args) {
-                msg = msg.replaceFirst("\\{\\}", String.valueOf(arg));
+            if (args != null) {
+                for (Object arg : args) {
+                    msg = msg.replaceFirst("\\{\\}", String.valueOf(arg));
+                }
             }
             fileLogger.append(msg);
-        } catch (Exception e) {
-            // ignore logging errors
+        } catch (Exception ignored) {
         }
-    }
-
-    // ===================== SCAN WORKFLOW =====================
-
-    public void scanStart(String userEmail, boolean hasImage, Float estimatedWeight) {
-        logBoth("", (Object[])null);
-        logBoth("================================================================================", (Object[])null);
-        logBoth("                         MEAL SCAN WORKFLOW STARTED                            ", (Object[])null);
-        logBoth("================================================================================", (Object[])null);
-        logBoth("Timestamp    : {}", LocalDateTime.now().format(TIME_FMT));
-        logBoth("User         : {}", userEmail != null ? userEmail : "unknown");
-        logBoth("Image        : {}", hasImage ? "PROVIDED" : "MISSING");
-        logBoth("Est. Weight  : {}", estimatedWeight != null ? estimatedWeight + "g" : "not provided");
-        logBoth("--------------------------------------------------------------------------------", (Object[])null);
-    }
-
-    public void scanStep(int step, String description) {
-        logBoth("", (Object[])null);
-        logBoth(">>> STEP {} : {}", step, description);
-        logBoth("", (Object[])null);
-    }
-
-    public void scanComplete(int foodCount, float totalCarbs, Float recommendedDose, long totalTimeMs) {
-        logBoth("", (Object[])null);
-        logBoth("================================================================================", (Object[])null);
-        logBoth("                         MEAL SCAN COMPLETED                                   ", (Object[])null);
-        logBoth("================================================================================", (Object[])null);
-        logBoth("Total Foods     : {}", foodCount);
-        logBoth("Total Carbs     : {}g", String.format("%.1f", totalCarbs));
-        logBoth("Recommended Dose: {}", recommendedDose != null ? recommendedDose + " units" : "N/A");
-        logBoth("Total Time      : {}ms", totalTimeMs);
-        logBoth("================================================================================", (Object[])null);
-        logBoth("", (Object[])null);
-    }
-
-    public void scanFailed(String stage, String reason) {
-        logBoth("", (Object[])null);
-        logBoth("================================================================================", (Object[])null);
-        logBoth("                         MEAL SCAN FAILED                                      ", (Object[])null);
-        logBoth("================================================================================", (Object[])null);
-        logBoth("Failed At : {}", stage);
-        logBoth("Reason    : {}", reason);
-        logBoth("================================================================================", (Object[])null);
-        logBoth("", (Object[])null);
     }
 
     // ===================== INSULIN CALCULATION =====================
 
     public void insulinCalcStart(Float totalCarbs, Integer currentGlucose, String activityLevel,
-                                  Boolean sickMode, Boolean stressMode, String userEmail) {
-        logBoth("", (Object[])null);
-        logBoth("--------------------------------------------------------------------------------", (Object[])null);
-        logBoth("[INSULIN] CALCULATION STARTED", (Object[])null);
-        logBoth("--------------------------------------------------------------------------------", (Object[])null);
+                                 Boolean sickMode, Boolean stressMode, String userEmail) {
+        blank();
+        logBoth("---------------- INSULIN CALCULATION STARTED ----------------");
         logBoth("[INSULIN] User           : {}", userEmail != null ? userEmail : "anonymous");
         logBoth("[INSULIN] Total Carbs    : {}g", totalCarbs);
         logBoth("[INSULIN] Current Glucose: {}", currentGlucose != null ? currentGlucose + " mg/dL" : "not provided");
@@ -99,15 +64,15 @@ public class ApiLogger {
         logBoth("[INSULIN] Sick Mode      : {}", Boolean.TRUE.equals(sickMode) ? "ON" : "OFF");
         logBoth("[INSULIN] Stress Mode    : {}", Boolean.TRUE.equals(stressMode) ? "ON" : "OFF");
     }
-    
+
     public void insulinCalcStart(float totalCarbs, String userEmail) {
-        logBoth("[INSULIN] Starting calculation for {}g carbs (user: {})", 
-            String.format("%.1f", totalCarbs), 
+        logBoth("[INSULIN] Starting calculation for {}g carbs (user: {})",
+            String.format("%.1f", totalCarbs),
             userEmail != null ? userEmail : "anonymous");
     }
 
-    public void insulinCalcBreakdown(float carbDose, Float correctionDose, float baseDose, 
-                                      float finalDose, float roundedDose) {
+    public void insulinCalcBreakdown(float carbDose, Float correctionDose, float baseDose,
+                                     float finalDose, float roundedDose) {
         logBoth("[INSULIN] Breakdown: CarbDose={} + Correction={} = Base:{} -> Final:{} -> Rounded:{}",
             String.format("%.2f", carbDose),
             correctionDose != null ? String.format("%.2f", correctionDose) : "0.00",
@@ -119,24 +84,24 @@ public class ApiLogger {
     public void insulinCalcParams(Float icr, Float isf, Integer targetGlucose, boolean fromProfile) {
         String source = fromProfile ? "USER PROFILE" : "DEFAULTS";
         logBoth("[INSULIN] Parameters from: {}", source);
-        logBoth("[INSULIN]   ICR (units/g) : {} (1:{})", 
-            String.format("%.3f", icr), 
+        logBoth("[INSULIN]   ICR (units/g) : {} (1:{})",
+            String.format("%.3f", icr),
             String.format("%.0f", 1.0f / icr));
         logBoth("[INSULIN]   ISF (mg/dL)   : {}", String.format("%.0f", isf));
         logBoth("[INSULIN]   Target Glucose: {} mg/dL", targetGlucose);
     }
-    
+
     public void insulinCalcProfileStatus(boolean complete, List<String> missingFields) {
         if (complete) {
-            logBoth("[INSULIN] Profile status: COMPLETE ✓", (Object[])null);
+            logBoth("[INSULIN] Profile status: COMPLETE ✓");
         } else {
-            logBoth("[INSULIN] Profile status: INCOMPLETE", (Object[])null);
+            logBoth("[INSULIN] Profile status: INCOMPLETE");
             logBoth("[INSULIN] Missing fields: {}", missingFields);
         }
     }
 
     public void insulinCalcSkipped(List<String> reasons) {
-        logBoth("[INSULIN] Calculation SKIPPED - profile incomplete", (Object[])null);
+        logBoth("[INSULIN] Calculation SKIPPED - profile incomplete");
         logBoth("[INSULIN] Missing: {}", reasons);
     }
 
@@ -144,7 +109,7 @@ public class ApiLogger {
         if (profileComplete && dose != null) {
             logBoth("[INSULIN] RESULT: {} units ✓", String.format("%.1f", dose));
         } else {
-            logBoth("[INSULIN] RESULT: No dose calculated ({})", 
+            logBoth("[INSULIN] RESULT: No dose calculated ({})",
                 message != null ? message : "profile incomplete");
         }
     }
@@ -154,106 +119,73 @@ public class ApiLogger {
     }
 
     public void insulinCalcComplete(float finalDose, float roundedDose, long timeMs) {
-        logBoth("--------------------------------------------------------------------------------", (Object[])null);
-        logBoth("[INSULIN] CALCULATION COMPLETE", (Object[])null);
-        logBoth("--------------------------------------------------------------------------------", (Object[])null);
+        logBoth("---------------- INSULIN CALCULATION COMPLETE ---------------");
         logBoth("[INSULIN] Raw Dose     : {} units", String.format("%.2f", finalDose));
         logBoth("[INSULIN] Rounded Dose : {} units", String.format("%.1f", roundedDose));
         logBoth("[INSULIN] Time         : {}ms", timeMs);
-        logBoth("--------------------------------------------------------------------------------", (Object[])null);
-        logBoth("", (Object[])null);
+        blank();
     }
 
+    public void insulinCalcError(String message) {
+        logBoth("[INSULIN] ❌ ERROR: {}", message);
+    }
+
+    // ===================== USER PROFILE =====================
+
     public void logUserUpdateIncoming(String email, com.insuscan.boundary.UserBoundary update) {
-        logBoth("", (Object[])null);
-        logBoth("--------------------------------------------------------------------------------", (Object[])null);
-        logBoth("[USER] 📥 INCOMING PROFILE UPDATE", (Object[])null);
-        logBoth("--------------------------------------------------------------------------------", (Object[])null);
+        blank();
+        logBoth("---------------- INCOMING PROFILE UPDATE 📥 ----------------");
         logBoth("[USER] Email      : {}", email);
         logBoth("[USER] Name       : {}", update.getUserName());
-        logBoth("[USER] --- Personal ---", (Object[])null);
+        logBoth("[USER] --- Personal ---");
         logBoth("[USER] Age        : {}", update.getAge());
         logBoth("[USER] Gender     : {}", update.getGender());
-        logBoth("[USER] --- Medical ---", (Object[])null);
+        logBoth("[USER] --- Medical ---");
         logBoth("[USER] ICR (Ratio): {}", update.getInsulinCarbRatio());
         logBoth("[USER] ISF        : {}", update.getCorrectionFactor());
         logBoth("[USER] Target     : {}", update.getTargetGlucose());
-        logBoth("[USER] --- Settings ---", (Object[])null);
+        logBoth("[USER] --- Settings ---");
         logBoth("[USER] Rounding   : {}", update.getDoseRounding());
-        logBoth("--------------------------------------------------------------------------------", (Object[])null);
     }
 
     public void logUserEntityBeforeSave(com.insuscan.data.UserEntity entity) {
-        logBoth("[USER] 💾 SAVING TO FIRESTORE (ENTITY STATE)", (Object[])null);
+        logBoth("[USER] 💾 SAVING TO FIRESTORE");
         logBoth("[USER] ID         : {}", entity.getId());
         logBoth("[USER] ICR (Float): {}", entity.getInsulinCarbRatio());
         logBoth("[USER] ISF        : {}", entity.getCorrectionFactor());
         logBoth("[USER] Age        : {}", entity.getAge());
         logBoth("[USER] UpdatedAt  : {}", entity.getUpdatedAt());
-        logBoth("--------------------------------------------------------------------------------", (Object[])null);
-        logBoth("", (Object[])null);
+        blank();
     }
 
-    // Keep original methods if they weren't covered, or map them to logBoth if easy.
-    // For now I covered the main ones.
+    // ===================== GEMINI / OPENAI =====================
 
-    // ... (rest of the file as needed, but minimal changes to avoid breaking anything)
-    
     public void openaiStart(String model, int imageBase64Chars) {
-        logBoth("--------------------------------------------------------------------------------", (Object[])null);
-        logBoth("[GEMINI] REQUEST", (Object[])null);
-        logBoth("--------------------------------------------------------------------------------", (Object[])null);
+        logBoth("-------------------- GEMINI REQUEST --------------------");
         logBoth("[GEMINI] Model       : {}", model);
         logBoth("[GEMINI] Image Size  : {} KB", (int) (imageBase64Chars * 0.75 / 1024));
-        logBoth("[GEMINI] Status      : Sending to Gemini...", (Object[])null);
+        logBoth("[GEMINI] Status      : Sending to Gemini...");
     }
 
-    public void openaiCacheHit(String imageHash) {
-        logBoth("[GEMINI] CACHE HIT - returning cached result (hash: {}...)", 
-            imageHash.substring(0, Math.min(8, imageHash.length())));
-    }
-    
     public void openaiSuccess(int foodCount, long totalTimeMs) {
         logBoth("[GEMINI] SUCCESS - {} foods detected in {}ms", foodCount, totalTimeMs);
     }
-    
-    public void usdaStart(String foodName, String normalizedName, List<String> searchTerms) {
-        logBoth("--------------------------------------------------------------------------------", (Object[])null);
-        logBoth("[USDA] NUTRITION LOOKUP", (Object[])null);
-        logBoth("--------------------------------------------------------------------------------", (Object[])null);
-        logBoth("[USDA] Original Food   : '{}'", foodName);
-        logBoth("[USDA] Normalized      : '{}'", normalizedName);
-        logBoth("[USDA] Search Terms    : {}", searchTerms);
-    }
 
-    public void carbCalculation(String foodName, float carbsPer100g, float portionGrams, float calculatedCarbs, String source) {
-        logBoth("[CALC] {} : {}g/100g x {}g portion = {}g carbs [{}]",
-            foodName,
-            String.format("%.1f", carbsPer100g),
-            String.format("%.0f", portionGrams),
-            String.format("%.1f", calculatedCarbs),
-            source);
-    }
-    
     public void openaiError(String stage, String message) {
         logBoth("[GEMINI] ❌ ERROR during {}: {}", stage, message);
     }
 
     public void openaiResponseReceived(long durationMs, int tokenCount) {
-        logBoth("[GEMINI] Response received in {}ms. Tokens: {}", durationMs, tokenCount > 0 ? tokenCount : "unknown");
+        logBoth("[GEMINI] Response received in {}ms. Tokens: {}",
+            durationMs, tokenCount > 0 ? tokenCount : "unknown");
     }
 
-    public void openaiRawResponse(String partialResponse) {
-        logBoth("[OPENAI] Raw (partial): {}", partialResponse);
-    }
-    
-    // We use a generic list or Object to avoid circular dependency on recognized food item if possible, 
-    // but the error message explicitly mentions RecognizedFoodItem. 
-    // Ideally we should import it, but to keep it simple and avoid import errors if that class moved, 
-    // we can use a wildcard or just Object and toString() it, but the error said "List<RecognizedFoodItem>".
-    // Let's assume the caller passes something that can be stringified.
     public void openaiParsedFoods(List<?> foods) {
         logBoth("[GEMINI] Parsed {} items: {}", foods != null ? foods.size() : 0, foods);
+    }
+    
+    public void openaiRawResponse(String partialResponse) {
+        logBoth("[GEMINI] Raw (partial): {}", partialResponse);
     }
 
     public void openaiRetry(String reason) {
@@ -261,10 +193,19 @@ public class ApiLogger {
     }
 
     public void apiKeyStatus(String service, boolean present, String preview) {
-        logBoth("[CONFIG] {} API Key: {} (Preview: {})", 
-            service, 
-            present ? "PRESENT" : "MISSING", 
+        logBoth("[CONFIG] {} API Key: {} (Preview: {})",
+            service,
+            present ? "PRESENT" : "MISSING",
             preview);
+    }
+
+    // ===================== USDA =====================
+
+    public void usdaStart(String foodName, String normalizedName, List<String> searchTerms) {
+        logBoth("-------------------- USDA NUTRITION LOOKUP --------------------");
+        logBoth("[USDA] Original Food   : '{}'", foodName);
+        logBoth("[USDA] Normalized      : '{}'", normalizedName);
+        logBoth("[USDA] Search Terms    : {}", searchTerms);
     }
 
     public void usdaApiCall(String query) {
@@ -272,18 +213,18 @@ public class ApiLogger {
     }
 
     public void usdaApiResponse(long durationMs, int resultsCount, String firstMatch) {
-        logBoth("[USDA] Response in {}ms. Found {} results. First: '{}'", 
+        logBoth("[USDA] Response in {}ms. Found {} results. First: '{}'",
             durationMs, resultsCount, firstMatch != null ? firstMatch : "none");
     }
 
     public void usdaMatchFound(String original, String match, float score) {
-        logBoth("[USDA] ✅ MATCH: '{}' -> '{}' (Score: {})", 
+        logBoth("[USDA] ✅ MATCH: '{}' -> '{}' (Score: {})",
             original, match, String.format("%.2f", score));
     }
-    
+
     public void usdaFallbackHit(String term, float score) {
-        logBoth("[USDA] ⚠️ FALLBACK MATCH for '{}' (Score: {})", 
-             term, String.format("%.2f", score));
+        logBoth("[USDA] ⚠️ FALLBACK MATCH for '{}' (Score: {})",
+            term, String.format("%.2f", score));
     }
 
     public void usdaNoMatch(String term, boolean isSpecific) {
@@ -292,15 +233,5 @@ public class ApiLogger {
 
     public void usdaError(String message) {
         logBoth("[USDA] ❌ ERROR: {}", message);
-    }
-    
-    public void insulinCalcError(String message) {
-        logBoth("[INSULIN] ❌ ERROR: {}", message);
-    }
-
-
-
-    public void carbCalculationFailed(String foodName, String reason) {
-        logBoth("[CALC] {} : FAILED - {}", foodName, reason);
     }
 }
