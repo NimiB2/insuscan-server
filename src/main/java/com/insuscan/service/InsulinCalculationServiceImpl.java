@@ -78,7 +78,7 @@ public class InsulinCalculationServiceImpl implements InsulinCalculationService 
 		UserEntity user = loadUserProfile(userId);
 
 		CalculationParams.Builder builder = new CalculationParams.Builder().fromUser(user).withTotalCarbs(totalCarbs)
-				.withCurrentGlucose(currentGlucose).withActivityLevel(activityLevel);
+				.withCurrentGlucose(currentGlucose);
 
 		applyPlanOverrides(builder, planIcr, planIsf, planTargetGlucose);
 

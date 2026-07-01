@@ -1,17 +1,18 @@
 package com.insuscan.calculation;
 
+import java.util.ArrayList;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
 /**
  * Input parameters for insulin dose calculation.
  * Uses Builder pattern for clean construction.
  */
 public class CalculationParams {
+
     private static final Logger log = LoggerFactory.getLogger(CalculationParams.class);
 
-	
-    // User profile settings
     /**
      * Insulin-to-Carb Ratio in Grams per Unit (e.g. 10 means 1 unit covers 10g carbs).
      * DO NOT pass the inverted ratio (0.1).
@@ -19,17 +20,9 @@ public class CalculationParams {
     private final Float insulinCarbRatio;
     private final Float correctionFactor;
     private final Integer targetGlucose;
-    
-    // Meal-time context
+
     private final Float totalCarbs;
     private final Integer currentGlucose;
-    private final String activityLevel;
-    
-    // Temporary adjustment percentages
-    private final int sickDayPercent;
-    private final int stressPercent;
-    private final int lightExercisePercent;
-    private final int intenseExercisePercent;
 
     private CalculationParams(Builder builder) {
         this.insulinCarbRatio = parseRatio(builder.insulinCarbRatio);
@@ -37,11 +30,6 @@ public class CalculationParams {
         this.targetGlucose = builder.targetGlucose;
         this.totalCarbs = builder.totalCarbs;
         this.currentGlucose = builder.currentGlucose;
-        this.activityLevel = builder.activityLevel;
-        this.sickDayPercent = builder.sickDayPercent != null ? builder.sickDayPercent : 0;
-        this.stressPercent = builder.stressPercent != null ? builder.stressPercent : 0;
-        this.lightExercisePercent = builder.lightExercisePercent != null ? builder.lightExercisePercent : 0;
-        this.intenseExercisePercent = builder.intenseExercisePercent != null ? builder.intenseExercisePercent : 0;
     }
 
     // Handles both "1:10" string format and direct float value
@@ -68,19 +56,12 @@ public class CalculationParams {
         return val;
     }
 
-    // Getters
     public Float getInsulinCarbRatio() { return insulinCarbRatio; }
     public Float getCorrectionFactor() { return correctionFactor; }
     public Integer getTargetGlucose() { return targetGlucose; }
     public Float getTotalCarbs() { return totalCarbs; }
     public Integer getCurrentGlucose() { return currentGlucose; }
-    public String getActivityLevel() { return activityLevel; }
-    public int getSickDayPercent() { return sickDayPercent; }
-    public int getStressPercent() { return stressPercent; }
-    public int getLightExercisePercent() { return lightExercisePercent; }
-    public int getIntenseExercisePercent() { return intenseExercisePercent; }
-    
- // Profile completeness check
+
     public boolean isProfileComplete() {
         return isValid(insulinCarbRatio)
             && isValid(correctionFactor)
@@ -96,94 +77,59 @@ public class CalculationParams {
     }
 
     public List<String> getMissingFields() {
-        List<String> missing = new java.util.ArrayList<>();
+        List<String> missing = new ArrayList<>();
         if (!isValid(insulinCarbRatio)) missing.add("Insulin:Carb Ratio");
         if (!isValid(correctionFactor)) missing.add("Correction Factor");
         if (!isValid(targetGlucose)) missing.add("Target Glucose");
         return missing;
     }
 
-    /**
-     * Builder for constructing CalculationParams
-     */
     public static class Builder {
         private String insulinCarbRatio;
         private Float correctionFactor;
         private Integer targetGlucose;
         private Float totalCarbs;
         private Integer currentGlucose;
-        private String activityLevel;
-        private Integer sickDayPercent;
-        private Integer stressPercent;
-        private Integer lightExercisePercent;
-        private Integer intenseExercisePercent;
 
         public Builder fromUser(com.insuscan.data.UserEntity user) {
             if (user == null) return this;
-            this.insulinCarbRatio = user.getInsulinCarbRatio() != null 
+            this.insulinCarbRatio = user.getInsulinCarbRatio() != null
                 ? user.getInsulinCarbRatio().toString() : null;
             this.correctionFactor = user.getCorrectionFactor();
             this.targetGlucose = user.getTargetGlucose();
-
             return this;
         }
-        
+
         // String format like "1:10"
-        public Builder withInsulinCarbRatio(String val) { 
-            this.insulinCarbRatio = val; 
-            return this; 
+        public Builder withInsulinCarbRatio(String val) {
+            this.insulinCarbRatio = val;
+            return this;
         }
-       
 
         // Float format from UserEntity
-        public Builder withInsulinCarbRatio(Float val) { 
-            this.insulinCarbRatio = val != null ? val.toString() : null; 
-            return this; 
+        public Builder withInsulinCarbRatio(Float val) {
+            this.insulinCarbRatio = val != null ? val.toString() : null;
+            return this;
         }
 
-        public Builder withCorrectionFactor(Float val) { 
-            this.correctionFactor = val; 
-            return this; 
+        public Builder withCorrectionFactor(Float val) {
+            this.correctionFactor = val;
+            return this;
         }
 
-        public Builder withTargetGlucose(Integer val) { 
-            this.targetGlucose = val; 
-            return this; 
+        public Builder withTargetGlucose(Integer val) {
+            this.targetGlucose = val;
+            return this;
         }
 
-        public Builder withTotalCarbs(Float val) { 
-            this.totalCarbs = val; 
-            return this; 
+        public Builder withTotalCarbs(Float val) {
+            this.totalCarbs = val;
+            return this;
         }
 
-        public Builder withCurrentGlucose(Integer val) { 
-            this.currentGlucose = val; 
-            return this; 
-        }
-
-        public Builder withActivityLevel(String val) { 
-            this.activityLevel = val; 
-            return this; 
-        }
-
-        public Builder withSickDayPercent(Integer val) { 
-            this.sickDayPercent = val; 
-            return this; 
-        }
-
-        public Builder withStressPercent(Integer val) { 
-            this.stressPercent = val; 
-            return this; 
-        }
-
-        public Builder withLightExercisePercent(Integer val) { 
-            this.lightExercisePercent = val; 
-            return this; 
-        }
-
-        public Builder withIntenseExercisePercent(Integer val) { 
-            this.intenseExercisePercent = val; 
-            return this; 
+        public Builder withCurrentGlucose(Integer val) {
+            this.currentGlucose = val;
+            return this;
         }
 
         public CalculationParams build() {
