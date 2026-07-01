@@ -12,7 +12,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 /**
- * Controller for insulin dose calculation endpoints
+ * Controller for insulin dose calculation endpoints.
  */
 @RestController
 @RequestMapping(path = "/insulin")
@@ -29,15 +29,6 @@ public class InsulinController {
         this.insulinCalculationService = insulinCalculationService;
     }
 
-    /**
-     * Calculate insulin dose from carbs
-     * POST /insulin/calculate?totalCarbs=50&currentGlucose=150&email=user@example.com
-     * 
-     * @param totalCarbs Total carbohydrates in grams (required)
-     * @param currentGlucose Current blood glucose in mg/dL (optional, for correction dose)
-     * @param email User email (optional, for personalized settings)
-     * @return Detailed insulin calculation result
-     */
     @Operation(summary = "Calculate insulin dose", description = "Calculates insulin dose based on carbs and optional glucose correction. Works with or without user profile.")
     @PostMapping(
         path = "/calculate",
@@ -67,11 +58,6 @@ public class InsulinController {
         return ResponseEntity.ok(result);
     }
 
-    /**
-     * Calculate insulin dose from request body (JSON)
-     * POST /insulin/calculate
-     * Body: { "totalCarbs": 50, "currentGlucose": 150, "userId": { "email": "user@example.com" } }
-     */
     @PostMapping(
         path = "/calculate",
         consumes = MediaType.APPLICATION_JSON_VALUE,
@@ -91,38 +77,6 @@ public class InsulinController {
                 request.getPlanIsf(),
                 request.getPlanTargetGlucose());
 
-        return ResponseEntity.ok(result);
-    }
-    
-    /**
-     * Calculate insulin dose with all adjustments
-     * POST /insulin/calculate/full
-     */
-    @PostMapping(
-        path = "/calculate/full",
-        produces = MediaType.APPLICATION_JSON_VALUE,
-        consumes = MediaType.APPLICATION_JSON_VALUE)
-    @Operation(
-        summary = "Calculate insulin dose with adjustments",
-        description = "Full calculation including sick day, stress, and exercise adjustments")
-    public ResponseEntity<InsulinCalculationBoundary> calculateWithAdjustments(
-            @RequestBody InsulinCalculationBoundary request) {
-        
-        // Extract userId if provided
-        UserIdBoundary userId = request.getUserId();
-        if (userId != null && userId.getSystemId() == null) {
-            userId.setSystemId(systemId);
-        }
-        
-        InsulinCalculationBoundary result = insulinCalculationService.calculateDoseWithAdjustments(
-                request.getTotalCarbs(),
-                request.getCurrentGlucose() != null ? request.getCurrentGlucose().intValue() : null,
-                request.getActivityLevel(),
-                request.getSickModeEnabled(),
-                request.getStressModeEnabled(),
-                userId
-        );
-        
         return ResponseEntity.ok(result);
     }
 }

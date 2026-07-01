@@ -53,16 +53,12 @@ public class ApiLogger {
 
     // ===================== INSULIN CALCULATION =====================
 
-    public void insulinCalcStart(Float totalCarbs, Integer currentGlucose, String activityLevel,
-                                 Boolean sickMode, Boolean stressMode, String userEmail) {
+    public void insulinCalcStart(Float totalCarbs, Integer currentGlucose, String userEmail) {
         blank();
         logBoth("---------------- INSULIN CALCULATION STARTED ----------------");
         logBoth("[INSULIN] User           : {}", userEmail != null ? userEmail : "anonymous");
         logBoth("[INSULIN] Total Carbs    : {}g", totalCarbs);
         logBoth("[INSULIN] Current Glucose: {}", currentGlucose != null ? currentGlucose + " mg/dL" : "not provided");
-        logBoth("[INSULIN] Activity Level : {}", activityLevel != null ? activityLevel : "normal");
-        logBoth("[INSULIN] Sick Mode      : {}", Boolean.TRUE.equals(sickMode) ? "ON" : "OFF");
-        logBoth("[INSULIN] Stress Mode    : {}", Boolean.TRUE.equals(stressMode) ? "ON" : "OFF");
     }
 
     public void insulinCalcStart(float totalCarbs, String userEmail) {

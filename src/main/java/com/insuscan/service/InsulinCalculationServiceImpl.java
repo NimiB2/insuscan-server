@@ -8,7 +8,6 @@ import com.insuscan.util.ApiLogger;
 import com.insuscan.calculation.InsulinCalculator;
 import com.insuscan.calculation.CalculationParams;
 import com.insuscan.calculation.CalculationResult;
-import com.insuscan.calculation.InsulinDefaults;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -17,11 +16,8 @@ import org.springframework.stereotype.Service;
 
 /**
  * Service implementation for Insulin Dose Calculation.
- * <p>
- * This service acts as an orchestrator/facade. It: 1. Validates inputs 2. Loads
- * User Profile data 3. Builds a context object (CalculationParams) 4. Delegates
- * the medical math to {@link InsulinCalculator} ("The Golden Logic") 5. Returns
- * the structured result
+ * Orchestrates input validation, user profile loading, and delegates the medical
+ * math to {@link InsulinCalculator}. Returns the structured result.
  */
 @Service
 public class InsulinCalculationServiceImpl implements InsulinCalculationService {
@@ -41,27 +37,17 @@ public class InsulinCalculationServiceImpl implements InsulinCalculationService 
 
 	@Override
 	public InsulinCalculationBoundary calculateDose(Float totalCarbs, Integer currentGlucose, UserIdBoundary userId) {
-		// Call full method with no adjustments
-		return calculateDoseWithAdjustments(totalCarbs, currentGlucose, "normal", false, false, userId);
+		return executeCalculation(totalCarbs, currentGlucose, userId, null, null, null);
 	}
-	
+
 	@Override
 	public InsulinCalculationBoundary calculateDose(Float totalCarbs, Integer currentGlucose, UserIdBoundary userId,
 			Float planIcr, Float planIsf, Integer planTargetGlucose) {
-		return executeCalculation(totalCarbs, currentGlucose, "normal", false, false, userId,
-				planIcr, planIsf, planTargetGlucose);
+		return executeCalculation(totalCarbs, currentGlucose, userId, planIcr, planIsf, planTargetGlucose);
 	}
 
-@Override
-	public InsulinCalculationBoundary calculateDoseWithAdjustments(Float totalCarbs, Integer currentGlucose,
-			String activityLevel, Boolean sickModeEnabled, Boolean stressModeEnabled, UserIdBoundary userId) {
-		return executeCalculation(totalCarbs, currentGlucose, activityLevel, sickModeEnabled, stressModeEnabled, userId,
-				null, null, null);
-	}
-
-	private InsulinCalculationBoundary executeCalculation(Float totalCarbs, Integer currentGlucose, String activityLevel,
-			Boolean sickModeEnabled, Boolean stressModeEnabled, UserIdBoundary userId,
-			Float planIcr, Float planIsf, Integer planTargetGlucose) {
+	private InsulinCalculationBoundary executeCalculation(Float totalCarbs, Integer currentGlucose,
+			UserIdBoundary userId, Float planIcr, Float planIsf, Integer planTargetGlucose) {
 
 		long startTime = System.currentTimeMillis();
 
@@ -72,8 +58,7 @@ public class InsulinCalculationServiceImpl implements InsulinCalculationService 
 		}
 
 		String userEmail = userId != null ? userId.getEmail() : null;
-		apiLogger.insulinCalcStart(totalCarbs, currentGlucose, activityLevel, sickModeEnabled, stressModeEnabled,
-				userEmail);
+		apiLogger.insulinCalcStart(totalCarbs, currentGlucose, userEmail);
 
 		UserEntity user = loadUserProfile(userId);
 
@@ -116,11 +101,9 @@ public class InsulinCalculationServiceImpl implements InsulinCalculationService 
 	private InsulinCalculationBoundary mapToBoundary(CalculationParams params, CalculationResult result) {
 		InsulinCalculationBoundary response = new InsulinCalculationBoundary();
 
-		// Inputs
 		response.setTotalCarbs(params.getTotalCarbs());
 		response.setCurrentGlucose(params.getCurrentGlucose() != null ? params.getCurrentGlucose().floatValue() : null);
 
-		// Profile Used
 		String ratioDisplay = params.getInsulinCarbRatio() != null
 				? String.format("1:%.0f", params.getInsulinCarbRatio())
 				: "Default";
@@ -128,11 +111,9 @@ public class InsulinCalculationServiceImpl implements InsulinCalculationService 
 		response.setCorrectionFactorUsed(params.getCorrectionFactor());
 		response.setTargetGlucoseUsed(params.getTargetGlucose());
 
-		// Results
 		response.setCarbDose(result.getCarbDose());
 		response.setCorrectionDose(result.getCorrectionDose());
 
-		// Final
 		response.setTotalRecommendedDose(result.getRoundedDose());
 		response.setWarning(result.getWarning());
 
