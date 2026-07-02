@@ -1,6 +1,9 @@
 package com.insuscan.boundary;
 
-// Meal identifier containing meal UUID and system ID
+/**
+ * Meal identifier containing meal UUID and system ID.
+ */
+
 public class MealIdBoundary {
     private String mealId;
     private String systemId;

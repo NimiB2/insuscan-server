@@ -2,6 +2,10 @@ package com.insuscan.service;
 
 import java.util.List;
 
+/**
+ * Outcome of a dose gate evaluation: either allowed, or blocked with reasons.
+ */
+
 public record DoseGateDecision(boolean blocked, List<String> reasons) {
 
 	public static DoseGateDecision allowed() {

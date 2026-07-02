@@ -1,6 +1,9 @@
 package com.insuscan.boundary;
 
-// User identifier containing email and system ID
+/**
+ * User identifier containing email and system ID.
+ */
+
 public class UserIdBoundary {
     private String email;
     private String systemId;

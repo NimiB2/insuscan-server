@@ -2,6 +2,11 @@ package com.insuscan.boundary;
 
 import java.util.Map;
 
+/**
+ * Depth measurements captured by the Android client via ARCore:
+ * plate depth, per-item depths, AR confidence, and estimated plate diameter.
+ */
+
 public class ArcoreDepthData {
 
     private Float plateDepthM;

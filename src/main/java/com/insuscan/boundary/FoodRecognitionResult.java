@@ -3,51 +3,45 @@ package com.insuscan.boundary;
 import java.util.List;
 import java.util.ArrayList;
 
-// Result from a food recognition service 
+/**
+ * Result from a food recognition service: detected foods, success flag,
+ * and container-level analysis (fill percent, container type).
+ */
 public class FoodRecognitionResult {
 
     private List<RecognizedFoodItem> detectedFoods;
     private boolean success;
     private String errorMessage;
 
-    // v2: Container analysis from Gemini vision
-    private Float containerFillPercent; // 0-100, how full the container appears
-    private String detectedContainerType; // FLAT_PLATE, REGULAR_BOWL, DEEP_BOWL
+    private Float containerFillPercent;
+    private String detectedContainerType;
 
     public FoodRecognitionResult() {
-        this.detectedFoods = new ArrayList<>(); // avoid nulls
+        this.detectedFoods = new ArrayList<>();
     }
 
-    // --- Inner Class: The Medical-Grade Food Item ---
+    /**
+     * A single food item recognized from an image, including its identity,
+     * portion estimate, cooking state, safety flags, and location bbox.
+     */
     public static class RecognizedFoodItem {
-        // --- Existing Fields ---
-        private String name; // Full visual description (e.g., "Roasted Potato Wedges")
-        private float confidence; // 0.0 to 1.0
+        private String name;
+        private float confidence;
         private Float estimatedPortionGrams;
 
-        // --- New Medical/Safety Fields ---
-        private String baseIngredient; // Clean name for DB search (e.g., "Potato")
-        private String visualState; // Cooking state: RAW, BOILED, ROASTED, FRIED
-        private List<String> riskFlags; // Warnings: "HIDDEN_SUGAR", "HIGH_FAT", "SAUCE_DETECTED"
-        private boolean requiresValidation; // True if AI is unsure or detects high risk
+        private String baseIngredient;
+        private String visualState;
+        private List<String> riskFlags;
+        private boolean requiresValidation;
 
-        // How much of the plate this food covers (0-100%)
-        // Server uses this to calculate area from plate dimensions
         private Float coveragePercent;
 
-        // Height profile: FLAT, LOW_PILE, MEDIUM_PILE, HIGH_PILE
-        // Server maps this to cm when ARCore isn't available
         private String heightCategory;
 
-        // Texture type: SOLID, GRANULAR, LEAFY, MIXED
-        // Server uses this to apply packing factor to density calculation
         private String textureType;
-     
-        // 2-3 USDA-friendly search terms from Gemini (replaces FoodNameNormalizer)
-        // Ordered from most specific to most general
+
         private List<String> usdaSearchTerms;
 
-        // bounding box (% of full image) for client-side GrabCut
         private Float bboxXPct;
         private Float bboxYPct;
         private Float bboxWPct;
@@ -65,13 +59,10 @@ public class FoodRecognitionResult {
             this.riskFlags = new ArrayList<>();
             this.usdaSearchTerms = new ArrayList<>();
             this.visualState = "UNKNOWN";
-            this.baseIngredient = name; // Default fallback
+            this.baseIngredient = name;
             this.requiresValidation = false;
         }
 
-        // --- Getters & Setters ---
-
-        // bbox for client-side GrabCut
         public void setBoundingBox(Float xPct, Float yPct, Float wPct, Float hPct) {
             this.bboxXPct = xPct;
             this.bboxYPct = yPct;
@@ -166,7 +157,7 @@ public class FoodRecognitionResult {
         public void setHeightCategory(String heightCategory) {
             this.heightCategory = heightCategory;
         }
-        
+
         public String getTextureType() {
             return textureType;
         }
@@ -183,9 +174,6 @@ public class FoodRecognitionResult {
             this.usdaSearchTerms = (usdaSearchTerms != null) ? usdaSearchTerms : new ArrayList<>();
         }
     }
-    // --- End of Inner Class ---
-
-    // --- Outer Class Methods (Factory & Accessors) ---
 
     public List<RecognizedFoodItem> getDetectedFoods() {
         return detectedFoods;
@@ -211,7 +199,6 @@ public class FoodRecognitionResult {
         this.errorMessage = errorMessage;
     }
 
-    // v2: Container analysis accessors
     public Float getContainerFillPercent() {
         return containerFillPercent;
     }
@@ -228,7 +215,6 @@ public class FoodRecognitionResult {
         this.detectedContainerType = detectedContainerType;
     }
 
-    // Factory methods
     public static FoodRecognitionResult success(List<RecognizedFoodItem> foods) {
         FoodRecognitionResult result = new FoodRecognitionResult();
         result.setSuccess(true);
@@ -240,7 +226,7 @@ public class FoodRecognitionResult {
         FoodRecognitionResult result = new FoodRecognitionResult();
         result.setSuccess(false);
         result.setErrorMessage(error);
-        result.setDetectedFoods(new ArrayList<>()); // never null
+        result.setDetectedFoods(new ArrayList<>());
         return result;
     }
 }

@@ -1,35 +1,36 @@
 package com.insuscan.boundary;
 
+import com.insuscan.data.InsulinPlan;
 import com.insuscan.enums.UserRole;
 
-// DTO for creating new users (registration)
+import java.util.List;
+
+/**
+ * DTO for creating new users on registration, including optional medical
+ * profile, personal info, dose settings, and initial insulin plans.
+ */
 public class NewUserBoundary {
+
     private String email;
     private UserRole role;
     private String userName;
     private String avatar;
-    
-    // Medical profile (optional on registration)
+
     private String insulinCarbRatio;
     private Float correctionFactor;
     private Integer targetGlucose;
-    
-    // Personal info
+
     private Integer age;
     private String gender;
-    
-    // Dose settings
-    private String doseRounding;
- 
-    // Insslin Plans
-    private java.util.List<com.insuscan.data.InsulinPlan> insulinPlans;
 
-	// Preferences
+    private String doseRounding;
+
+    private List<InsulinPlan> insulinPlans;
+
     private String glucoseUnits;
 
     public NewUserBoundary() {}
 
-    // Getters and Setters
     public String getEmail() {
         return email;
     }
@@ -86,25 +87,46 @@ public class NewUserBoundary {
         this.targetGlucose = targetGlucose;
     }
 
- // === Personal Info ===
-    public Integer getAge() { return age; }
-    public void setAge(Integer age) { this.age = age; }
+    public Integer getAge() {
+        return age;
+    }
 
-    public String getGender() { return gender; }
-    public void setGender(String gender) { this.gender = gender; }
+    public void setAge(Integer age) {
+        this.age = age;
+    }
 
-    // === Dose Settings ===
-    public String getDoseRounding() { return doseRounding; }
-    public void setDoseRounding(String doseRounding) { this.doseRounding = doseRounding; }
+    public String getGender() {
+        return gender;
+    }
 
-    // === Preferences ===
-    public String getGlucoseUnits() { return glucoseUnits; }
-    public void setGlucoseUnits(String glucoseUnits) { this.glucoseUnits = glucoseUnits; }
-    
-    // === Plans ===
-    public java.util.List<com.insuscan.data.InsulinPlan> getInsulinPlans() { return insulinPlans; }
-    public void setInsulinPlans(java.util.List<com.insuscan.data.InsulinPlan> insulinPlans) { this.insulinPlans = insulinPlans; }
-    
+    public void setGender(String gender) {
+        this.gender = gender;
+    }
+
+    public String getDoseRounding() {
+        return doseRounding;
+    }
+
+    public void setDoseRounding(String doseRounding) {
+        this.doseRounding = doseRounding;
+    }
+
+    public String getGlucoseUnits() {
+        return glucoseUnits;
+    }
+
+    public void setGlucoseUnits(String glucoseUnits) {
+        this.glucoseUnits = glucoseUnits;
+    }
+
+    public List<InsulinPlan> getInsulinPlans() {
+        return insulinPlans;
+    }
+
+    public void setInsulinPlans(List<InsulinPlan> insulinPlans) {
+        this.insulinPlans = insulinPlans;
+    }
+
     @Override
     public String toString() {
         return "NewUserBoundary{" +

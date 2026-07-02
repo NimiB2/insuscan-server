@@ -1,5 +1,10 @@
 package com.insuscan.data;
 
+/**
+ * A named insulin dosing plan (ICR, ISF, target glucose) that a user can
+ * apply as an override to their base medical profile at meal time.
+ */
+
 public class InsulinPlan {
 
     private String id;

@@ -2,49 +2,38 @@ package com.insuscan.boundary;
 
 import java.util.List;
 
-
-// Request/Response DTO for insulin calculation
+/**
+ * Request/Response DTO for insulin dose calculation. Carries inputs (carbs,
+ * glucose, optional plan overrides), computed outputs (dose breakdown),
+ * profile status, and warnings.
+ */
 public class InsulinCalculationBoundary {
-    // Input
+
     private Float totalCarbs;
-    private Float currentGlucose;       // Optional: for correction dose
-    private UserIdBoundary userId;      // To fetch user's medical profile
-    
+    private Float currentGlucose;
+    private UserIdBoundary userId;
+
     private Float planIcr;
     private Float planIsf;
     private Integer planTargetGlucose;
-    
-    // Output
-    private Float carbDose;             // Dose for carbs coverage
-    private Float correctionDose;       // Dose for glucose correction
+
+    private Float carbDose;
+    private Float correctionDose;
     private Float totalRecommendedDose;
-    
-    // Calculation breakdown (for transparency)
+
     private String insulinCarbRatioUsed;
     private Float correctionFactorUsed;
     private Integer targetGlucoseUsed;
-    
-    private Float sickAdjustment;
-    private Float stressAdjustment;  
-    private Float exerciseAdjustment;
-    private String activityLevel;
-    
-    private Boolean sickModeEnabled;
-    private Boolean stressModeEnabled;
-    
- // Profile status
+
     private boolean profileComplete;
     private List<String> missingFields;
 
-    // User-friendly message
     private String message;
-    
-    // Warnings
-    private String warning;             // e.g. "Dose unusually high - please verify"
+
+    private String warning;
 
     public InsulinCalculationBoundary() {}
 
-    // Getters and Setters
     public Float getTotalCarbs() {
         return totalCarbs;
     }
@@ -68,7 +57,7 @@ public class InsulinCalculationBoundary {
     public void setUserId(UserIdBoundary userId) {
         this.userId = userId;
     }
-    
+
     public Float getPlanIcr() {
         return planIcr;
     }
@@ -148,34 +137,31 @@ public class InsulinCalculationBoundary {
     public void setWarning(String warning) {
         this.warning = warning;
     }
-    
-    public Float getSickAdjustment() { return sickAdjustment; }
-    public void setSickAdjustment(Float sickAdjustment) { this.sickAdjustment = sickAdjustment; }
 
-    public Float getStressAdjustment() { return stressAdjustment; }
-    public void setStressAdjustment(Float stressAdjustment) { this.stressAdjustment = stressAdjustment; }
+    public boolean isProfileComplete() {
+        return profileComplete;
+    }
 
-    public Float getExerciseAdjustment() { return exerciseAdjustment; }
-    public void setExerciseAdjustment(Float exerciseAdjustment) { this.exerciseAdjustment = exerciseAdjustment; }
+    public void setProfileComplete(boolean profileComplete) {
+        this.profileComplete = profileComplete;
+    }
 
-    public String getActivityLevel() { return activityLevel; }
-    public void setActivityLevel(String activityLevel) { this.activityLevel = activityLevel; }
+    public List<String> getMissingFields() {
+        return missingFields;
+    }
 
-    public Boolean getSickModeEnabled() { return sickModeEnabled; }
-    public void setSickModeEnabled(Boolean sickModeEnabled) { this.sickModeEnabled = sickModeEnabled; }
+    public void setMissingFields(List<String> missingFields) {
+        this.missingFields = missingFields;
+    }
 
-    public Boolean getStressModeEnabled() { return stressModeEnabled; }
-    public void setStressModeEnabled(Boolean stressModeEnabled) { this.stressModeEnabled = stressModeEnabled; }
+    public String getMessage() {
+        return message;
+    }
 
-    public boolean isProfileComplete() { return profileComplete; }
-    public void setProfileComplete(boolean profileComplete) { this.profileComplete = profileComplete; }
+    public void setMessage(String message) {
+        this.message = message;
+    }
 
-    public List<String> getMissingFields() { return missingFields; }
-    public void setMissingFields(List<String> missingFields) { this.missingFields = missingFields; }
-
-    public String getMessage() { return message; }
-    public void setMessage(String message) { this.message = message; }
-    
     @Override
     public String toString() {
         return "InsulinCalculationBoundary{" +

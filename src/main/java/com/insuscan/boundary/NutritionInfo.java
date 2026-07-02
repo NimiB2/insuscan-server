@@ -1,6 +1,10 @@
 package com.insuscan.boundary;
 
-//Nutrition data from USDA FoodData Central
+/**
+ * Nutrition data from USDA FoodData Central, including per-100g macros,
+ * density (for volume-to-weight conversion), and serving size info.
+ */
+
 public class NutritionInfo {
     private String fdcId; // USDA food ID
     private String foodName; // official name
@@ -14,7 +18,7 @@ public class NutritionInfo {
     private String densitySource; // USDA, LOOKUP, GEMINI, UNKNOWN
     private Float servingVolumeCm3; // Volume of a single serving (from USDA)
 
-    private float fiberPer100g; // dietary fiber for net carb calculation
+    private float fiberPer100g; 
     private float waterPer100g;
     private float proteinPer100g;
     private float fatPer100g;
@@ -23,7 +27,6 @@ public class NutritionInfo {
     public NutritionInfo() {
     }
 
-    // Getters and Setters
     public String getFdcId() {
         return fdcId;
     }
@@ -138,7 +141,6 @@ public class NutritionInfo {
     }
     
 
-    // Calculate carbs for a specific weight
     public float calculateCarbs(float weightGrams) {
         return (carbsPer100g * weightGrams) / 100f;
     }
@@ -174,7 +176,6 @@ public class NutritionInfo {
     }
     
 
-    // Factory for "not found" result
     public static NutritionInfo notFound(String foodName) {
         NutritionInfo info = new NutritionInfo();
         info.setFoodName(foodName);

@@ -1,33 +1,34 @@
 package com.insuscan.boundary;
 
+import com.insuscan.data.InsulinPlan;
 import com.insuscan.enums.UserRole;
 
-// User data transfer object for API responses
+import java.util.List;
+
+/**
+ * User data transfer object for API responses, containing identity,
+ * medical profile (ICR/ISF/target), personal info, and insulin plans.
+ */
 public class UserBoundary {
+
     private UserIdBoundary userId;
     private UserRole role;
     private String userName;
     private String avatar;
-    
-    // Medical profile
-    private String insulinCarbRatio;    // e.g. "1:10"
+
+    private String insulinCarbRatio;
     private Float correctionFactor;
     private Integer targetGlucose;
 
- // Personal info
     private Integer age;
     private String gender;
-   
-    // Dose settings
+
     private String doseRounding;
-     
-    // Insulin Plans
-    private java.util.List<com.insuscan.data.InsulinPlan> insulinPlans;
-    
+
+    private List<InsulinPlan> insulinPlans;
 
     public UserBoundary() {}
 
-    // Getters and Setters
     public UserIdBoundary getUserId() {
         return userId;
     }
@@ -84,21 +85,38 @@ public class UserBoundary {
         this.targetGlucose = targetGlucose;
     }
 
- // === Personal Info ===
-    public Integer getAge() { return age; }
-    public void setAge(Integer age) { this.age = age; }
+    public Integer getAge() {
+        return age;
+    }
 
-    public String getGender() { return gender; }
-    public void setGender(String gender) { this.gender = gender; }
+    public void setAge(Integer age) {
+        this.age = age;
+    }
 
-    // === Dose Settings ===
-    public String getDoseRounding() { return doseRounding; }
-    public void setDoseRounding(String doseRounding) { this.doseRounding = doseRounding; }
+    public String getGender() {
+        return gender;
+    }
 
-    // === Plans ===
-    public java.util.List<com.insuscan.data.InsulinPlan> getInsulinPlans() { return insulinPlans; }
-    public void setInsulinPlans(java.util.List<com.insuscan.data.InsulinPlan> insulinPlans) { this.insulinPlans = insulinPlans; }
-    
+    public void setGender(String gender) {
+        this.gender = gender;
+    }
+
+    public String getDoseRounding() {
+        return doseRounding;
+    }
+
+    public void setDoseRounding(String doseRounding) {
+        this.doseRounding = doseRounding;
+    }
+
+    public List<InsulinPlan> getInsulinPlans() {
+        return insulinPlans;
+    }
+
+    public void setInsulinPlans(List<InsulinPlan> insulinPlans) {
+        this.insulinPlans = insulinPlans;
+    }
+
     @Override
     public String toString() {
         return "UserBoundary{" +

@@ -16,6 +16,11 @@ import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
+/**
+ * Converts between {@link MealEntity} (Firestore document) and
+ * {@link MealBoundary} (API DTO), handling composite ID parsing/building
+ * and food item sub-conversion.
+ */
 @Component
 public class MealConverter {
 
@@ -28,7 +33,6 @@ public class MealConverter {
         this.mealIdGenerator = mealIdGenerator;
     }
 
-    // Convert MealEntity to MealBoundary for API responses
     public MealBoundary toBoundary(MealEntity entity) {
         if (entity == null) {
             return null;
@@ -36,7 +40,6 @@ public class MealConverter {
 
         MealBoundary boundary = new MealBoundary();
 
-        // Parse composite meal ID (systemId_mealUuid)
         if (entity.getId() != null) {
             MealIdBoundary mealId = new MealIdBoundary();
             String[] parts = entity.getId().split("_", 2);
@@ -50,7 +53,6 @@ public class MealConverter {
             boundary.setMealId(mealId);
         }
 
-        // Parse composite user ID (systemId_email)
         if (entity.getUserId() != null) {
             UserIdBoundary userId = new UserIdBoundary();
             String[] parts = entity.getUserId().split("_", 2);
@@ -66,7 +68,6 @@ public class MealConverter {
 
         boundary.setImageUrl(entity.getImageUrl());
 
-        // Convert food items
         if (entity.getFoodItems() != null) {
             boundary.setFoodItems(
                     entity.getFoodItems().stream()
@@ -74,10 +75,8 @@ public class MealConverter {
                             .collect(Collectors.toList()));
         }
 
-        // Nutrition totals
         boundary.setTotalCarbs(entity.getTotalCarbs());
 
-        // Portion analysis
         boundary.setEstimatedWeight(entity.getEstimatedWeight());
         boundary.setPlateVolumeCm3(entity.getPlateVolumeCm3());
         boundary.setPlateDiameterCm(entity.getPlateDiameterCm());
@@ -87,43 +86,31 @@ public class MealConverter {
         boundary.setReferenceObjectType(entity.getReferenceObjectType());
         boundary.setContainerType(entity.getContainerType());
 
-        // User state at meal time
         boundary.setCurrentGlucose(entity.getCurrentGlucose());
-        boundary.setActivityLevel(entity.getActivityLevel());
 
-        // Calculation breakdown
         boundary.setCarbDose(entity.getCarbDose());
         boundary.setCorrectionDose(entity.getCorrectionDose());
-        boundary.setSickAdjustment(entity.getSickAdjustment());
-        boundary.setStressAdjustment(entity.getStressAdjustment());
-        boundary.setExerciseAdjustment(entity.getExerciseAdjustment());
         boundary.setActiveInsulin(entity.getActiveInsulin());
 
-        // Insulin data
         boundary.setRecommendedDose(entity.getRecommendedDose());
         boundary.setActualDose(entity.getActualDose());
 
-        // Status and timestamps
         boundary.setStatus(entity.getStatus());
         boundary.setScannedAt(entity.getScannedAt());
         boundary.setConfirmedAt(entity.getConfirmedAt());
         boundary.setCompletedAt(entity.getCompletedAt());
-        boundary.setWasSickMode(entity.getWasSickMode());
-        boundary.setWasStressMode(entity.getWasStressMode());
         boundary.setInsulinMessage(entity.getInsulinMessage());
         boundary.setMissingProfileFields(entity.getMissingProfileFields());
         boundary.setProfileComplete(entity.isProfileComplete());
 
-        // Insulin plan used at meal time
         boundary.setSavedPlanName(entity.getSavedPlanName());
-        
+
         boundary.setReviewWarnings(entity.getReviewWarnings());
         boundary.setRequiresManualReview(entity.isRequiresManualReview());
 
         return boundary;
     }
 
-    // Convert MealBoundary to MealEntity for database storage
     public MealEntity toEntity(MealBoundary boundary) {
         if (boundary == null) {
             return null;
@@ -131,7 +118,6 @@ public class MealConverter {
 
         MealEntity entity = new MealEntity();
 
-        // Build composite meal ID
         if (boundary.getMealId() != null) {
             String sys = boundary.getMealId().getSystemId();
             if (sys == null || sys.trim().isEmpty()) {
@@ -141,7 +127,6 @@ public class MealConverter {
             entity.setId(sys + "_" + mealUuid);
         }
 
-        // Build composite user ID
         if (boundary.getUserId() != null) {
             String sys = boundary.getUserId().getSystemId() != null
                     ? boundary.getUserId().getSystemId()
@@ -152,7 +137,6 @@ public class MealConverter {
 
         entity.setImageUrl(boundary.getImageUrl());
 
-        // Convert food items
         if (boundary.getFoodItems() != null) {
             entity.setFoodItems(
                     boundary.getFoodItems().stream()
@@ -160,10 +144,8 @@ public class MealConverter {
                             .collect(Collectors.toList()));
         }
 
-        // Nutrition totals
         entity.setTotalCarbs(boundary.getTotalCarbs());
 
-        // Portion analysis
         entity.setEstimatedWeight(boundary.getEstimatedWeight());
         entity.setPlateVolumeCm3(boundary.getPlateVolumeCm3());
         entity.setPlateDiameterCm(boundary.getPlateDiameterCm());
@@ -173,51 +155,37 @@ public class MealConverter {
         entity.setReferenceObjectType(boundary.getReferenceObjectType());
         entity.setContainerType(boundary.getContainerType());
 
-        // User state at meal time
         entity.setCurrentGlucose(boundary.getCurrentGlucose());
-        entity.setActivityLevel(boundary.getActivityLevel());
 
-        // Calculation breakdown
         entity.setCarbDose(boundary.getCarbDose());
         entity.setCorrectionDose(boundary.getCorrectionDose());
-        entity.setSickAdjustment(boundary.getSickAdjustment());
-        entity.setStressAdjustment(boundary.getStressAdjustment());
-        entity.setExerciseAdjustment(boundary.getExerciseAdjustment());
         entity.setActiveInsulin(boundary.getActiveInsulin());
 
-        // Insulin data
         entity.setRecommendedDose(boundary.getRecommendedDose());
         entity.setActualDose(boundary.getActualDose());
 
-        // Status and timestamps
         entity.setStatus(boundary.getStatus());
         entity.setScannedAt(boundary.getScannedAt());
         entity.setConfirmedAt(boundary.getConfirmedAt());
         entity.setCompletedAt(boundary.getCompletedAt());
 
-        entity.setWasSickMode(boundary.getWasSickMode());
-        entity.setWasStressMode(boundary.getWasStressMode());
         entity.setInsulinMessage(boundary.getInsulinMessage());
         entity.setMissingProfileFields(boundary.getMissingProfileFields());
         entity.setProfileComplete(boundary.isProfileComplete());
 
-        // Insulin plan used at meal time
         entity.setSavedPlanName(boundary.getSavedPlanName());
-        
+
         entity.setReviewWarnings(boundary.getReviewWarnings());
         entity.setRequiresManualReview(boundary.isRequiresManualReview());
 
         return entity;
     }
 
-    // Create a new meal entity with generated ID for initial scan
     public MealEntity createNewMealEntity(String userEmail, String imageUrl) {
         MealEntity entity = new MealEntity();
 
-        // Generate new meal ID with date + sequence format
         entity.setId(mealIdGenerator.generateMealId(systemId));
 
-        // Set user reference
         entity.setUserId(systemId + "_" + userEmail);
 
         entity.setImageUrl(imageUrl);
@@ -227,7 +195,6 @@ public class MealConverter {
         return entity;
     }
 
-    // Convert FoodItem entity to boundary
     private FoodItemBoundary foodItemToBoundary(MealEntity.FoodItem item) {
         if (item == null) {
             return null;
@@ -241,7 +208,6 @@ public class MealConverter {
         boundary.setConfidence(item.getConfidence());
         boundary.setUsdaFdcId(item.getUsdaFdcId());
 
-        // pass bbox to client
         boundary.setBboxXPct(item.getBboxXPct());
         boundary.setBboxYPct(item.getBboxYPct());
         boundary.setBboxWPct(item.getBboxWPct());
@@ -250,7 +216,6 @@ public class MealConverter {
         return boundary;
     }
 
-    // Convert FoodItem boundary to entity
     public MealEntity.FoodItem foodItemToEntity(FoodItemBoundary boundary) {
         if (boundary == null) {
             return null;
@@ -273,7 +238,6 @@ public class MealConverter {
         return item;
     }
 
-    // Calculate total nutrition from food items
     public void calculateTotals(MealEntity entity) {
         if (entity.getFoodItems() == null || entity.getFoodItems().isEmpty()) {
             entity.setTotalCarbs(0f);

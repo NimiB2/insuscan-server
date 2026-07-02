@@ -13,7 +13,6 @@ import com.insuscan.pipeline.FoodEstimationPipeline;
 import com.insuscan.pipeline.model.PipelineContext;
 import com.insuscan.pipeline.model.PipelineFoodItem;
 import com.insuscan.pipeline.model.PipelineResult;
-import com.insuscan.pipeline.model.PipelineWarning;
 import com.insuscan.service.DoseGateDecision;
 import com.insuscan.service.DoseGateEvaluator;
 import com.insuscan.service.InsulinCalculationService;
@@ -43,8 +42,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
  * New scan endpoint for the dual-image pipeline (Milestone 7).
- *
- * <p>Path: POST /vision/v2/scan</p>
+ * Path: POST /vision/v2/scan
  */
 @RestController
 @RequestMapping(path = "/vision/v2")
@@ -76,7 +74,7 @@ public class ScanPipelineController {
             MealConverter mealConverter,
             MealService mealService,
             ObjectMapper objectMapper,
-    		DoseGateEvaluator doseGateEvaluator) {
+            DoseGateEvaluator doseGateEvaluator) {
 
         this.pipeline = pipeline;
         this.userRepository = userRepository;
@@ -87,7 +85,6 @@ public class ScanPipelineController {
         this.mealService = mealService;
         this.objectMapper = objectMapper;
         this.doseGateEvaluator = doseGateEvaluator;
-
     }
 
     @Operation(
@@ -123,7 +120,6 @@ public class ScanPipelineController {
 
         log.info("[ScanV2] Request from user={}, refType={}", email, referenceObjectType);
 
-        // 1. Build context and Run pipeline
         PipelineContext ctx = new PipelineContext();
         ctx.setImageTopBase64(Base64.getEncoder().encodeToString(topFile.getBytes()));
         ctx.setImageSideBase64(Base64.getEncoder().encodeToString(sideFile.getBytes()));
@@ -134,7 +130,7 @@ public class ScanPipelineController {
         ctx.setImageTopHeightPx(topImageHeight);
         ctx.setImageSideWidthPx(sideImageWidth);
         ctx.setImageSideHeightPx(sideImageHeight);
-        
+
         if (arcoreDataJson != null && !arcoreDataJson.isBlank()) {
             try {
                 ArcoreDepthData arcoreDepthData = objectMapper.readValue(arcoreDataJson, ArcoreDepthData.class);
@@ -151,41 +147,37 @@ public class ScanPipelineController {
         PipelineResult result = pipeline.run(ctx);
 
         if (!result.isSuccess()) {
-            return ResponseEntity.unprocessableEntity().body(result); // Return errors directly if fatal
+            return ResponseEntity.unprocessableEntity().body(result);
         }
 
-        // 2. Map PipelineResult to MealEntity
         String userDocId = systemId + "_" + email;
         String newId = mealIdGenerator.generateMealId(email);
 
         MealEntity meal = new MealEntity();
         meal.setId(systemId + "_" + newId);
         meal.setUserId(userDocId);
-        meal.setImageUrl("uploaded://" + newId + ".jpg"); // Mocked for now
+        meal.setImageUrl("uploaded://" + newId + ".jpg");
         meal.setScannedAt(new Date());
         meal.setStatus(MealStatus.PENDING);
         meal.setReferenceObjectType(referenceObjectType);
 
-        // Map totals
         if (ctx.getMealTotals() != null) {
             meal.setTotalCarbs(ctx.getMealTotals().getTotalNetCarbsG());
             meal.setEstimatedWeight(ctx.getMealTotals().getTotalWeightG());
         }
 
-        // Map plate geometry
         if (ctx.getPlateGeometry() != null) {
             meal.setPlateDiameterCm(ctx.getPlateGeometry().getInnerDiameterCm());
             meal.setPlateDepthCm(ctx.getPlateGeometry().getInnerDepthCm());
             meal.setContainerType(ctx.getPlateGeometry().getContainerType());
             meal.setReferenceDetected(true);
-            
+
             float radius = meal.getPlateDiameterCm() / 2f;
             meal.setPlateVolumeCm3((float) (Math.PI * radius * radius * meal.getPlateDepthCm()));
         }
 
         meal.setAnalysisConfidence(result.getOverallConfidence());
 
-        // Map food items
         List<MealEntity.FoodItem> foodItems = new ArrayList<>();
         if (ctx.getFoodItems() != null) {
             for (PipelineFoodItem pi : ctx.getFoodItems()) {
@@ -194,7 +186,7 @@ public class ScanPipelineController {
                 item.setQuantity(pi.getWeightG());
                 item.setCarbs(pi.getNetCarbsG());
                 item.setConfidence(pi.getDetectionConfidence());
-                
+
                 if (pi.getBoundingBoxPct() != null && pi.getBoundingBoxPct().length == 4) {
                     item.setBboxXPct(pi.getBoundingBoxPct()[0]);
                     item.setBboxYPct(pi.getBoundingBoxPct()[1]);
@@ -206,7 +198,6 @@ public class ScanPipelineController {
         }
         meal.setFoodItems(foodItems);
 
-     // Map warnings — prefix each message with its code so the client can route by code.
         if (result.getWarnings() != null && !result.getWarnings().isEmpty()) {
             List<String> textWarnings = result.getWarnings().stream()
                 .map(w -> "[" + w.getCode() + "] " + w.getMessage())
@@ -214,12 +205,10 @@ public class ScanPipelineController {
             meal.setReviewWarnings(textWarnings);
         }
 
-     // 3. Dose gate — block dose recommendation on unreliable/invalid results
         Float gateWeight = ctx.getMealTotals() != null ? ctx.getMealTotals().getTotalWeightG() : null;
         Float gateCarbs  = ctx.getMealTotals() != null ? ctx.getMealTotals().getTotalNetCarbsG() : null;
         DoseGateDecision gateDecision = doseGateEvaluator.evaluate(result.getWarnings(), gateWeight, gateCarbs);
 
-        // 4. Insulin Calculation (skipped when blocked)
         UserEntity user = userRepository.findById(userDocId).orElse(null);
         if (gateDecision.blocked()) {
             meal.setRecommendedDose(null);
@@ -247,12 +236,6 @@ public class ScanPipelineController {
                 meal.setInsulinMessage(calc.getMessage());
                 meal.setProfileComplete(calc.isProfileComplete());
                 meal.setMissingProfileFields(calc.getMissingFields());
-                meal.setSickAdjustment(calc.getSickAdjustment());
-                meal.setStressAdjustment(calc.getStressAdjustment());
-                meal.setExerciseAdjustment(calc.getExerciseAdjustment());
-                meal.setWasSickMode(calc.getSickModeEnabled());
-                meal.setWasStressMode(calc.getStressModeEnabled());
-                meal.setActivityLevel(calc.getActivityLevel());
             } catch (Exception e) {
                 log.error("[ScanV2] Failed to calculate insulin: {}", e.getMessage());
                 meal.setInsulinMessage("Error calculating insulin: " + e.getMessage());
@@ -263,25 +246,20 @@ public class ScanPipelineController {
             meal.setInsulinMessage("User profile not found. Please log in.");
         }
 
-        // 5. Save to DB
         mealRepository.save(meal);
-        log.info("[ScanV2] Saved MealEntity (id={}) with totalCarbs={}, estimatedWeight={}", 
+        log.info("[ScanV2] Saved MealEntity (id={}) with totalCarbs={}, estimatedWeight={}",
             meal.getId(), meal.getTotalCarbs(), meal.getEstimatedWeight());
 
-        // 6. Convert to Boundary and return
         MealBoundary boundary = mealConverter.toBoundary(meal);
         return ResponseEntity.ok(boundary);
     }
 
-    /**
-     * Get all saved vision analyses for a user (Migrated from VisionController)
-     */
     @GetMapping(path = "/saved", produces = MediaType.APPLICATION_JSON_VALUE)
     public List<MealBoundary> getSavedAnalyses(
             @RequestParam(value = "email", required = false) String email,
             @RequestParam(value = "userId", required = false) String userId,
             @RequestParam(value = "limit", required = false, defaultValue = "10") int limit) {
-        
+
         String userEmail = email;
         if (userEmail == null || userEmail.isEmpty()) {
             if (userId != null && userId.contains("@")) {
@@ -295,9 +273,6 @@ public class ScanPipelineController {
         return mealService.getRecentMeals(systemId, userEmail, limit);
     }
 
-    /**
-     * Get a specific saved analysis by meal ID (Migrated from VisionController)
-     */
     @GetMapping(path = "/saved/{mealId}", produces = MediaType.APPLICATION_JSON_VALUE)
     public MealBoundary getSavedAnalysis(@PathVariable("mealId") String mealId) {
         String uuid = mealId;
@@ -308,9 +283,6 @@ public class ScanPipelineController {
                 .orElseThrow(() -> new RuntimeException("Meal not found: " + mealId));
     }
 
-    /**
-     * Serve the test vision HTML page (Migrated from VisionController)
-     */
     @GetMapping(path = "/test", produces = MediaType.TEXT_HTML_VALUE)
     public ResponseEntity<Resource> getTestPage() {
         Resource resource = new ClassPathResource("static/test-vision.html");

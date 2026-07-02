@@ -1,11 +1,14 @@
 package com.insuscan.boundary;
 
+/**
+ * Request payload for parsing free-text chat input into structured meal data.
+ */
+
 public class ChatParseRequest {
 
     private String text;
     private String state;
 
-    // Constructors
     public ChatParseRequest() {
     }
 
@@ -13,8 +16,7 @@ public class ChatParseRequest {
         this.text = text;
         this.state = state;
     }
-
-    // Getters and Setters
+    
     public String getText() {
         return text;
     }

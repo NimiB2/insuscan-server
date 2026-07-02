@@ -1,5 +1,11 @@
 package com.insuscan.boundary;
 
+/**
+ * Query optimization hints returned by the AI search service:
+ * a translated primary query, alternative variations, terms to exclude,
+ * the user's intent, and preparation keywords for candidate scoring.
+ */
+
 public class SearchOptimization {
 
     private String translatedQuery;
@@ -7,17 +13,7 @@ public class SearchOptimization {
     private String[] excludeTerms;
     private String intent;
 
-    /**
-     * USDA-style preparation keywords describing how the food is prepared.
-     * Examples: ["cooked"], ["raw"], ["fried"], ["roasted"], ["canned"], ["dried"]
-     * Used to:
-     *  1. Build precise primary USDA search terms (e.g. "white rice" + "cooked" → "white rice cooked")
-     *  2. Prefer/penalize candidates in pickBestCandidate() based on preparation style
-     */
     private String[] preparationKeywords;
-
-    public SearchOptimization() {
-    }
 
     public SearchOptimization(String translatedQuery, String[] searchVariations,
                               String[] excludeTerms, String intent) {

@@ -8,17 +8,20 @@ import com.insuscan.boundary.UserBoundary;
 import com.insuscan.boundary.UserIdBoundary;
 import com.insuscan.data.UserEntity;
 
+/**
+ * Converts between {@link UserEntity} (Firestore document) and
+ * {@link UserBoundary} (API DTO), handling composite ID parsing/building
+ * and ICR representation (Float internally, "1:X" string in the boundary).
+ */
 @Component
 public class UserConverter {
 
     @Value("${spring.application.name}")
     private String systemId;
 
-    // Convert entity to boundary (for API responses)
     public UserBoundary toBoundary(UserEntity entity) {
         UserBoundary boundary = new UserBoundary();
 
-        // Parse composite ID: systemId_email
         UserIdBoundary userId = new UserIdBoundary();
         if (entity.getId() != null) {
             String[] parts = entity.getId().split("_", 2);
@@ -33,31 +36,25 @@ public class UserConverter {
         boundary.setUserName(entity.getUserName());
         boundary.setAvatar(entity.getAvatar());
 
-        // Medical profile - convert Float ratio to String "1:X" format
         if (entity.getInsulinCarbRatio() != null) {
             boundary.setInsulinCarbRatio(floatToRatioString(entity.getInsulinCarbRatio()));
         }
         boundary.setCorrectionFactor(entity.getCorrectionFactor());
         boundary.setTargetGlucose(entity.getTargetGlucose());
 
-     // Personal info
         boundary.setAge(entity.getAge());
         boundary.setGender(entity.getGender());
 
-        // Dose settings
         boundary.setDoseRounding(entity.getDoseRounding());
 
-        // Inslun Plans
         boundary.setInsulinPlans(entity.getInsulinPlans());
-        
+
         return boundary;
     }
 
-    // Convert boundary to entity (for saving to DB)
     public UserEntity toEntity(UserBoundary boundary) {
         UserEntity entity = new UserEntity();
 
-        // Build composite ID
         if (boundary.getUserId() != null) {
             entity.setId(boundary.getUserId().getSystemId() + "_" + boundary.getUserId().getEmail());
         }
@@ -66,27 +63,22 @@ public class UserConverter {
         entity.setUserName(boundary.getUserName());
         entity.setAvatar(boundary.getAvatar());
 
-        // Medical profile - convert String "1:X" to Float
         if (boundary.getInsulinCarbRatio() != null) {
             entity.setInsulinCarbRatio(ratioStringToFloat(boundary.getInsulinCarbRatio()));
         }
         entity.setCorrectionFactor(boundary.getCorrectionFactor());
         entity.setTargetGlucose(boundary.getTargetGlucose());
 
-     // Personal info
         entity.setAge(boundary.getAge());
         entity.setGender(boundary.getGender());
 
-        // Dose settings
         entity.setDoseRounding(boundary.getDoseRounding());
-        
-        // Insulin Plans
+
         entity.setInsulinPlans(boundary.getInsulinPlans());
-        
+
         return entity;
     }
 
-    // Convert new user registration to user boundary
     public UserBoundary newUserToBoundary(NewUserBoundary newUser) {
         UserBoundary boundary = new UserBoundary();
 
@@ -96,25 +88,20 @@ public class UserConverter {
         boundary.setAvatar(newUser.getAvatar());
         boundary.setRole(newUser.getRole());
 
-        // Optional medical profile on registration
         boundary.setInsulinCarbRatio(newUser.getInsulinCarbRatio());
         boundary.setCorrectionFactor(newUser.getCorrectionFactor());
         boundary.setTargetGlucose(newUser.getTargetGlucose());
-        
-        // Personal info
+
         boundary.setAge(newUser.getAge());
         boundary.setGender(newUser.getGender());
 
-        // Dose settings
         boundary.setDoseRounding(newUser.getDoseRounding());
 
-        // Insulin Plans 
         boundary.setInsulinPlans(newUser.getInsulinPlans());
 
         return boundary;
     }
 
-    // Helper: Convert "1:10" ratio string to float (0.1)
     private Float ratioStringToFloat(String ratioStr) {
         if (ratioStr == null || ratioStr.isBlank()) {
             return null;
@@ -129,12 +116,10 @@ public class UserConverter {
                 }
             }
         } catch (NumberFormatException e) {
-            // Invalid format
         }
         return null;
     }
 
-    // Helper: Convert float (0.1) to ratio string "1:10"
     private String floatToRatioString(Float ratio) {
         if (ratio == null || ratio <= 0) {
             return null;

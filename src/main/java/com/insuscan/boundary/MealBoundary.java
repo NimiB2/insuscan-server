@@ -5,68 +5,39 @@ import java.util.Date;
 import java.util.List;
 
 /**
- * MealBoundary - Data Transfer Object (DTO) Represents a complete meal record
+ * MealBoundary: Data Transfer Object (DTO) Represents a complete meal record
  * including vision analysis, user context, and insulin calculations.
  */
 public class MealBoundary {
-	// ============================================================================================
-	// 1. Identity & Media
-	// ============================================================================================
+
 	private MealIdBoundary mealId;
 	private UserIdBoundary userId;
 	private String imageUrl;
 
-	// ============================================================================================
-	// 2. Food Content & Nutrition
-	// ============================================================================================
 	private List<FoodItemBoundary> foodItems;
-	private Float totalCarbs; // Total calculated carbs in grams
+	private Float totalCarbs;
 
-	// ============================================================================================
-	// 3. Vision & Portion Analysis
-	// ============================================================================================
-	private Float estimatedWeight; // Total weight in grams
-	private Float plateVolumeCm3; // Volume from AR/Depth
-	private Float plateDiameterCm; // Detected or referenced diameter
-	private Float plateDepthCm; // Detected depth
-	private Float analysisConfidence; // Overall algorithm confidence (0.0 - 1.0)
-	private Boolean referenceDetected; // Was a reference object (e.g. syringe) found?
-	private String referenceObjectType; // Selected type: INSULIN_PEN, CARD, NONE
-	private String containerType; // FLAT_PLATE, REGULAR_BOWL, DEEP_BOWL
+	private Float estimatedWeight;
+	private Float plateVolumeCm3;
+	private Float plateDiameterCm;
+	private Float plateDepthCm;
+	private Float analysisConfidence;
+	private Boolean referenceDetected;
+	private String referenceObjectType;
+	private String containerType;
 
-	// ============================================================================================
-	// 4. User Context & State
-	// ============================================================================================
-	private Integer currentGlucose; // Glucose level in mg/dL
-	private String activityLevel; // "normal", "light", "intense"
+	private Integer currentGlucose;
 
-	// Flags: Did the user explicitly select these modes? (For UI display)
-	private Boolean wasSickMode;
-	private Boolean wasStressMode;
-
-	// ============================================================================================
-	// 5. Calculation Breakdown
-	// ============================================================================================
-	private Float carbDose; // Base dose for carbohydrates
-	private Float correctionDose; // Dose for high glucose correction
+	private Float carbDose;
+	private Float correctionDose;
 	private String glucoseUnits;
 
-	// Adjustment Values (The actual calculated amount added/subtracted)
-	private Float activeInsulin; // Active Insulin (IOB) subtracted
-	private Float sickAdjustment; // e.g. +1.5 units
-	private Float stressAdjustment; // e.g. +0.5 units
-	private Float exerciseAdjustment; // e.g. -1.0 units
+	private Float activeInsulin;
 
-	// ============================================================================================
-	// 6. Final Dosage
-	// ============================================================================================
-	private Float recommendedDose; // Calculated recommendation
-	private Float actualDose; // What the user actually injected (confirmed)
+	private Float recommendedDose;
+	private Float actualDose;
 
-	// ============================================================================================
-	// 7. Status, Metadata & Feedback
-	// ============================================================================================
-	private MealStatus status; // SCANNED, CONFIRMED, DELETED
+	private MealStatus status;
 	@com.fasterxml.jackson.annotation.JsonFormat(shape = com.fasterxml.jackson.annotation.JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd'T'HH:mm:ss'Z'", timezone = "UTC")
 	private Date scannedAt;
 	@com.fasterxml.jackson.annotation.JsonFormat(shape = com.fasterxml.jackson.annotation.JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd'T'HH:mm:ss'Z'", timezone = "UTC")
@@ -74,18 +45,17 @@ public class MealBoundary {
 	@com.fasterxml.jackson.annotation.JsonFormat(shape = com.fasterxml.jackson.annotation.JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd'T'HH:mm:ss'Z'", timezone = "UTC")
 	private Date completedAt;
 
-	private String note; // User notes
-	private boolean profileComplete; // Flag: Was profile complete during calc?
-	private List<String> missingProfileFields; // List of missing fields if incomplete
-	private String insulinMessage; // Warnings or info messages
-	private String savedPlanName; // The insulin plan selected at the time of the meal
-	private List<String> reviewWarnings; // Warnings or notices from the pipeline
-	private boolean requiresManualReview; // Dose recommendation withheld needs manual review
+	private String note;
+	private boolean profileComplete;
+	private List<String> missingProfileFields;
+	private String insulinMessage;
+	private String savedPlanName;
+	private List<String> reviewWarnings;
+	private boolean requiresManualReview;
 
 	public MealBoundary() {
 	}
 
-	// --- 1. Identity ---
 	public MealIdBoundary getMealId() {
 		return mealId;
 	}
@@ -110,7 +80,6 @@ public class MealBoundary {
 		this.imageUrl = imageUrl;
 	}
 
-	// --- 2. Content ---
 	public List<FoodItemBoundary> getFoodItems() {
 		return foodItems;
 	}
@@ -127,7 +96,6 @@ public class MealBoundary {
 		this.totalCarbs = totalCarbs;
 	}
 
-	// --- 3. Vision Analysis ---
 	public Float getEstimatedWeight() {
 		return estimatedWeight;
 	}
@@ -192,7 +160,6 @@ public class MealBoundary {
 		this.containerType = containerType;
 	}
 
-	// --- 4. User Context ---
 	public Integer getCurrentGlucose() {
 		return currentGlucose;
 	}
@@ -201,31 +168,6 @@ public class MealBoundary {
 		this.currentGlucose = currentGlucose;
 	}
 
-	public String getActivityLevel() {
-		return activityLevel;
-	}
-
-	public void setActivityLevel(String activityLevel) {
-		this.activityLevel = activityLevel;
-	}
-
-	public Boolean getWasSickMode() {
-		return wasSickMode;
-	}
-
-	public void setWasSickMode(Boolean wasSickMode) {
-		this.wasSickMode = wasSickMode;
-	}
-
-	public Boolean getWasStressMode() {
-		return wasStressMode;
-	}
-
-	public void setWasStressMode(Boolean wasStressMode) {
-		this.wasStressMode = wasStressMode;
-	}
-
-	// --- 5. Calculation Breakdown ---
 	public Float getCarbDose() {
 		return carbDose;
 	}
@@ -242,30 +184,6 @@ public class MealBoundary {
 		this.correctionDose = correctionDose;
 	}
 
-	public Float getSickAdjustment() {
-		return sickAdjustment;
-	}
-
-	public void setSickAdjustment(Float sickAdjustment) {
-		this.sickAdjustment = sickAdjustment;
-	}
-
-	public Float getStressAdjustment() {
-		return stressAdjustment;
-	}
-
-	public void setStressAdjustment(Float stressAdjustment) {
-		this.stressAdjustment = stressAdjustment;
-	}
-
-	public Float getExerciseAdjustment() {
-		return exerciseAdjustment;
-	}
-
-	public void setExerciseAdjustment(Float exerciseAdjustment) {
-		this.exerciseAdjustment = exerciseAdjustment;
-	}
-
 	public Float getActiveInsulin() {
 		return activeInsulin;
 	}
@@ -274,7 +192,6 @@ public class MealBoundary {
 		this.activeInsulin = activeInsulin;
 	}
 
-	// --- 6. Final Dosage ---
 	public Float getRecommendedDose() {
 		return recommendedDose;
 	}
@@ -299,7 +216,6 @@ public class MealBoundary {
 		this.glucoseUnits = glucoseUnits;
 	}
 
-	// --- 7. Status & Metadata ---
 	public MealStatus getStatus() {
 		return status;
 	}
@@ -379,6 +295,7 @@ public class MealBoundary {
 	public void setReviewWarnings(List<String> reviewWarnings) {
 		this.reviewWarnings = reviewWarnings;
 	}
+
 	public boolean isRequiresManualReview() {
 		return requiresManualReview;
 	}
@@ -391,7 +308,6 @@ public class MealBoundary {
 	public String toString() {
 		return "MealBoundary{" + "id=" + mealId + ", user=" + userId + ", carbs=" + totalCarbs + ", glucose="
 				+ currentGlucose + ", recDose=" + recommendedDose + ", actDose=" + actualDose + ", status=" + status
-				+ ", sickMode=" + wasSickMode + ", stressMode=" + wasStressMode + ", savedPlanName=" + savedPlanName
-				+ '}';
+				+ ", savedPlanName=" + savedPlanName + '}';
 	}
 }

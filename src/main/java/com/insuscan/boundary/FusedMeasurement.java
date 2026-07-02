@@ -1,5 +1,10 @@
 package com.insuscan.boundary;
 
+/**
+ * Result of fusing multiple size measurements (AR, side image, reference object)
+ * into a single value with a confidence score and the source combination used.
+ */
+
 public class FusedMeasurement {
 
     public enum Source {

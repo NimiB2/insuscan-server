@@ -3,31 +3,32 @@ package com.insuscan.data;
 import com.insuscan.enums.UserRole;
 
 import java.util.Date;
+import java.util.List;
 
-// Firestore collection: users
+/**
+ * Firestore document representing a user account. Contains identity,
+ * personal info, medical profile (ICR/ISF/target), dose rounding preference,
+ * and the user's insulin plans.
+ */
 public class UserEntity {
-    
-    private String id;              // Format: systemId_email
-    
+
+    private String id;
+
     private UserRole role;
     private String userName;
     private String avatar;
-    
- // Personal info
+
     private Integer age;
-    private String gender;              // "Male", "Female", "Other", "Prefer not to say"
- 
-    // Dose rounding preference
-    private String doseRounding;        // "0.5" or "1"
-       
-    // Insulin Plans
-    private java.util.List<InsulinPlan> insulinPlans;
-       
-    // Medical profile for insulin calculation
-    private Float insulinCarbRatio;     // Units of insulin per gram of carbs (e.g., 0.1 = 1:10)
-    private Float correctionFactor;     // mg/dL drop per unit of insulin (e.g., 50)
-    private Integer targetGlucose;      // Target blood glucose in mg/dL (e.g., 100)
-    
+    private String gender;
+
+    private String doseRounding;
+
+    private List<InsulinPlan> insulinPlans;
+
+    private Float insulinCarbRatio;
+    private Float correctionFactor;
+    private Integer targetGlucose;
+
     private Date createdAt;
     private Date updatedAt;
 
@@ -36,7 +37,6 @@ public class UserEntity {
         this.updatedAt = new Date();
     }
 
-    // Getters and Setters
     public String getId() {
         return id;
     }
@@ -108,22 +108,39 @@ public class UserEntity {
     public void setUpdatedAt(Date updatedAt) {
         this.updatedAt = updatedAt;
     }
-    
- // === Personal Info ===
-    public Integer getAge() { return age; }
-    public void setAge(Integer age) { this.age = age; }
 
-    public String getGender() { return gender; }
-    public void setGender(String gender) { this.gender = gender; }
+    public Integer getAge() {
+        return age;
+    }
 
-    // === Dose Settings ===
-    public String getDoseRounding() { return doseRounding; }
-    public void setDoseRounding(String doseRounding) { this.doseRounding = doseRounding; }
+    public void setAge(Integer age) {
+        this.age = age;
+    }
 
-    // === Plans ===
-    public java.util.List<InsulinPlan> getInsulinPlans() { return insulinPlans; }
-    public void setInsulinPlans(java.util.List<InsulinPlan> insulinPlans) { this.insulinPlans = insulinPlans; }
-    
+    public String getGender() {
+        return gender;
+    }
+
+    public void setGender(String gender) {
+        this.gender = gender;
+    }
+
+    public String getDoseRounding() {
+        return doseRounding;
+    }
+
+    public void setDoseRounding(String doseRounding) {
+        this.doseRounding = doseRounding;
+    }
+
+    public List<InsulinPlan> getInsulinPlans() {
+        return insulinPlans;
+    }
+
+    public void setInsulinPlans(List<InsulinPlan> insulinPlans) {
+        this.insulinPlans = insulinPlans;
+    }
+
     @Override
     public String toString() {
         return "UserEntity{" +

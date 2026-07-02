@@ -1,6 +1,10 @@
 package com.insuscan.boundary;
 
-// Individual food item detected in a meal
+/**
+ * Individual food item detected in a meal, including its name, quantity,
+ * carb content, and bounding box for client-side segmentation (GrabCut).
+ */
+
 public class FoodItemBoundary {
     private String name;
     private String nameHebrew;
@@ -10,7 +14,7 @@ public class FoodItemBoundary {
     private String usdaFdcId; // USDA FoodData Central ID
     private String note;
 
-    // bbox from Gemini vision (% of image) — client uses for GrabCut
+    // bbox from Gemini vision (% of image), client uses for GrabCut
     private Float bboxXPct;
     private Float bboxYPct;
     private Float bboxWPct;
@@ -51,7 +55,6 @@ public class FoodItemBoundary {
         this.bboxHPct = bboxHPct;
     }
 
-    // Getters and Setters
     public String getName() {
         return name;
     }

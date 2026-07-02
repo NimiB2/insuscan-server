@@ -4,62 +4,49 @@ import com.insuscan.enums.MealStatus;
 import java.util.Date;
 import java.util.List;
 
-// Firestore collection: meals
+/**
+ * Firestore document representing a scanned meal. Contains vision analysis,
+ * user context at meal time, insulin calculation breakdown, and metadata.
+ */
 public class MealEntity {
 
-    // --- Identity ---
-    private String id; // Format: systemId_mealUuid
-    private String userId; // Reference to user who scanned
-    private String imageUrl; // URL to stored meal image
-    private String note; // General note for the entire meal
+    private String id;
+    private String userId;
+    private String imageUrl;
+    private String note;
 
-    // --- Core Data ---
-    private List<FoodItem> foodItems; // Detected food items
-    private Float totalCarbs; // Total carbs in grams
+    private List<FoodItem> foodItems;
+    private Float totalCarbs;
 
-    
-    // --- Portion Analysis & Metadata ---
-    private Float estimatedWeight; // Total weight in grams
+    private Float estimatedWeight;
     private Float plateVolumeCm3;
     private Float plateDiameterCm;
     private Float plateDepthCm;
-    private Float analysisConfidence; // 0.0 to 1.0
-    private Boolean referenceDetected; // Was reference object found
-    private String referenceObjectType; // Selected type: INSULIN_PEN, CARD, NONE
-    private String containerType; // FLAT_PLATE, REGULAR_BOWL, DEEP_BOWL — used for history-based learning
+    private Float analysisConfidence;
+    private Boolean referenceDetected;
+    private String referenceObjectType;
+    private String containerType;
 
-    // --- User Context (State at meal time) ---
-    private Integer currentGlucose; // Blood sugar
-    private String activityLevel; // "normal", "light", "intense"
+    private Integer currentGlucose;
 
-    // --- Insulin Calculation Breakdown ---
-    private Float carbDose; // Dose from carbs alone
-    private Float correctionDose; // Dose from glucose correction
-    private Float sickAdjustment; // Adjustment amount
-    private Float stressAdjustment; // Adjustment amount
-    private Float exerciseAdjustment; // Adjustment amount (negative)
+    private Float carbDose;
+    private Float correctionDose;
 
-    // --- Final Results ---
     private Float recommendedDose;
-    private Float actualDose; // User override
+    private Float actualDose;
     private boolean requiresManualReview;
 
-
-    // --- Status & Timestamps ---
     private MealStatus status;
     private Date scannedAt;
     private Date confirmedAt;
     private Date completedAt;
 
-    // --- Profile Status (for client feedback) ---
     private boolean profileComplete;
     private List<String> missingProfileFields;
     private String insulinMessage;
     private String savedPlanName;
 
-    private Float activeInsulin; // IOB subtracted from dose
-    private Boolean wasSickMode;
-    private Boolean wasStressMode;
+    private Float activeInsulin;
     private List<String> reviewWarnings;
 
     public MealEntity() {
@@ -67,20 +54,19 @@ public class MealEntity {
         this.status = MealStatus.PENDING;
     }
 
-    // ==========================================
-    // Nested Class: Food Item
-    // ==========================================
+    /**
+     * A single food item within a meal, with location bbox for GrabCut.
+     */
     public static class FoodItem {
         private String name;
-        private String nameHebrew; // Hebrew translation if available
-        private Float quantity; // Amount in grams
-        private Float carbs; // Carbs in grams
-        private Float confidence; // Detection confidence 0.0 to 1.0
-        private String usdaFdcId; // USDA FoodData Central ID
+        private String nameHebrew;
+        private Float quantity;
+        private Float carbs;
+        private Float confidence;
+        private String usdaFdcId;
 
-        // This is the field that was missing causing the error
-        private String note; // Specific note/risk for this item (e.g., "High Fat")
-        // bbox from GPT (% of image) — passed through to client for GrabCut
+        private String note;
+
         private Float bboxXPct;
         private Float bboxYPct;
         private Float bboxWPct;
@@ -120,8 +106,6 @@ public class MealEntity {
         public void setBboxHPct(Float bboxHPct) {
             this.bboxHPct = bboxHPct;
         }
-
-        // --- FoodItem Getters & Setters ---
 
         public String getName() {
             return name;
@@ -179,10 +163,6 @@ public class MealEntity {
             this.note = note;
         }
     }
-
-    // ==========================================
-    // Outer Class Getters & Setters
-    // ==========================================
 
     public String getId() {
         return id;
@@ -304,14 +284,6 @@ public class MealEntity {
         this.currentGlucose = currentGlucose;
     }
 
-    public String getActivityLevel() {
-        return activityLevel;
-    }
-
-    public void setActivityLevel(String activityLevel) {
-        this.activityLevel = activityLevel;
-    }
-
     public Float getCarbDose() {
         return carbDose;
     }
@@ -326,30 +298,6 @@ public class MealEntity {
 
     public void setCorrectionDose(Float correctionDose) {
         this.correctionDose = correctionDose;
-    }
-
-    public Float getSickAdjustment() {
-        return sickAdjustment;
-    }
-
-    public void setSickAdjustment(Float sickAdjustment) {
-        this.sickAdjustment = sickAdjustment;
-    }
-
-    public Float getStressAdjustment() {
-        return stressAdjustment;
-    }
-
-    public void setStressAdjustment(Float stressAdjustment) {
-        this.stressAdjustment = stressAdjustment;
-    }
-
-    public Float getExerciseAdjustment() {
-        return exerciseAdjustment;
-    }
-
-    public void setExerciseAdjustment(Float exerciseAdjustment) {
-        this.exerciseAdjustment = exerciseAdjustment;
     }
 
     public Float getRecommendedDose() {
@@ -424,22 +372,6 @@ public class MealEntity {
         this.insulinMessage = insulinMessage;
     }
 
-    public Boolean getWasSickMode() {
-        return wasSickMode;
-    }
-
-    public void setWasSickMode(Boolean wasSickMode) {
-        this.wasSickMode = wasSickMode;
-    }
-
-    public Boolean getWasStressMode() {
-        return wasStressMode;
-    }
-
-    public void setWasStressMode(Boolean wasStressMode) {
-        this.wasStressMode = wasStressMode;
-    }
-
     public Float getActiveInsulin() {
         return activeInsulin;
     }
@@ -463,7 +395,7 @@ public class MealEntity {
     public void setSavedPlanName(String savedPlanName) {
         this.savedPlanName = savedPlanName;
     }
-    
+
     public boolean isRequiresManualReview() {
         return requiresManualReview;
     }
@@ -471,7 +403,7 @@ public class MealEntity {
     public void setRequiresManualReview(boolean requiresManualReview) {
         this.requiresManualReview = requiresManualReview;
     }
-    
+
     @Override
     public String toString() {
         return "MealEntity{" +

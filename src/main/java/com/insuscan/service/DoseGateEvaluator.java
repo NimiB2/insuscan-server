@@ -12,6 +12,11 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+/**
+ * Clinical safety gate that decides whether a calculated dose can be recommended
+ * to the user, based on meal validity and pipeline warnings.
+ */
+
 @Component
 public class DoseGateEvaluator {
 

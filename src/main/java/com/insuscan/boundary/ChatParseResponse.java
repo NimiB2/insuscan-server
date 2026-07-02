@@ -2,6 +2,10 @@ package com.insuscan.boundary;
 
 import java.util.List;
 
+/**
+ * Response from chat parsing: identifies the user's intended action and
+ * carries the parsed payload (food items, glucose, activity, or profile updates).
+ */
 public class ChatParseResponse {
 
     private String action; // "add_food", "set_glucose", "set_activity", "unknown"
@@ -9,14 +13,12 @@ public class ChatParseResponse {
     private Integer glucose; // For "set_glucose" action
     private String activity; // For "set_activity" action
 
-    // For "set_medical_params"
     private Double icr;
     private Double isf;
     private Integer targetGlucose;
 
-    private String message; // Friendly message to display in chat
+    private String message;
 
-    // Constructors
     public ChatParseResponse() {
     }
 
@@ -25,7 +27,6 @@ public class ChatParseResponse {
         this.message = message;
     }
 
-    // Getters and Setters
     public String getAction() {
         return action;
     }
@@ -90,7 +91,9 @@ public class ChatParseResponse {
         this.message = message;
     }
 
-    // Nested food entry for parsed items
+    /**
+     * A single parsed food item from an "add_food" action.
+     */
     public static class FoodEntry {
         private String name;
         private Integer quantity;

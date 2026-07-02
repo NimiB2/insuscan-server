@@ -1,5 +1,9 @@
 package com.insuscan.enums;
 
+/**
+ * Physical dimensions of reference objects used for scale calibration
+ * in food images. Each value carries a scale description sent to Gemini.
+ */
 
 public enum ReferenceObjectDimensions {
 
