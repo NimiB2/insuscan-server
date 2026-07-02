@@ -2,6 +2,7 @@ package com.insuscan.crud;
 
 import com.google.api.core.ApiFuture;
 import com.google.cloud.firestore.*;
+import com.insuscan.data.InsulinPlan;
 import com.insuscan.data.UserEntity;
 import com.insuscan.enums.UserRole;
 import org.slf4j.Logger;
@@ -12,19 +13,22 @@ import java.util.*;
 import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
 
+/**
+ * Firestore-backed repository for {@link UserEntity}, providing CRUD operations,
+ * pagination, and manual mapping to/from Firestore documents.
+ */
 @Repository
 public class UserRepository {
-    
+
     private static final Logger log = LoggerFactory.getLogger(UserRepository.class);
     private static final String COLLECTION_NAME = "users";
-    
+
     private final Firestore firestore;
 
     public UserRepository(Firestore firestore) {
         this.firestore = firestore;
     }
 
-    // Save or update a user
     public UserEntity save(UserEntity user) {
         try {
             user.setUpdatedAt(new Date());
@@ -38,7 +42,6 @@ public class UserRepository {
         }
     }
 
-    // Find user by ID
     public Optional<UserEntity> findById(String id) {
         try {
             DocumentSnapshot doc = firestore.collection(COLLECTION_NAME).document(id).get().get();
@@ -52,7 +55,6 @@ public class UserRepository {
         }
     }
 
-    // Check if user exists
     public boolean existsById(String id) {
         try {
             DocumentSnapshot doc = firestore.collection(COLLECTION_NAME).document(id).get().get();
@@ -63,14 +65,13 @@ public class UserRepository {
         }
     }
 
-    // Find all users with pagination
     public List<UserEntity> findAll(int page, int size) {
         try {
             Query query = firestore.collection(COLLECTION_NAME)
                     .orderBy("createdAt", Query.Direction.DESCENDING)
                     .offset(page * size)
                     .limit(size);
-            
+
             return executeQuery(query);
         } catch (Exception e) {
             log.error("Error finding all users", e);
@@ -78,35 +79,6 @@ public class UserRepository {
         }
     }
 
-    // Find users by role with pagination
-    public List<UserEntity> findByRole(UserRole role, int page, int size) {
-        try {
-            Query query = firestore.collection(COLLECTION_NAME)
-                    .whereEqualTo("role", role.name())
-                    .offset(page * size)
-                    .limit(size);
-            
-            return executeQuery(query);
-        } catch (Exception e) {
-            log.error("Error finding users by role: {}", role, e);
-            throw new RuntimeException("Failed to find users by role", e);
-        }
-    }
-
-    // Find all users by role
-    public List<UserEntity> findByRole(UserRole role) {
-        try {
-            Query query = firestore.collection(COLLECTION_NAME)
-                    .whereEqualTo("role", role.name());
-            
-            return executeQuery(query);
-        } catch (Exception e) {
-            log.error("Error finding users by role: {}", role, e);
-            throw new RuntimeException("Failed to find users by role", e);
-        }
-    }
-
-    // Delete user by ID
     public void deleteById(String id) {
         try {
             firestore.collection(COLLECTION_NAME).document(id).delete().get();
@@ -117,7 +89,6 @@ public class UserRepository {
         }
     }
 
-    // Delete all users
     public void deleteAll() {
         try {
             CollectionReference collection = firestore.collection(COLLECTION_NAME);
@@ -129,7 +100,6 @@ public class UserRepository {
         }
     }
 
-    // Count all users
     public long count() {
         try {
             AggregateQuerySnapshot snapshot = firestore.collection(COLLECTION_NAME)
@@ -143,7 +113,6 @@ public class UserRepository {
         }
     }
 
-    // Helper: execute query and return list
     private List<UserEntity> executeQuery(Query query) throws ExecutionException, InterruptedException {
         QuerySnapshot snapshot = query.get().get();
         return snapshot.getDocuments().stream()
@@ -151,49 +120,41 @@ public class UserRepository {
                 .collect(Collectors.toList());
     }
 
-    // Helper: delete collection in batches
     private void deleteCollection(CollectionReference collection) throws ExecutionException, InterruptedException {
         ApiFuture<QuerySnapshot> future = collection.limit(500).get();
         List<QueryDocumentSnapshot> docs = future.get().getDocuments();
-        
+
         while (!docs.isEmpty()) {
             WriteBatch batch = firestore.batch();
             for (QueryDocumentSnapshot doc : docs) {
                 batch.delete(doc.getReference());
             }
             batch.commit().get();
-            
+
             docs = collection.limit(500).get().get().getDocuments();
         }
     }
 
-    // Helper: convert entity to map for Firestore
     private Map<String, Object> entityToMap(UserEntity entity) {
         Map<String, Object> map = new HashMap<>();
-        
-        // Base fields
+
         map.put("id", entity.getId());
         map.put("role", entity.getRole() != null ? entity.getRole().name() : null);
         map.put("userName", entity.getUserName());
         map.put("avatar", entity.getAvatar());
-        
-        // Medical profile
+
         map.put("insulinCarbRatio", entity.getInsulinCarbRatio());
         map.put("correctionFactor", entity.getCorrectionFactor());
-        map.put("targetGlucose", entity.getTargetGlucose());     
-        
-        // Personal info
+        map.put("targetGlucose", entity.getTargetGlucose());
+
         map.put("age", entity.getAge());
         map.put("gender", entity.getGender());
- 
-        
-        // Dose settings
+
         map.put("doseRounding", entity.getDoseRounding());
 
-     // Insulin Plans
         if (entity.getInsulinPlans() != null) {
             List<Map<String, Object>> plansList = new ArrayList<>();
-            for (com.insuscan.data.InsulinPlan plan : entity.getInsulinPlans()) {
+            for (InsulinPlan plan : entity.getInsulinPlans()) {
                 Map<String, Object> planMap = new HashMap<>();
                 planMap.put("id", plan.getId());
                 planMap.put("name", plan.getName());
@@ -205,74 +166,65 @@ public class UserRepository {
             }
             map.put("insulinPlans", plansList);
         }
-       
-        // Timestamps
+
         map.put("createdAt", entity.getCreatedAt());
         map.put("updatedAt", entity.getUpdatedAt());
-        
+
         return map;
     }
 
-    // Helper: convert Firestore document to entity
     private UserEntity mapToEntity(DocumentSnapshot doc) {
         UserEntity entity = new UserEntity();
-        
-        // Base fields
+
         entity.setId(doc.getString("id"));
-        
+
         String roleStr = doc.getString("role");
         if (roleStr != null) {
             entity.setRole(UserRole.valueOf(roleStr));
         }
-        
+
         entity.setUserName(doc.getString("userName"));
         entity.setAvatar(doc.getString("avatar"));
-        
-        // Medical profile
+
         Double insulinRatio = doc.getDouble("insulinCarbRatio");
         entity.setInsulinCarbRatio(insulinRatio != null ? insulinRatio.floatValue() : null);
-        
+
         Double correctionFactor = doc.getDouble("correctionFactor");
         entity.setCorrectionFactor(correctionFactor != null ? correctionFactor.floatValue() : null);
-        
+
         Long targetGlucose = doc.getLong("targetGlucose");
         entity.setTargetGlucose(targetGlucose != null ? targetGlucose.intValue() : null);
 
-        
-        // Personal info
         Long age = doc.getLong("age");
         entity.setAge(age != null ? age.intValue() : null);
-        
+
         entity.setGender(doc.getString("gender"));
-      
-        // Dose settings
+
         entity.setDoseRounding(doc.getString("doseRounding"));
-       
-     // Insulin Plans
+
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> plansRaw = (List<Map<String, Object>>) doc.get("insulinPlans");
         if (plansRaw != null) {
-            List<com.insuscan.data.InsulinPlan> plans = new ArrayList<>();
-            for (Map<String, Object> map2 : plansRaw) {
-                com.insuscan.data.InsulinPlan plan = new com.insuscan.data.InsulinPlan();
-                plan.setId((String) map2.get("id"));
-                plan.setName((String) map2.get("name"));
-                plan.setDefault(Boolean.TRUE.equals(map2.get("isDefault")));
-                Number icr = (Number) map2.get("icr");
+            List<InsulinPlan> plans = new ArrayList<>();
+            for (Map<String, Object> planMap : plansRaw) {
+                InsulinPlan plan = new InsulinPlan();
+                plan.setId((String) planMap.get("id"));
+                plan.setName((String) planMap.get("name"));
+                plan.setDefault(Boolean.TRUE.equals(planMap.get("isDefault")));
+                Number icr = (Number) planMap.get("icr");
                 if (icr != null) plan.setIcr(icr.floatValue());
-                Number isf = (Number) map2.get("isf");
+                Number isf = (Number) planMap.get("isf");
                 if (isf != null) plan.setIsf(isf.floatValue());
-                Number tg = (Number) map2.get("targetGlucose");
+                Number tg = (Number) planMap.get("targetGlucose");
                 if (tg != null) plan.setTargetGlucose(tg.intValue());
                 plans.add(plan);
             }
             entity.setInsulinPlans(plans);
         }
-        
-        // Timestamps
+
         entity.setCreatedAt(doc.getDate("createdAt"));
         entity.setUpdatedAt(doc.getDate("updatedAt"));
-        
+
         return entity;
     }
 }
