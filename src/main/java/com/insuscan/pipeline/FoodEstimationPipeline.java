@@ -1,12 +1,21 @@
 package com.insuscan.pipeline;
 
+import com.insuscan.pipeline.calculation.NutritionAggregator;
+import com.insuscan.pipeline.calculation.VolumeCalculator;
+import com.insuscan.pipeline.calculation.WeightCalculator;
 import com.insuscan.pipeline.model.PipelineContext;
 import com.insuscan.pipeline.model.PipelineResult;
+import com.insuscan.pipeline.model.PipelineWarning;
 import com.insuscan.pipeline.stage.ArcoreDepthFusionService;
 import com.insuscan.pipeline.stage.CalibrationService;
+import com.insuscan.pipeline.stage.FoodAreaService;
+import com.insuscan.pipeline.stage.FoodDetectionService;
+import com.insuscan.pipeline.stage.FoodHeightService;
+import com.insuscan.pipeline.stage.NutritionAndDensityService;
 import com.insuscan.pipeline.stage.PerspectiveCorrectionService;
 import com.insuscan.pipeline.stage.PlateGeometryService;
 import com.insuscan.pipeline.stage.SamSegmentationService;
+import com.insuscan.pipeline.stage.SanityCheckService;
 import com.insuscan.pipeline.support.ConfidenceAggregator;
 import com.insuscan.pipeline.support.ReferenceObjectRegistry;
 import org.slf4j.Logger;
@@ -19,14 +28,11 @@ import org.springframework.stereotype.Service;
  * <p>This class owns the pipeline flow only — no business logic.
  * Each step is delegated to a dedicated service.</p>
  *
- * <p>Failure policy (per work_plan.md decision #6):</p>
+ * <p>Failure policy:</p>
  * <ul>
  *   <li>FATAL failure at any stage → stop immediately, return error to client</li>
  *   <li>DEGRADED failure → continue with lower confidence, add warning</li>
  * </ul>
- *
- * <p>Current state: SKELETON — all stage methods are stubs returning empty results.
- * Each milestone fills in the real implementations.</p>
  */
 @Service
 public class FoodEstimationPipeline {
@@ -37,34 +43,33 @@ public class FoodEstimationPipeline {
     private final ReferenceObjectRegistry referenceObjectRegistry;
     private final CalibrationService calibrationService;
     private final PlateGeometryService plateGeometryService;
-    private final com.insuscan.pipeline.stage.FoodDetectionService foodDetectionService;
-    private final com.insuscan.pipeline.stage.FoodAreaService foodAreaService;
-    private final com.insuscan.pipeline.stage.FoodHeightService foodHeightService;
-    private final com.insuscan.pipeline.calculation.VolumeCalculator volumeCalculator;
-    private final com.insuscan.pipeline.stage.NutritionAndDensityService nutritionAndDensityService;
-    private final com.insuscan.pipeline.calculation.WeightCalculator weightCalculator;
-    private final com.insuscan.pipeline.calculation.NutritionAggregator nutritionAggregator;
-    private final com.insuscan.pipeline.stage.SanityCheckService sanityCheckService;
+    private final FoodDetectionService foodDetectionService;
+    private final FoodAreaService foodAreaService;
+    private final FoodHeightService foodHeightService;
+    private final VolumeCalculator volumeCalculator;
+    private final NutritionAndDensityService nutritionAndDensityService;
+    private final WeightCalculator weightCalculator;
+    private final NutritionAggregator nutritionAggregator;
+    private final SanityCheckService sanityCheckService;
     private final ArcoreDepthFusionService arcoreDepthFusionService;
     private final PerspectiveCorrectionService perspectiveCorrectionService;
     private final SamSegmentationService samSegmentationService;
 
-    
     public FoodEstimationPipeline(ConfidenceAggregator confidenceAggregator,
-                                   ReferenceObjectRegistry referenceObjectRegistry,
-                                   CalibrationService calibrationService,
-                                   PlateGeometryService plateGeometryService,
-                                   com.insuscan.pipeline.stage.FoodDetectionService foodDetectionService,
-                                   com.insuscan.pipeline.stage.FoodAreaService foodAreaService,
-                                   com.insuscan.pipeline.stage.FoodHeightService foodHeightService,
-                                   com.insuscan.pipeline.calculation.VolumeCalculator volumeCalculator,
-                                   com.insuscan.pipeline.stage.NutritionAndDensityService nutritionAndDensityService,
-                                   com.insuscan.pipeline.calculation.WeightCalculator weightCalculator,
-                                   com.insuscan.pipeline.calculation.NutritionAggregator nutritionAggregator,
-                                   com.insuscan.pipeline.stage.SanityCheckService sanityCheckService,                                
-                                   ArcoreDepthFusionService arcoreDepthFusionService,
-                                   PerspectiveCorrectionService perspectiveCorrectionService,
-                                   SamSegmentationService samSegmentationService) {
+                                  ReferenceObjectRegistry referenceObjectRegistry,
+                                  CalibrationService calibrationService,
+                                  PlateGeometryService plateGeometryService,
+                                  FoodDetectionService foodDetectionService,
+                                  FoodAreaService foodAreaService,
+                                  FoodHeightService foodHeightService,
+                                  VolumeCalculator volumeCalculator,
+                                  NutritionAndDensityService nutritionAndDensityService,
+                                  WeightCalculator weightCalculator,
+                                  NutritionAggregator nutritionAggregator,
+                                  SanityCheckService sanityCheckService,
+                                  ArcoreDepthFusionService arcoreDepthFusionService,
+                                  PerspectiveCorrectionService perspectiveCorrectionService,
+                                  SamSegmentationService samSegmentationService) {
         this.confidenceAggregator = confidenceAggregator;
         this.referenceObjectRegistry = referenceObjectRegistry;
         this.calibrationService = calibrationService;
@@ -80,7 +85,6 @@ public class FoodEstimationPipeline {
         this.arcoreDepthFusionService = arcoreDepthFusionService;
         this.perspectiveCorrectionService = perspectiveCorrectionService;
         this.samSegmentationService = samSegmentationService;
-
     }
 
     /**
@@ -100,7 +104,7 @@ public class FoodEstimationPipeline {
             return PipelineResult.failure(validationError);
         }
 
-     // ── Validate reference object type ─────────────────────────────────
+        // ── Validate reference object type ─────────────────────────────────
         // NONE is allowed (calibration will fall back to standard plate).
         // Any other unknown type is rejected.
 
@@ -112,8 +116,7 @@ public class FoodEstimationPipeline {
                 ". Supported types: INSULIN_PEN, CARD, NONE"
             );
         }
-        
-        
+
         try {
             runStage1_Calibration(ctx);
             if (hasFatalWarning(ctx)) return buildResult(ctx, false, "Calibration failed");
@@ -150,7 +153,7 @@ public class FoodEstimationPipeline {
         return buildResult(ctx, true, null);
     }
 
-    // ── Stage stubs (replaced milestone by milestone) ──────────────────────
+    // ── Stage runners ──────────────────────────────────────────────────────
 
     /** Stage 1 — Milestone 2 */
     private void runStage1_Calibration(PipelineContext ctx) {
@@ -165,7 +168,7 @@ public class FoodEstimationPipeline {
         plateGeometryService.measurePlate(ctx);
         ctx.recordTiming("PLATE_GEOMETRY", System.currentTimeMillis() - start);
     }
-    
+
     private void runStage2_5_PerspectiveCorrection(PipelineContext ctx) {
         long start = System.currentTimeMillis();
         perspectiveCorrectionService.correctPerspective(ctx);
@@ -184,7 +187,7 @@ public class FoodEstimationPipeline {
         samSegmentationService.segmentFoodItems(ctx);
         ctx.recordTiming("SAM_SEGMENTATION", System.currentTimeMillis() - start);
     }
-    
+
     /** Stage 4 — Milestone 3 */
     private void runStage4_FoodArea(PipelineContext ctx) {
         long start = System.currentTimeMillis();
@@ -198,13 +201,13 @@ public class FoodEstimationPipeline {
         foodHeightService.estimateHeights(ctx);
         ctx.recordTiming("FOOD_HEIGHT", System.currentTimeMillis() - start);
     }
-    
+
     private void runStageArcore_DepthFusion(PipelineContext ctx) {
         long start = System.currentTimeMillis();
         arcoreDepthFusionService.fuseDepths(ctx);
         ctx.recordTiming("ARCORE_FUSION", System.currentTimeMillis() - start);
     }
-    
+
     private void runStage5_5_SamSideSegmentation(PipelineContext ctx) {
         long start = System.currentTimeMillis();
         samSegmentationService.segmentSideImage(ctx);
@@ -264,7 +267,7 @@ public class FoodEstimationPipeline {
     private boolean hasFatalWarning(PipelineContext ctx) {
         // A FATAL StageResult surfaces as a CRITICAL warning added by the stage service
         return ctx.getWarnings().stream()
-            .anyMatch(w -> w.getSeverity() == com.insuscan.pipeline.model.PipelineWarning.Severity.CRITICAL);
+            .anyMatch(w -> w.getSeverity() == PipelineWarning.Severity.CRITICAL);
     }
 
     private PipelineResult buildResult(PipelineContext ctx, boolean success, String failureReason) {
@@ -308,7 +311,6 @@ public class FoodEstimationPipeline {
             result.setTotalFatG(ctx.getMealTotals().getTotalFatG());
         }
 
-        // Items requiring validation
         ctx.getFoodItems().stream()
             .filter(item -> item.isRequiresUserValidation() || !item.isFoundInUsda())
             .map(item -> item.getName())

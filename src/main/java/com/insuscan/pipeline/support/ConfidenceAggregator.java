@@ -26,6 +26,8 @@ public class ConfidenceAggregator {
         PipelineWarningCollector.STAGE_WEIGHT,         0.10f
     );
 
+    // ── Public API ────────────────────────────────────────────────────────
+
     /** Minimum overall confidence required for safeForDosing=true. */
     private static final float SAFE_FOR_DOSING_THRESHOLD = 0.65f;
 

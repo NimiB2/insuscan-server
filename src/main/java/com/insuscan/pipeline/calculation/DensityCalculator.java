@@ -8,11 +8,11 @@ import org.springframework.stereotype.Service;
 
 /**
  * Calculates physical density (g/cm³) using a 3-tier strategy system.
- * 
+ *
  * <p>Strategies:</p>
  * <ol>
  *   <li><b>USDA_SERVING:</b> Uses precise volume-to-weight ratios from USDA foodPortions.</li>
- *   <li><b>PROXIMATE_AIRY:</b> Uses Choi & Okos (1986) proximate composition formula, 
+ *   <li><b>PROXIMATE_WITH_TEXTURE:</b> Uses Choi & Okos (1986) proximate composition formula,
  *       multiplied by the vision model's effectiveDensityFactor (for foods with air gaps).</li>
  *   <li><b>PROXIMATE_CALC:</b> Pure Choi & Okos formula (for solid, homogeneous foods).</li>
  * </ol>
@@ -23,7 +23,6 @@ public class DensityCalculator {
     private static final Logger log = LoggerFactory.getLogger(DensityCalculator.class);
 
     public void calculateAndSetDensity(PipelineFoodItem item, NutritionInfo usdaInfo) {
-        // Strategy 1: USDA Serving Portions (Highest precision, lab measured)
         if (usdaInfo.getDensitySource() != null && "USDA".equals(usdaInfo.getDensitySource())
             && usdaInfo.getDensityGPerCm3() != null) {
             
@@ -37,7 +36,6 @@ public class DensityCalculator {
             return;
         }
 
-        // Strategy 2/3: Choi & Okos Proximate Formula
         Float proximateDensity = usdaInfo.calculateDensityFromProximates();
         if (proximateDensity != null) {
             Float factor = item.getEffectiveDensityFactor();
@@ -46,14 +44,12 @@ public class DensityCalculator {
             }
 
             if (factor < 0.95f) {
-                // Strategy 2: Proximate with AI air-gap factor
                 float adjustedDensity = proximateDensity * factor;
                 item.setDensityGPerCm3(adjustedDensity);
                 item.setDensitySource(PipelineFoodItem.DensitySource.PROXIMATE_WITH_TEXTURE);
                 log.info("[Density] {} -> {} g/cm³ (PROXIMATE_WITH_TEXTURE: base {} * factor {})", 
                 	    item.getName(), String.format("%.3f", adjustedDensity), String.format("%.3f", proximateDensity), String.format("%.2f", factor));
             } else {
-                // Strategy 3: Pure Proximate (Solid food)
                 item.setDensityGPerCm3(proximateDensity);
                 item.setDensitySource(PipelineFoodItem.DensitySource.PROXIMATE_CALC);
                 log.info("[Density] {} -> {} g/cm³ (PROXIMATE_CALC)", item.getName(), String.format("%.3f", proximateDensity));
@@ -61,7 +57,6 @@ public class DensityCalculator {
             return;
         }
 
-        // Fallback: Unknown
         item.setDensityGPerCm3(null);
         item.setDensitySource(PipelineFoodItem.DensitySource.UNKNOWN);
         log.warn("[Density] {} -> UNKNOWN (Missing USDA portions and proximates)", item.getName());

@@ -18,6 +18,8 @@ public class ReferenceObjectRegistry {
      */
     public record Dimensions(float lengthCm, float widthCm, float sideViewDimensionCm, String description) {}
 
+    // ── Public API ────────────────────────────────────────────────────────
+
     /**
      * Returns the physical dimensions for the given reference object type string.
      * Returns null if the type is unknown or NONE.

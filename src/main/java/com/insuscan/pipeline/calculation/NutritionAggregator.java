@@ -52,7 +52,7 @@ public class NutritionAggregator {
                         totalFiber += fiber;
                     }
                     
-                    float netCarbs = Math.max(0, carbs - fiber); // Prevent negative net carbs
+                    float netCarbs = Math.max(0, carbs - fiber);
                     item.setNetCarbsG(netCarbs);
                     totalNetCarbs += netCarbs;
                 }

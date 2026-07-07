@@ -5,7 +5,6 @@ import com.insuscan.pipeline.model.PipelineWarning;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
-import com.insuscan.pipeline.support.StandardPlateConfig;
 
 /**
  * Collects and manages warnings throughout the pipeline. Provides convenience
@@ -15,8 +14,9 @@ import com.insuscan.pipeline.support.StandardPlateConfig;
 public class PipelineWarningCollector {
 
 	private static final Logger log = LoggerFactory.getLogger(PipelineWarningCollector.class);
+	
+	// ── Stage constants ───────────────────────────────────────────────────
 
-	// Stage name constants
 	public static final String STAGE_CALIBRATION = "CALIBRATION";
 	public static final String STAGE_PLATE_GEOMETRY = "PLATE_GEOMETRY";
 	public static final String STAGE_FOOD_DETECTION = "FOOD_DETECTION";
@@ -28,6 +28,8 @@ public class PipelineWarningCollector {
 	public static final String STAGE_AGGREGATION = "AGGREGATION";
 	public static final String STAGE_SANITY_CHECK = "SANITY_CHECK";
 	public static final String STAGE_PERSPECTIVE_CORRECTION = "PERSPECTIVE_CORRECTION";
+
+	// ── Core ─────────────────────────────────────────────────────────────
 
 	public void add(PipelineContext ctx, PipelineWarning warning) {
 		ctx.addWarning(warning);
@@ -150,6 +152,8 @@ public class PipelineWarningCollector {
 				String.format("'%s' calculated weight %.1fg is outside plausible range [3g–500g]. Please review.",
 						foodName, weightG)));
 	}
+	
+	// ── Helpers ──────────────────────────────────────────────────────────
 	
 	private static boolean isNone(String selectedType) {
         return selectedType == null || selectedType.isBlank() || "NONE".equalsIgnoreCase(selectedType);

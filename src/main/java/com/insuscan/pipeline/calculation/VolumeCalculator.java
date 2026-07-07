@@ -28,17 +28,16 @@ public class VolumeCalculator {
         float totalVolume = 0f;
 
         for (PipelineFoodItem item : ctx.getFoodItems()) {
-            if (item.getAreaCm2() != null && item.getEffectiveHeightCm() != null) {
+        	if (item.getAreaCm2() != null && item.getEffectiveHeightCm() != null) {
                 float volume = item.getAreaCm2() * item.getEffectiveHeightCm();
                 item.setVolumeCm3(volume);
                 totalVolume += volume;
                 log.info("[Volume] {} -> {} cm³", item.getName(), String.format("%.1f", volume));
-                } else {
+            } else {
                 log.warn("[Volume] Missing area or height for {}", item.getName());
             }
         }
 
-        // Cross-validation: sum of volumes vs container max volume
         if (ctx.getPlateGeometry() != null && totalVolume > 0) {
             PipelineContext.PlateGeometry geom = ctx.getPlateGeometry();
             
@@ -46,8 +45,7 @@ public class VolumeCalculator {
             float diameter = geom.getInnerDiameterCm();
             float depth = geom.getInnerDepthCm();
             
-            // The fill percentage is already a model estimate of how full it is,
-            // but here we check against the ABSOLUTE maximum physical capacity.
+            // Check against absolute physical capacity, not the model's fill estimate.
             float maxVolume = (float) (Math.PI * Math.pow(diameter / 2, 2) * depth);
             
             if (totalVolume > maxVolume) {
