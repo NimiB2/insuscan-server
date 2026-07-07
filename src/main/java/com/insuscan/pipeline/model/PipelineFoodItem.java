@@ -51,7 +51,6 @@ public class PipelineFoodItem {
 	private boolean requiresUserValidation;
 	private Float geminiCoveragePercent;
 
-
 	/**
 	 * Effective density factor (0.3–1.0) estimated by the vision model. Represents
 	 * the fraction of the visual volume that is actual food (vs. air). Used only in
@@ -60,12 +59,11 @@ public class PipelineFoodItem {
 	 */
 	private Float effectiveDensityFactor;
 
-	// ── Stage 3.5: SAM Segmentation ───────────────────────────────────────────
+	// ── Stage 3.5: SAM Segmentation ───────────────────────────────────────
 
 	private Integer maskPixelCount;
 	private Integer imagePixelCount;
 	private Float samMaskScore;
-
 	private float[] boundingBoxSidePct;
 	private Integer maskSidePixelCount;
 	private Integer imageSidePixelCount;
@@ -113,330 +111,113 @@ public class PipelineFoodItem {
 
 	// ── Helpers ───────────────────────────────────────────────────────────
 
-	public boolean hasDensity() {
-		return densityGPerCm3 != null && densityGPerCm3 > 0 && densitySource != DensitySource.UNKNOWN;
-	}
-
-	public boolean canCalculateWeight() {
-		return volumeCm3 != null && hasDensity();
-	}
-
-	public boolean hasBoundingBox() {
-		return boundingBoxPct != null && boundingBoxPct.length == 4;
-	}
-
-	// ── Getters & Setters ─────────────────────────────────────────────────
-
-	public String getName() {
-		return name;
-	}
-
-	public void setName(String name) {
-		this.name = name;
-	}
-
-	public String getBaseIngredient() {
-		return baseIngredient;
-	}
-
-	public void setBaseIngredient(String baseIngredient) {
-		this.baseIngredient = baseIngredient;
-	}
-
-	public String getVisualState() {
-		return visualState;
-	}
-
-	public void setVisualState(String visualState) {
-		this.visualState = visualState;
-	}
-
-	public float[] getBoundingBoxPct() {
-		return boundingBoxPct;
-	}
-
-	public void setBoundingBoxPct(float[] boundingBoxPct) {
-		this.boundingBoxPct = boundingBoxPct;
-	}
-
-	public List<String> getSearchTerms() {
-		return searchTerms;
-	}
-
-	public void setSearchTerms(List<String> searchTerms) {
-		this.searchTerms = searchTerms;
-	}
-
-	public float getDetectionConfidence() {
-		return detectionConfidence;
-	}
-
-	public void setDetectionConfidence(float detectionConfidence) {
-		this.detectionConfidence = detectionConfidence;
-	}
-
-	public boolean isRequiresUserValidation() {
-		return requiresUserValidation;
-	}
-
-	public void setRequiresUserValidation(boolean requiresUserValidation) {
-		this.requiresUserValidation = requiresUserValidation;
-	}
-
-	public Float getEffectiveDensityFactor() {
-		return effectiveDensityFactor;
-	}
-
-	public void setEffectiveDensityFactor(Float effectiveDensityFactor) {
-		this.effectiveDensityFactor = effectiveDensityFactor;
-	}
-
-	public Float getAreaCm2() {
-		return areaCm2;
-	}
-
-	public void setAreaCm2(Float areaCm2) {
-		this.areaCm2 = areaCm2;
-	}
-
-	public Float getCoveragePercent() {
-		return coveragePercent;
-	}
-
-	public void setCoveragePercent(Float coveragePercent) {
-		this.coveragePercent = coveragePercent;
-	}
-
-	public Float getAreaConfidence() {
-		return areaConfidence;
-	}
-
-	public void setAreaConfidence(Float areaConfidence) {
-		this.areaConfidence = areaConfidence;
-	}
-
-	public Float getEffectiveHeightCm() {
-		return effectiveHeightCm;
-	}
-
-	public void setEffectiveHeightCm(Float effectiveHeightCm) {
-		this.effectiveHeightCm = effectiveHeightCm;
-	}
-
-	public Float getHeightConfidence() {
-		return heightConfidence;
-	}
-
-	public void setHeightConfidence(Float heightConfidence) {
-		this.heightConfidence = heightConfidence;
-	}
-
-	public List<String> getHeightWarnings() {
-		return heightWarnings;
-	}
-
-	public void setHeightWarnings(List<String> heightWarnings) {
-		this.heightWarnings = heightWarnings;
-	}
-
-	public Float getVolumeCm3() {
-		return volumeCm3;
-	}
-
-	public void setVolumeCm3(Float volumeCm3) {
-		this.volumeCm3 = volumeCm3;
-	}
-
-	public Float getCarbsPer100g() {
-		return carbsPer100g;
-	}
-
-	public void setCarbsPer100g(Float carbsPer100g) {
-		this.carbsPer100g = carbsPer100g;
-	}
-
-	public Float getProteinPer100g() {
-		return proteinPer100g;
-	}
-
-	public void setProteinPer100g(Float proteinPer100g) {
-		this.proteinPer100g = proteinPer100g;
-	}
-
-	public Float getFatPer100g() {
-		return fatPer100g;
-	}
-
-	public void setFatPer100g(Float fatPer100g) {
-		this.fatPer100g = fatPer100g;
-	}
-
-	public Float getFiberPer100g() {
-		return fiberPer100g;
-	}
-
-	public void setFiberPer100g(Float fiberPer100g) {
-		this.fiberPer100g = fiberPer100g;
-	}
-
-	public Float getWaterPer100g() {
-		return waterPer100g;
-	}
-
-	public void setWaterPer100g(Float waterPer100g) {
-		this.waterPer100g = waterPer100g;
-	}
-
-	public Float getDensityGPerCm3() {
-		return densityGPerCm3;
-	}
-
-	public void setDensityGPerCm3(Float densityGPerCm3) {
-		this.densityGPerCm3 = densityGPerCm3;
-	}
-
-	public DensitySource getDensitySource() {
-		return densitySource;
-	}
-
-	public void setDensitySource(DensitySource densitySource) {
-		this.densitySource = densitySource;
-	}
-
-	public boolean isFoundInUsda() {
-		return foundInUsda;
-	}
-
-	public void setFoundInUsda(boolean foundInUsda) {
-		this.foundInUsda = foundInUsda;
-	}
-
-	public String getUsdaItemId() {
-		return usdaItemId;
-	}
-
-	public void setUsdaItemId(String usdaItemId) {
-		this.usdaItemId = usdaItemId;
-	}
-
-	public Float getWeightG() {
-		return weightG;
-	}
-
-	public void setWeightG(Float weightG) {
-		this.weightG = weightG;
-	}
-
-	public List<String> getWeightWarnings() {
-		return weightWarnings;
-	}
-
-	public void setWeightWarnings(List<String> weightWarnings) {
-		this.weightWarnings = weightWarnings;
-	}
-
-	public Float getCarbsG() {
-		return carbsG;
-	}
-
-	public void setCarbsG(Float carbsG) {
-		this.carbsG = carbsG;
-	}
-
-	public Float getNetCarbsG() {
-		return netCarbsG;
-	}
-
-	public void setNetCarbsG(Float netCarbsG) {
-		this.netCarbsG = netCarbsG;
-	}
-
-	public Float getProteinG() {
-		return proteinG;
-	}
-
-	public void setProteinG(Float proteinG) {
-		this.proteinG = proteinG;
-	}
-
-	public Float getFatG() {
-		return fatG;
-	}
-
-	public void setFatG(Float fatG) {
-		this.fatG = fatG;
-	}
-
-	public Float getFiberG() {
-		return fiberG;
-	}
-
-	public void setFiberG(Float fiberG) {
-		this.fiberG = fiberG;
-	}
+	public boolean hasDensity() { return densityGPerCm3 != null && densityGPerCm3 > 0 && densitySource != DensitySource.UNKNOWN; }
+	public boolean canCalculateWeight() { return volumeCm3 != null && hasDensity(); }
+	public boolean hasBoundingBox() { return boundingBoxPct != null && boundingBoxPct.length == 4; }
+	public boolean hasSideBoundingBox() { return boundingBoxSidePct != null && boundingBoxSidePct.length == 4; }
+
+	// ── Stage 3: Detection — Getters & Setters ────────────────────────────
+
+	public String getName() { return name; }
+	public void setName(String name) { this.name = name; }
+	public String getBaseIngredient() { return baseIngredient; }
+	public void setBaseIngredient(String baseIngredient) { this.baseIngredient = baseIngredient; }
+	public String getVisualState() { return visualState; }
+	public void setVisualState(String visualState) { this.visualState = visualState; }
+	public float[] getBoundingBoxPct() { return boundingBoxPct; }
+	public void setBoundingBoxPct(float[] boundingBoxPct) { this.boundingBoxPct = boundingBoxPct; }
+	public List<String> getSearchTerms() { return searchTerms; }
+	public void setSearchTerms(List<String> searchTerms) { this.searchTerms = searchTerms; }
+	public float getDetectionConfidence() { return detectionConfidence; }
+	public void setDetectionConfidence(float detectionConfidence) { this.detectionConfidence = detectionConfidence; }
+	public boolean isRequiresUserValidation() { return requiresUserValidation; }
+	public void setRequiresUserValidation(boolean requiresUserValidation) { this.requiresUserValidation = requiresUserValidation; }
+	public Float getGeminiCoveragePercent() { return geminiCoveragePercent; }
+	public void setGeminiCoveragePercent(Float geminiCoveragePercent) { this.geminiCoveragePercent = geminiCoveragePercent; }
+	public Float getEffectiveDensityFactor() { return effectiveDensityFactor; }
+	public void setEffectiveDensityFactor(Float effectiveDensityFactor) { this.effectiveDensityFactor = effectiveDensityFactor; }
+
+	// ── Stage 3.5: SAM Segmentation — Getters & Setters ───────────────────
+
+	public Integer getMaskPixelCount() { return maskPixelCount; }
+	public void setMaskPixelCount(Integer maskPixelCount) { this.maskPixelCount = maskPixelCount; }
+	public Integer getImagePixelCount() { return imagePixelCount; }
+	public void setImagePixelCount(Integer imagePixelCount) { this.imagePixelCount = imagePixelCount; }
+	public Float getSamMaskScore() { return samMaskScore; }
+	public void setSamMaskScore(Float samMaskScore) { this.samMaskScore = samMaskScore; }
+	public float[] getBoundingBoxSidePct() { return boundingBoxSidePct; }
+	public void setBoundingBoxSidePct(float[] boundingBoxSidePct) { this.boundingBoxSidePct = boundingBoxSidePct; }
+	public Integer getMaskSidePixelCount() { return maskSidePixelCount; }
+	public void setMaskSidePixelCount(Integer maskSidePixelCount) { this.maskSidePixelCount = maskSidePixelCount; }
+	public Integer getImageSidePixelCount() { return imageSidePixelCount; }
+	public void setImageSidePixelCount(Integer imageSidePixelCount) { this.imageSidePixelCount = imageSidePixelCount; }
+
+	// ── Stage 4: Area — Getters & Setters ─────────────────────────────────
+
+	public Float getAreaCm2() { return areaCm2; }
+	public void setAreaCm2(Float areaCm2) { this.areaCm2 = areaCm2; }
+	public Float getCoveragePercent() { return coveragePercent; }
+	public void setCoveragePercent(Float coveragePercent) { this.coveragePercent = coveragePercent; }
+	public Float getAreaConfidence() { return areaConfidence; }
+	public void setAreaConfidence(Float areaConfidence) { this.areaConfidence = areaConfidence; }
+
+	// ── Stage 5: Height — Getters & Setters ───────────────────────────────
+
+	public Float getEffectiveHeightCm() { return effectiveHeightCm; }
+	public void setEffectiveHeightCm(Float effectiveHeightCm) { this.effectiveHeightCm = effectiveHeightCm; }
+	public Float getHeightConfidence() { return heightConfidence; }
+	public void setHeightConfidence(Float heightConfidence) { this.heightConfidence = heightConfidence; }
+	public List<String> getHeightWarnings() { return heightWarnings; }
+	public void setHeightWarnings(List<String> heightWarnings) { this.heightWarnings = heightWarnings; }
+
+	// ── Stage 6: Volume — Getters & Setters ───────────────────────────────
+
+	public Float getVolumeCm3() { return volumeCm3; }
+	public void setVolumeCm3(Float volumeCm3) { this.volumeCm3 = volumeCm3; }
+
+	// ── Stage 7: Nutrition & Density — Getters & Setters ──────────────────
+
+	public Float getCarbsPer100g() { return carbsPer100g; }
+	public void setCarbsPer100g(Float carbsPer100g) { this.carbsPer100g = carbsPer100g; }
+	public Float getProteinPer100g() { return proteinPer100g; }
+	public void setProteinPer100g(Float proteinPer100g) { this.proteinPer100g = proteinPer100g; }
+	public Float getFatPer100g() { return fatPer100g; }
+	public void setFatPer100g(Float fatPer100g) { this.fatPer100g = fatPer100g; }
+	public Float getFiberPer100g() { return fiberPer100g; }
+	public void setFiberPer100g(Float fiberPer100g) { this.fiberPer100g = fiberPer100g; }
+	public Float getWaterPer100g() { return waterPer100g; }
+	public void setWaterPer100g(Float waterPer100g) { this.waterPer100g = waterPer100g; }
+	public Float getDensityGPerCm3() { return densityGPerCm3; }
+	public void setDensityGPerCm3(Float densityGPerCm3) { this.densityGPerCm3 = densityGPerCm3; }
+	public DensitySource getDensitySource() { return densitySource; }
+	public void setDensitySource(DensitySource densitySource) { this.densitySource = densitySource; }
+	public boolean isFoundInUsda() { return foundInUsda; }
+	public void setFoundInUsda(boolean foundInUsda) { this.foundInUsda = foundInUsda; }
+	public String getUsdaItemId() { return usdaItemId; }
+	public void setUsdaItemId(String usdaItemId) { this.usdaItemId = usdaItemId; }
+
+	// ── Stage 8: Weight — Getters & Setters ───────────────────────────────
+
+	public Float getWeightG() { return weightG; }
+	public void setWeightG(Float weightG) { this.weightG = weightG; }
+	public List<String> getWeightWarnings() { return weightWarnings; }
+	public void setWeightWarnings(List<String> weightWarnings) { this.weightWarnings = weightWarnings; }
+
+	// ── Stage 9: Nutrition totals — Getters & Setters ─────────────────────
+
+	public Float getCarbsG() { return carbsG; }
+	public void setCarbsG(Float carbsG) { this.carbsG = carbsG; }
+	public Float getNetCarbsG() { return netCarbsG; }
+	public void setNetCarbsG(Float netCarbsG) { this.netCarbsG = netCarbsG; }
+	public Float getProteinG() { return proteinG; }
+	public void setProteinG(Float proteinG) { this.proteinG = proteinG; }
+	public Float getFatG() { return fatG; }
+	public void setFatG(Float fatG) { this.fatG = fatG; }
+	public Float getFiberG() { return fiberG; }
+	public void setFiberG(Float fiberG) { this.fiberG = fiberG; }
 
 	@Override
 	public String toString() {
 		return "PipelineFoodItem{name='" + name + "', weight=" + weightG + "g, netCarbs=" + netCarbsG + "g}";
-	}
-
-	public Integer getMaskPixelCount() {
-		return maskPixelCount;
-	}
-
-	public void setMaskPixelCount(Integer v) {
-		this.maskPixelCount = v;
-	}
-
-	public Integer getImagePixelCount() {
-		return imagePixelCount;
-	}
-
-	public void setImagePixelCount(Integer v) {
-		this.imagePixelCount = v;
-	}
-
-	public Float getSamMaskScore() {
-		return samMaskScore;
-	}
-
-	public void setSamMaskScore(Float v) {
-		this.samMaskScore = v;
-	}
-
-	public float[] getBoundingBoxSidePct() {
-		return boundingBoxSidePct;
-	}
-
-	public void setBoundingBoxSidePct(float[] v) {
-		this.boundingBoxSidePct = v;
-	}
-
-	public boolean hasSideBoundingBox() {
-		return boundingBoxSidePct != null && boundingBoxSidePct.length == 4;
-	}
-
-	public Integer getMaskSidePixelCount() {
-		return maskSidePixelCount;
-	}
-
-	public void setMaskSidePixelCount(Integer v) {
-		this.maskSidePixelCount = v;
-	}
-
-	public Integer getImageSidePixelCount() {
-		return imageSidePixelCount;
-	}
-
-	public void setImageSidePixelCount(Integer v) {
-		this.imageSidePixelCount = v;
-	}
-	
-	public Float getGeminiCoveragePercent() {
-		return geminiCoveragePercent;
-	}
-
-	public void setGeminiCoveragePercent(Float v) {
-		this.geminiCoveragePercent = v;
 	}
 }

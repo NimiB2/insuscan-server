@@ -3,6 +3,9 @@ package com.insuscan.service;
 import com.insuscan.boundary.FusedMeasurement;
 import java.util.List;
 
+/**
+ * Fuses AR-based measurements with vision-model estimates to produce robust plate and food-height dimensions.
+ */
 public interface GeometryFusionService {
 
     FusedMeasurement fuseDiameter(Float arDiameterCm, String topImageBase64,

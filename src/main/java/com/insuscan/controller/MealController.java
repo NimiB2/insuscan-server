@@ -13,6 +13,11 @@ import com.insuscan.service.MealService;
 import java.time.LocalDate;
 import java.util.List;
 
+/**
+ * REST endpoints for meal lifecycle management: creation from scans,
+ * food item updates, confirmation with insulin calculation,
+ * portion analysis, date-range queries, and deletion.
+ */
 @RestController
 @RequestMapping(path = "/meals")
 @CrossOrigin(origins = "*")
@@ -24,7 +29,6 @@ public class MealController {
         this.mealService = mealService;
     }
 
-    // POST /meals/{systemId}/{email} - Create new meal from scan
     @PostMapping(path = "/{systemId}/{email:.+}", produces = MediaType.APPLICATION_JSON_VALUE)
     public MealBoundary createMeal(
             @PathVariable("systemId") String systemId,
@@ -33,8 +37,9 @@ public class MealController {
         return mealService.createMeal(systemId, email, imageUrl);
     }
 
-    // POST /meals/{systemId}/save-scanned - Save full meal data
-    @PostMapping(path = "/{systemId}/{email:.+}/save-scanned", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+    @PostMapping(path = "/{systemId}/{email:.+}/save-scanned",
+            consumes = MediaType.APPLICATION_JSON_VALUE,
+            produces = MediaType.APPLICATION_JSON_VALUE)
     public MealBoundary saveScannedMeal(
             @PathVariable("systemId") String systemId,
             @PathVariable("email") String email,
@@ -42,7 +47,6 @@ public class MealController {
         return mealService.saveScannedMeal(systemId, email, mealBoundary);
     }
 
-    // GET /meals/{systemId}/{mealId} - Get meal by ID
     @GetMapping(path = "/{systemId}/{mealId}", produces = MediaType.APPLICATION_JSON_VALUE)
     public MealBoundary getMeal(
             @PathVariable("systemId") String systemId,
@@ -52,7 +56,6 @@ public class MealController {
                         "Meal not found: " + mealId));
     }
 
-    // GET /meals/user/{systemId}/{email} - Get meals for user
     @GetMapping(path = "/user/{systemId}/{email:.+}", produces = MediaType.APPLICATION_JSON_VALUE)
     public List<MealBoundary> getMealsByUser(
             @PathVariable("systemId") String systemId,
@@ -62,7 +65,6 @@ public class MealController {
         return mealService.getMealsByUser(systemId, email, page, size);
     }
 
-    // GET /meals/recent/{systemId}/{email} - Get recent meals for user
     @GetMapping(path = "/recent/{systemId}/{email:.+}", produces = MediaType.APPLICATION_JSON_VALUE)
     public List<MealBoundary> getRecentMeals(
             @PathVariable("systemId") String systemId,
@@ -71,8 +73,9 @@ public class MealController {
         return mealService.getRecentMeals(systemId, email, count);
     }
 
-    // PUT /meals/{systemId}/{mealId}/fooditems - Update food items
-    @PutMapping(path = "/{systemId}/{mealId}/fooditems", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+    @PutMapping(path = "/{systemId}/{mealId}/fooditems",
+            consumes = MediaType.APPLICATION_JSON_VALUE,
+            produces = MediaType.APPLICATION_JSON_VALUE)
     public MealBoundary updateFoodItems(
             @PathVariable("systemId") String systemId,
             @PathVariable("mealId") String mealId,
@@ -80,22 +83,15 @@ public class MealController {
         return mealService.updateFoodItems(systemId, mealId, foodItems);
     }
 
-    // PUT /meals/{systemId}/{mealId}/confirm - Confirm meal and calculate dose
     @PutMapping(path = "/{systemId}/{mealId}/confirm", produces = MediaType.APPLICATION_JSON_VALUE)
     public MealBoundary confirmMeal(
             @PathVariable("systemId") String systemId,
             @PathVariable("mealId") String mealId,
             @RequestParam(value = "actualDose", required = false) Float actualDose,
-            @RequestParam(value = "currentGlucose", required = false) Integer currentGlucose,
-            @RequestParam(value = "activityLevel", required = false) String activityLevel,
-            @RequestParam(value = "sickMode", required = false) Boolean sickMode,
-            @RequestParam(value = "stressMode", required = false) Boolean stressMode) {
-        return mealService.confirmMeal(systemId, mealId, actualDose,
-                currentGlucose, activityLevel,
-                sickMode, stressMode);
+            @RequestParam(value = "currentGlucose", required = false) Integer currentGlucose) {
+        return mealService.confirmMeal(systemId, mealId, actualDose, currentGlucose);
     }
 
-    // PUT /meals/{systemId}/{mealId}/complete - Mark meal as completed
     @PutMapping(path = "/{systemId}/{mealId}/complete", produces = MediaType.APPLICATION_JSON_VALUE)
     public MealBoundary completeMeal(
             @PathVariable("systemId") String systemId,
@@ -114,7 +110,6 @@ public class MealController {
         return mealService.getMealsByDateRange(systemId, email, from, to, page, size);
     }
 
-    // PUT /meals/{systemId}/{mealId}/portion - Update portion analysis
     @PutMapping(path = "/{systemId}/{mealId}/portion", produces = MediaType.APPLICATION_JSON_VALUE)
     public MealBoundary updatePortionAnalysis(
             @PathVariable("systemId") String systemId,
@@ -130,7 +125,6 @@ public class MealController {
                 diameterCm, depthCm, confidence, refDetected);
     }
 
-    // DELETE /meals/{systemId}/{mealId} - Delete meal
     @DeleteMapping(path = "/{systemId}/{mealId}")
     public void deleteMeal(
             @PathVariable("systemId") String systemId,
@@ -138,7 +132,6 @@ public class MealController {
         mealService.deleteMeal(systemId, mealId);
     }
 
-    // GET /meals/count/{systemId}/{email} - Get meal count for user
     @GetMapping(path = "/count/{systemId}/{email:.+}")
     public long getMealCount(
             @PathVariable("systemId") String systemId,

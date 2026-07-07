@@ -22,11 +22,15 @@ import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+/**
+ * Service implementation for user management: registration, login, profile
+ * updates, admin queries, and medical profile completeness checks.
+ */
 @Service
 public class UserServiceImpl implements UserService {
 
     private static final Logger log = LoggerFactory.getLogger(UserServiceImpl.class);
-    
+
     private final UserRepository userRepository;
     private final UserConverter userConverter;
     private final ApiLogger apiLogger;
@@ -34,7 +38,7 @@ public class UserServiceImpl implements UserService {
     @Value("${spring.application.name}")
     private String systemId;
 
-    public UserServiceImpl(UserRepository userRepository, UserConverter userConverter,ApiLogger apiLogger) {
+    public UserServiceImpl(UserRepository userRepository, UserConverter userConverter, ApiLogger apiLogger) {
         this.userRepository = userRepository;
         this.userConverter = userConverter;
         this.apiLogger = apiLogger;
@@ -42,24 +46,19 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public UserBoundary createUser(NewUserBoundary newUser) {
-        // Validate input
         validateNewUser(newUser);
 
-        // Convert to boundary then entity
         UserBoundary boundary = userConverter.newUserToBoundary(newUser);
         UserEntity entity = userConverter.toEntity(boundary);
 
-        // Check if user already exists
         if (userRepository.existsById(entity.getId())) {
             throw new InsuScanInvalidInputException(
                 "User already exists with email: " + newUser.getEmail());
         }
 
-        // Set timestamps
         entity.setCreatedAt(new Date());
         entity.setUpdatedAt(new Date());
 
-        // Save and return
         UserEntity saved = userRepository.save(entity);
         return userConverter.toBoundary(saved);
     }
@@ -84,7 +83,6 @@ public class UserServiceImpl implements UserService {
             .orElseThrow(() -> new InsuScanNotFoundException(
                 "User not found: " + email));
 
-        // Update fields if provided
         if (update.getUserName() != null) {
             existing.setUserName(update.getUserName());
         }
@@ -95,7 +93,6 @@ public class UserServiceImpl implements UserService {
             existing.setRole(update.getRole());
         }
 
-        // Update medical profile if provided (with validation)
         if (update.getInsulinCarbRatio() != null) {
             if (!InputValidators.isValidInsulinRatio(update.getInsulinCarbRatio())) {
                 throw new InsuScanInvalidInputException(
@@ -119,24 +116,17 @@ public class UserServiceImpl implements UserService {
             existing.setTargetGlucose(update.getTargetGlucose());
         }
 
-        
-     // Personal info
         if (update.getAge() != null) {
             existing.setAge(update.getAge());
         }
         if (update.getGender() != null) {
             existing.setGender(update.getGender());
         }
-      
 
-        // Dose settings
         if (update.getDoseRounding() != null) {
             existing.setDoseRounding(update.getDoseRounding());
         }
 
-       
-        
-        // Insulin Plans
         if (update.getInsulinPlans() != null) {
             existing.setInsulinPlans(update.getInsulinPlans());
         }
@@ -149,7 +139,6 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public List<UserBoundary> getAllUsers(String adminSystemId, String adminEmail, int page, int size) {
-        // Verify admin access
         verifyAdminAccess(adminSystemId, adminEmail);
 
         return userRepository.findAll(page, size)
@@ -160,7 +149,6 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public void deleteAllUsers(String adminSystemId, String adminEmail) {
-        // Verify admin access
         verifyAdminAccess(adminSystemId, adminEmail);
 
         userRepository.deleteAll();
@@ -173,27 +161,20 @@ public class UserServiceImpl implements UserService {
 
         String id = systemId + "_" + email;
         log.debug("Looking up user - systemId: {}, email: {}, constructed ID: {}", systemId, email, id);
-        
+
         Optional<UserEntity> user = userRepository.findById(id);
         if (user.isPresent()) {
             log.debug("User found: {}", id);
         } else {
             log.warn("User not found with ID: {}", id);
         }
-        
+
         return user.map(userConverter::toBoundary);
     }
 
     @Override
-    public boolean userExists(String systemId, String email) {
-        String id = systemId + "_" + email;
-        return userRepository.existsById(id);
-    }
-
-    @Override
-    public void deleteUser(String adminSystemId, String adminEmail, 
+    public void deleteUser(String adminSystemId, String adminEmail,
                           String targetSystemId, String targetEmail) {
-        // Verify admin access
         verifyAdminAccess(adminSystemId, adminEmail);
 
         String targetId = targetSystemId + "_" + targetEmail;
@@ -208,17 +189,14 @@ public class UserServiceImpl implements UserService {
     public boolean hasCompleteMedicalProfile(String systemId, String email) {
         String id = systemId + "_" + email;
         UserEntity user = userRepository.findById(id).orElse(null);
-        
+
         if (user == null) {
             return false;
         }
-        
-        // Medical profile is complete if insulin:carb ratio is set
-        // (correction factor and target glucose have defaults, so not strictly required)
+
         return user.getInsulinCarbRatio() != null;
     }
 
-    // Validate new user registration data
     private void validateNewUser(NewUserBoundary newUser) {
         if (newUser == null) {
             throw new InsuScanInvalidInputException("User data cannot be null");
@@ -230,28 +208,25 @@ public class UserServiceImpl implements UserService {
             throw new InsuScanInvalidInputException("User role is required");
         }
 
-        // Validate optional insulin ratio format
-        if (newUser.getInsulinCarbRatio() != null 
+        if (newUser.getInsulinCarbRatio() != null
                 && !InputValidators.isValidInsulinRatio(newUser.getInsulinCarbRatio())) {
             throw new InsuScanInvalidInputException(
                 "Invalid insulin:carb ratio format. Use format like '1:10'");
         }
 
-        // Validate medical profile if provided
-        if (newUser.getCorrectionFactor() != null 
+        if (newUser.getCorrectionFactor() != null
                 && !InputValidators.isValidCorrectionFactor(newUser.getCorrectionFactor())) {
             throw new InsuScanInvalidInputException(
                 "Invalid correction factor. Must be between 1 and 200 mg/dL per unit");
         }
 
-        if (newUser.getTargetGlucose() != null 
+        if (newUser.getTargetGlucose() != null
                 && !InputValidators.isValidTargetGlucose(newUser.getTargetGlucose())) {
             throw new InsuScanInvalidInputException(
                 "Invalid target glucose. Must be between 60 and 200 mg/dL");
         }
     }
 
-    // Verify the requesting user has admin privileges
     private void verifyAdminAccess(String systemId, String email) {
         InputValidators.validateSystemId(systemId);
         InputValidators.validateEmail(email);

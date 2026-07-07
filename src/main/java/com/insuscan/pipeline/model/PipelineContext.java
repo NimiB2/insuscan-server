@@ -1,12 +1,12 @@
 package com.insuscan.pipeline.model;
 
 import com.insuscan.enums.ReferenceObjectDimensions;
+import com.insuscan.boundary.ArcoreDepthData;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import com.insuscan.boundary.ArcoreDepthData;
 
 /**
  * Shared mutable context that flows through all pipeline stages.
@@ -61,10 +61,10 @@ public class PipelineContext {
 
     /** Bounding box of the plate in the top image [x, y, w, h] as pixel coords, if found. */
     private float[] plateBoundsTopPx;
-    
+
     /** Plate circle in the top image as pixel coords [cx, cy, r], if measured. */
     private float[] plateCircleTopPx;
-    
+
     /** True when calibration fell back to standard plate estimate in BOTH images.
      *  Signals later stages (notably PlateGeometryService) to override Gemini's
      *  plate dimensions with the standard plate config. */
@@ -74,12 +74,12 @@ public class PipelineContext {
 
     private PlateGeometry plateGeometry;
 
- // ── Stage 2.5: Perspective Correction ─────────────────────────────────────
+    // ── Stage 2.5: Perspective Correction ──────────────────────────────────
 
     private boolean perspectiveCorrectionApplied;
     private Float perspectiveTiltDegrees;
-    
-    // ── Stages 3–9: Food Items (accumulated) ──────────────────────────────
+
+    // ── Stages 3–9: Food Items (accumulated) ───────────────────────────────
 
     private List<PipelineFoodItem> foodItems = new ArrayList<>();
 
@@ -87,7 +87,7 @@ public class PipelineContext {
 
     private MealTotals mealTotals;
 
-    // ── Cross-cutting: Warnings & Metrics ─────────────────────────────────
+    // ── Cross-cutting: Warnings & Metrics ──────────────────────────────────
 
     private final List<PipelineWarning> warnings = new ArrayList<>();
     private final Map<String, Long> stepTimingsMs = new HashMap<>();
@@ -102,24 +102,24 @@ public class PipelineContext {
         private float fillPercent;
         private float diameterConfidence;
         private float depthConfidence;
-        private String reasoningNotes;  // From model — for logging only
+        private String reasoningNotes;  // From model - for logging only
 
         public PlateGeometry() {}
 
         public float getInnerDiameterCm() { return innerDiameterCm; }
-        public void setInnerDiameterCm(float v) { this.innerDiameterCm = v; }
+        public void setInnerDiameterCm(float innerDiameterCm) { this.innerDiameterCm = innerDiameterCm; }
         public float getInnerDepthCm() { return innerDepthCm; }
-        public void setInnerDepthCm(float v) { this.innerDepthCm = v; }
+        public void setInnerDepthCm(float innerDepthCm) { this.innerDepthCm = innerDepthCm; }
         public String getContainerType() { return containerType; }
-        public void setContainerType(String v) { this.containerType = v; }
+        public void setContainerType(String containerType) { this.containerType = containerType; }
         public float getFillPercent() { return fillPercent; }
-        public void setFillPercent(float v) { this.fillPercent = v; }
+        public void setFillPercent(float fillPercent) { this.fillPercent = fillPercent; }
         public float getDiameterConfidence() { return diameterConfidence; }
-        public void setDiameterConfidence(float v) { this.diameterConfidence = v; }
+        public void setDiameterConfidence(float diameterConfidence) { this.diameterConfidence = diameterConfidence; }
         public float getDepthConfidence() { return depthConfidence; }
-        public void setDepthConfidence(float v) { this.depthConfidence = v; }
+        public void setDepthConfidence(float depthConfidence) { this.depthConfidence = depthConfidence; }
         public String getReasoningNotes() { return reasoningNotes; }
-        public void setReasoningNotes(String v) { this.reasoningNotes = v; }
+        public void setReasoningNotes(String reasoningNotes) { this.reasoningNotes = reasoningNotes; }
     }
 
     // ── Nested: MealTotals ─────────────────────────────────────────────────
@@ -136,100 +136,97 @@ public class PipelineContext {
         private int itemsRequiringValidation;
 
         public float getTotalWeightG() { return totalWeightG; }
-        public void setTotalWeightG(float v) { this.totalWeightG = v; }
+        public void setTotalWeightG(float totalWeightG) { this.totalWeightG = totalWeightG; }
         public float getTotalNetCarbsG() { return totalNetCarbsG; }
-        public void setTotalNetCarbsG(float v) { this.totalNetCarbsG = v; }
+        public void setTotalNetCarbsG(float totalNetCarbsG) { this.totalNetCarbsG = totalNetCarbsG; }
         public float getTotalCarbsG() { return totalCarbsG; }
-        public void setTotalCarbsG(float v) { this.totalCarbsG = v; }
+        public void setTotalCarbsG(float totalCarbsG) { this.totalCarbsG = totalCarbsG; }
         public float getTotalProteinG() { return totalProteinG; }
-        public void setTotalProteinG(float v) { this.totalProteinG = v; }
+        public void setTotalProteinG(float totalProteinG) { this.totalProteinG = totalProteinG; }
         public float getTotalFatG() { return totalFatG; }
-        public void setTotalFatG(float v) { this.totalFatG = v; }
+        public void setTotalFatG(float totalFatG) { this.totalFatG = totalFatG; }
         public float getTotalFiberG() { return totalFiberG; }
-        public void setTotalFiberG(float v) { this.totalFiberG = v; }
+        public void setTotalFiberG(float totalFiberG) { this.totalFiberG = totalFiberG; }
         public int getItemsFound() { return itemsFound; }
-        public void setItemsFound(int v) { this.itemsFound = v; }
+        public void setItemsFound(int itemsFound) { this.itemsFound = itemsFound; }
         public int getItemsNotInUsda() { return itemsNotInUsda; }
-        public void setItemsNotInUsda(int v) { this.itemsNotInUsda = v; }
+        public void setItemsNotInUsda(int itemsNotInUsda) { this.itemsNotInUsda = itemsNotInUsda; }
         public int getItemsRequiringValidation() { return itemsRequiringValidation; }
-        public void setItemsRequiringValidation(int v) { this.itemsRequiringValidation = v; }
+        public void setItemsRequiringValidation(int itemsRequiringValidation) { this.itemsRequiringValidation = itemsRequiringValidation; }
     }
 
     // ── Convenience helpers ────────────────────────────────────────────────
 
-    public void addWarning(PipelineWarning warning) {
-        warnings.add(warning);
-    }
+    public void addWarning(PipelineWarning warning) { warnings.add(warning); }
+    public void recordTiming(String stage, long ms) { stepTimingsMs.put(stage, ms); }
+    public void recordConfidence(String stage, float confidence) { stepConfidences.put(stage, confidence); }
+    public ReferenceObjectDimensions getReferenceObjectDimensions() { return ReferenceObjectDimensions.fromServerValue(referenceObjectType); }
 
-    public void recordTiming(String stage, long ms) {
-        stepTimingsMs.put(stage, ms);
-    }
-
-    public void recordConfidence(String stage, float confidence) {
-        stepConfidences.put(stage, confidence);
-    }
-
-    public ReferenceObjectDimensions getReferenceObjectDimensions() {
-        return ReferenceObjectDimensions.fromServerValue(referenceObjectType);
-    }
-
-    // ── Getters & Setters ──────────────────────────────────────────────────
+    // ── Input — Getters & Setters ──────────────────────────────────────────
 
     public String getImageTopBase64() { return imageTopBase64; }
-    public void setImageTopBase64(String v) { this.imageTopBase64 = v; }
+    public void setImageTopBase64(String imageTopBase64) { this.imageTopBase64 = imageTopBase64; }
     public String getImageSideBase64() { return imageSideBase64; }
-    public void setImageSideBase64(String v) { this.imageSideBase64 = v; }
+    public void setImageSideBase64(String imageSideBase64) { this.imageSideBase64 = imageSideBase64; }
     public String getReferenceObjectType() { return referenceObjectType; }
-    public void setReferenceObjectType(String v) { this.referenceObjectType = v; }
+    public void setReferenceObjectType(String referenceObjectType) { this.referenceObjectType = referenceObjectType; }
     public String getUserId() { return userId; }
-    public void setUserId(String v) { this.userId = v; }
+    public void setUserId(String userId) { this.userId = userId; }
     public String getSystemId() { return systemId; }
-    public void setSystemId(String v) { this.systemId = v; }
-    
+    public void setSystemId(String systemId) { this.systemId = systemId; }
     public ArcoreDepthData getArcoreDepthData() { return arcoreDepthData; }
-    public void setArcoreDepthData(ArcoreDepthData v) { this.arcoreDepthData = v; }
-
+    public void setArcoreDepthData(ArcoreDepthData arcoreDepthData) { this.arcoreDepthData = arcoreDepthData; }
     public Integer getImageTopWidthPx() { return imageTopWidthPx; }
-    public void setImageTopWidthPx(Integer v) { this.imageTopWidthPx = v; }
+    public void setImageTopWidthPx(Integer imageTopWidthPx) { this.imageTopWidthPx = imageTopWidthPx; }
     public Integer getImageTopHeightPx() { return imageTopHeightPx; }
-    public void setImageTopHeightPx(Integer v) { this.imageTopHeightPx = v; }
+    public void setImageTopHeightPx(Integer imageTopHeightPx) { this.imageTopHeightPx = imageTopHeightPx; }
     public Integer getImageSideWidthPx() { return imageSideWidthPx; }
-    public void setImageSideWidthPx(Integer v) { this.imageSideWidthPx = v; }
+    public void setImageSideWidthPx(Integer imageSideWidthPx) { this.imageSideWidthPx = imageSideWidthPx; }
     public Integer getImageSideHeightPx() { return imageSideHeightPx; }
-    public void setImageSideHeightPx(Integer v) { this.imageSideHeightPx = v; }
+    public void setImageSideHeightPx(Integer imageSideHeightPx) { this.imageSideHeightPx = imageSideHeightPx; }
+
+    // ── Stage 1: Calibration — Getters & Setters ───────────────────────────
 
     public Float getPixelToCmRatioTop() { return pixelToCmRatioTop; }
-    public void setPixelToCmRatioTop(Float v) { this.pixelToCmRatioTop = v; }
+    public void setPixelToCmRatioTop(Float pixelToCmRatioTop) { this.pixelToCmRatioTop = pixelToCmRatioTop; }
     public Float getPixelToCmRatioSide() { return pixelToCmRatioSide; }
-    public void setPixelToCmRatioSide(Float v) { this.pixelToCmRatioSide = v; }
-
-    public boolean isUseStandardPlateFallback() { return useStandardPlateFallback; }
-    public void setUseStandardPlateFallback(boolean v) { this.useStandardPlateFallback = v; }
-    
+    public void setPixelToCmRatioSide(Float pixelToCmRatioSide) { this.pixelToCmRatioSide = pixelToCmRatioSide; }
     public float[] getReferenceBoundsTopPx() { return referenceBoundsTopPx; }
-    public void setReferenceBoundsTopPx(float[] v) { this.referenceBoundsTopPx = v; }
+    public void setReferenceBoundsTopPx(float[] referenceBoundsTopPx) { this.referenceBoundsTopPx = referenceBoundsTopPx; }
     public float[] getReferenceBoundsSidePx() { return referenceBoundsSidePx; }
-    public void setReferenceBoundsSidePx(float[] v) { this.referenceBoundsSidePx = v; }
+    public void setReferenceBoundsSidePx(float[] referenceBoundsSidePx) { this.referenceBoundsSidePx = referenceBoundsSidePx; }
     public float[] getPlateBoundsTopPx() { return plateBoundsTopPx; }
-    public void setPlateBoundsTopPx(float[] v) { this.plateBoundsTopPx = v; }
+    public void setPlateBoundsTopPx(float[] plateBoundsTopPx) { this.plateBoundsTopPx = plateBoundsTopPx; }
     public float[] getPlateCircleTopPx() { return plateCircleTopPx; }
-    public void setPlateCircleTopPx(float[] v) { this.plateCircleTopPx = v; }
+    public void setPlateCircleTopPx(float[] plateCircleTopPx) { this.plateCircleTopPx = plateCircleTopPx; }
+    public boolean isUseStandardPlateFallback() { return useStandardPlateFallback; }
+    public void setUseStandardPlateFallback(boolean useStandardPlateFallback) { this.useStandardPlateFallback = useStandardPlateFallback; }
+
+    // ── Stage 2: Plate Geometry — Getters & Setters ────────────────────────
 
     public PlateGeometry getPlateGeometry() { return plateGeometry; }
-    public void setPlateGeometry(PlateGeometry v) { this.plateGeometry = v; }
+    public void setPlateGeometry(PlateGeometry plateGeometry) { this.plateGeometry = plateGeometry; }
+
+    // ── Stage 2.5: Perspective Correction — Getters & Setters ──────────────
+
+    public boolean isPerspectiveCorrectionApplied() { return perspectiveCorrectionApplied; }
+    public void setPerspectiveCorrectionApplied(boolean perspectiveCorrectionApplied) { this.perspectiveCorrectionApplied = perspectiveCorrectionApplied; }
+    public Float getPerspectiveTiltDegrees() { return perspectiveTiltDegrees; }
+    public void setPerspectiveTiltDegrees(Float perspectiveTiltDegrees) { this.perspectiveTiltDegrees = perspectiveTiltDegrees; }
+
+    // ── Stages 3–9: Food Items — Getters & Setters ─────────────────────────
 
     public List<PipelineFoodItem> getFoodItems() { return foodItems; }
-    public void setFoodItems(List<PipelineFoodItem> v) { this.foodItems = v; }
+    public void setFoodItems(List<PipelineFoodItem> foodItems) { this.foodItems = foodItems; }
+
+    // ── Stage 9: Meal-level totals — Getters & Setters ─────────────────────
 
     public MealTotals getMealTotals() { return mealTotals; }
-    public void setMealTotals(MealTotals v) { this.mealTotals = v; }
+    public void setMealTotals(MealTotals mealTotals) { this.mealTotals = mealTotals; }
+
+    // ── Cross-cutting: Warnings & Metrics — Getters ────────────────────────
 
     public List<PipelineWarning> getWarnings() { return warnings; }
     public Map<String, Long> getStepTimingsMs() { return stepTimingsMs; }
     public Map<String, Float> getStepConfidences() { return stepConfidences; }
-    
-    public boolean isPerspectiveCorrectionApplied() { return perspectiveCorrectionApplied; }
-    public void setPerspectiveCorrectionApplied(boolean v) { this.perspectiveCorrectionApplied = v; }
-    public Float getPerspectiveTiltDegrees() { return perspectiveTiltDegrees; }
-    public void setPerspectiveTiltDegrees(Float v) { this.perspectiveTiltDegrees = v; }
 }

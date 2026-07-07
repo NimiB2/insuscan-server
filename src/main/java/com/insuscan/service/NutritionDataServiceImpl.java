@@ -11,6 +11,9 @@ import org.springframework.web.reactive.function.client.WebClient;
 
 import java.util.*;
 
+/**
+ * USDA FoodData Central client with normalization, best-match selection, density extraction from portion data, and a static fallback table for common foods when the API is unavailable.
+ */
 @Service
 public class NutritionDataServiceImpl implements NutritionDataService {
 
@@ -25,7 +28,6 @@ public class NutritionDataServiceImpl implements NutritionDataService {
 
     private static final String USDA_BASE_URL = "https://api.nal.usda.gov/fdc/v1";
 
-    // Fallback data for common foods when API unavailable
     private static final Map<String, NutritionInfo> FALLBACK_DATA = initFallbackData();
 
     public NutritionDataServiceImpl(WebClient.Builder webClientBuilder,
@@ -49,19 +51,15 @@ public class NutritionDataServiceImpl implements NutritionDataService {
             return NutritionInfo.notFound(foodName);
         }
 
-        // Normalize and prepare search terms
         String normalizedName = foodNameNormalizer.normalize(foodName);
         List<String> searchTerms = foodNameNormalizer.getSearchTerms(normalizedName);
 
-        // Log the lookup start
         apiLogger.usdaStart(foodName, normalizedName, searchTerms);
 
-        // Check if API is available
         if (!isServiceAvailable()) {
             String keyPreview = apiKey != null && apiKey.length() > 5 ? apiKey.substring(0, 5) : "N/A";
             apiLogger.apiKeyStatus("USDA", false, keyPreview);
 
-            // No API key - use fallback
             NutritionInfo fallback = getFallbackNutrition(foodName);
             if (fallback.isFound()) {
                 apiLogger.usdaFallbackHit(foodName, fallback.getCarbsPer100g());
@@ -71,7 +69,6 @@ public class NutritionDataServiceImpl implements NutritionDataService {
             return fallback;
         }
 
-        // API is available - try USDA first!
         try {
             for (String term : searchTerms) {
                 apiLogger.usdaApiCall(term);
@@ -83,7 +80,6 @@ public class NutritionDataServiceImpl implements NutritionDataService {
                 apiLogger.usdaApiResponse(elapsed, results.size(), "N/A");
 
                 if (!results.isEmpty()) {
-                    // Log all results
                     for (NutritionInfo r : results) {
                         log.debug("[USDA]   -> {} (fdcId: {}, carbs: {}g)",
                                 r.getFoodName(), r.getFdcId(), r.getCarbsPer100g());
@@ -98,7 +94,6 @@ public class NutritionDataServiceImpl implements NutritionDataService {
                 }
             }
 
-            // API returned no results - now use fallback
             log.info("[USDA] API returned no results, checking fallback...");
             NutritionInfo fallback = getFallbackNutrition(foodName);
             if (fallback.isFound()) {
@@ -112,7 +107,6 @@ public class NutritionDataServiceImpl implements NutritionDataService {
         } catch (Exception e) {
             apiLogger.usdaError(e.getMessage());
 
-            // API failed - use fallback
             NutritionInfo fallback = getFallbackNutrition(foodName);
             if (fallback.isFound()) {
                 apiLogger.usdaFallbackHit(foodName + " (after API error)", fallback.getCarbsPer100g());
@@ -161,7 +155,6 @@ public class NutritionDataServiceImpl implements NutritionDataService {
             info.setFdcId(fdcId);
             info.setFoodName((String) response.get("description"));
 
-            // Parse nutrients
             @SuppressWarnings("unchecked")
             List<Map<String, Object>> nutrients = (List<Map<String, Object>>) response.get("foodNutrients");
             float fiber = 0f;
@@ -199,7 +192,6 @@ public class NutritionDataServiceImpl implements NutritionDataService {
             }
             info.setFiberPer100g(fiber);
 
-            // Parse serving/portion data for density
             @SuppressWarnings("unchecked")
             List<Map<String, Object>> portions = (List<Map<String, Object>>) response.get("foodPortions");
             if (portions != null && !portions.isEmpty()) {
@@ -242,7 +234,6 @@ public class NutritionDataServiceImpl implements NutritionDataService {
 
         String normalizedLower = normalizedName.toLowerCase();
 
-        // Exact match
         for (NutritionInfo info : results) {
             if (info.getFoodName() != null &&
                     info.getFoodName().toLowerCase().equals(normalizedLower)) {
@@ -250,7 +241,6 @@ public class NutritionDataServiceImpl implements NutritionDataService {
             }
         }
 
-        // Contains match
         for (NutritionInfo info : results) {
             String foodName = info.getFoodName() != null ? info.getFoodName().toLowerCase() : "";
             if (foodName.contains(normalizedLower) || normalizedLower.contains(foodName)) {
@@ -258,7 +248,6 @@ public class NutritionDataServiceImpl implements NutritionDataService {
             }
         }
 
-        // Return first result
         return results.get(0);
     }
 
@@ -286,10 +275,8 @@ public class NutritionDataServiceImpl implements NutritionDataService {
     @SuppressWarnings("unchecked")
     private List<NutritionInfo> searchFoodsInternal(String query, int maxResults) {
         try {
-            // --- MEDICAL GRADE CONFIGURATION ---
             Map<String, Object> requestBody = Map.of(
                     "query", query,
-                    // Fetch enough results to ensure the correct item is present
                     "pageSize", maxResults,
                     // ONLY use lab-verified data (No "Branded" or user-submitted data)
                     "dataType", List.of("Foundation", "SR Legacy"),
@@ -312,9 +299,7 @@ public class NutritionDataServiceImpl implements NutritionDataService {
     }
 
     /**
-     * MEDICAL GRADE RETRIEVAL:
-     * Fetches a pool of high-quality candidates for the Semantic Matcher (Step 3).
-     * Uses strictly "Foundation" and "SR Legacy" data types.
+     * Fetches a pool of high-quality candidates for the semantic matcher, restricted to USDA Foundation and SR Legacy data types.
      */
     public List<NutritionInfo> searchCandidates(String baseIngredient) {
         if (baseIngredient == null || baseIngredient.trim().isEmpty()) {
@@ -393,7 +378,6 @@ public class NutritionDataServiceImpl implements NutritionDataService {
                     info.setFiberPer100g(fiber);
                 }
 
-                // Try to extract density from USDA portion data
                 // USDA returns "foodMeasures" with gramWeight + volume descriptions
                 List<Map> measures = (List<Map>) food.get("foodMeasures");
                 if (measures == null) {
@@ -417,7 +401,7 @@ public class NutritionDataServiceImpl implements NutritionDataService {
                                     info.setDensityGPerCm3(density);
                                     info.setDensitySource("USDA");
                                     info.setServingVolumeCm3(volumeCm3);
-                                    break; // use the first valid one
+                                    break;
                                 }
                             }
                         }
@@ -468,11 +452,9 @@ public class NutritionDataServiceImpl implements NutritionDataService {
         return NutritionInfo.notFound(foodName);
     }
 
-    // Fallback data (same as before)
     private static Map<String, NutritionInfo> initFallbackData() {
         Map<String, NutritionInfo> data = new HashMap<>();
 
-        // Grains
         data.put("rice", createFallback("rice", 28f));
         data.put("white rice", createFallback("white rice", 28f));
         data.put("bread", createFallback("bread", 49f));
@@ -480,7 +462,6 @@ public class NutritionDataServiceImpl implements NutritionDataService {
         data.put("spaghetti", createFallback("spaghetti", 25f));
         data.put("potato", createFallback("potato", 17f));
 
-        // Proteins
         data.put("chicken", createFallback("chicken", 0f));
         data.put("chicken breast", createFallback("chicken breast", 0f));
         data.put("beef", createFallback("beef", 0f));
@@ -488,16 +469,13 @@ public class NutritionDataServiceImpl implements NutritionDataService {
         data.put("salmon", createFallback("salmon", 0f));
         data.put("egg", createFallback("egg", 1.1f));
 
-        // Dairy
         data.put("cheese", createFallback("cheese", 1.3f));
         data.put("milk", createFallback("milk", 5f));
 
-        // Vegetables
         data.put("salad", createFallback("salad", 3f));
         data.put("tomato", createFallback("tomato", 3.9f));
         data.put("broccoli", createFallback("broccoli", 7f));
 
-        // Fruits
         data.put("apple", createFallback("apple", 14f));
         data.put("banana", createFallback("banana", 23f));
 
@@ -522,7 +500,6 @@ public class NutritionDataServiceImpl implements NutritionDataService {
             return 0f;
         String lower = desc.toLowerCase().trim();
 
-        // Standard volume conversions to cm³
         if (lower.contains("cup"))
             return 236.6f;
         if (lower.contains("tablespoon") || lower.contains("tbsp"))

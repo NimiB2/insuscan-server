@@ -7,17 +7,19 @@ package com.insuscan.pipeline.model;
 public class PipelineWarning {
 
     public enum Severity {
-        INFO,    // Informational — no action needed
+        INFO,    // Informational - no action needed
         LOW,     // Minor issue — result still usable
         MEDIUM,  // Notable issue — confidence reduced
         HIGH,    // Serious issue — result may be inaccurate
         CRITICAL // Severe issue — pipeline marked as unreliable
     }
 
+
     private final String sourceStage;  // e.g. "CALIBRATION", "FOOD_DETECTION"
     private final String code;         // e.g. "RATIO_MISMATCH", "FOOD_NOT_IN_USDA"
     private final String message;      // Human-readable, shown to user if needed
     private final Severity severity;
+
 
     public PipelineWarning(String sourceStage, String code, String message, Severity severity) {
         this.sourceStage = sourceStage;
@@ -26,7 +28,7 @@ public class PipelineWarning {
         this.severity = severity;
     }
 
-    // --- Factories ---
+    // ── Factories ─────────────────────────────────────────────────────────
 
     public static PipelineWarning info(String stage, String code, String message) {
         return new PipelineWarning(stage, code, message, Severity.INFO);
@@ -44,7 +46,6 @@ public class PipelineWarning {
         return new PipelineWarning(stage, code, message, Severity.CRITICAL);
     }
 
-    // --- Getters ---
 
     public String getSourceStage() { return sourceStage; }
     public String getCode() { return code; }

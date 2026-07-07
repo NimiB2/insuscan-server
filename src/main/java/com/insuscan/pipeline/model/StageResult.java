@@ -20,13 +20,13 @@ public class StageResult<T> {
         DEGRADED  // Continue, but mark overall confidence as lower
     }
 
+
     private final T value;
     private final float confidence;    // 0.0–1.0, meaningful only on success
     private final boolean success;
     private final String failureReason;
     private final FailureSeverity failureSeverity;
 
-    // --- Private constructor ---
 
     private StageResult(T value, float confidence, boolean success,
                         String failureReason, FailureSeverity failureSeverity) {
@@ -37,7 +37,7 @@ public class StageResult<T> {
         this.failureSeverity = failureSeverity;
     }
 
-    // --- Factories ---
+    // ── Factories ─────────────────────────────────────────────────────────
 
     public static <T> StageResult<T> success(T value, float confidence) {
         return new StageResult<>(value, confidence, true, null, null);
@@ -56,18 +56,11 @@ public class StageResult<T> {
         return new StageResult<>(partialValue, confidence, false, reason, FailureSeverity.DEGRADED);
     }
 
-    // --- Accessors ---
+    // ── Accessors ─────────────────────────────────────────────────────────
 
     public boolean isSuccess() { return success; }
-
-    public boolean isFatal() {
-        return !success && failureSeverity == FailureSeverity.FATAL;
-    }
-
-    public boolean isDegraded() {
-        return !success && failureSeverity == FailureSeverity.DEGRADED;
-    }
-
+    public boolean isFatal() { return !success && failureSeverity == FailureSeverity.FATAL; }
+    public boolean isDegraded() { return !success && failureSeverity == FailureSeverity.DEGRADED; }
     public T getValue() { return value; }
     public float getConfidence() { return confidence; }
     public String getFailureReason() { return failureReason; }

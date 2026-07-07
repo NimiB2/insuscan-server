@@ -11,14 +11,15 @@ import com.insuscan.util.GeminiApiClient;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-//import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-//import org.springframework.web.reactive.function.client.WebClient;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
+/**
+ * AI-backed query optimizer and result ranker for USDA food searches, with time-limited in-memory caching of query optimizations.
+ */
 @Service
 public class FoodSearchAiServiceImpl implements FoodSearchAiService {
 
@@ -47,7 +48,6 @@ public class FoodSearchAiServiceImpl implements FoodSearchAiService {
 			return createBasicOptimization(query);
 		}
 
-		// Check cache
 		String cacheKey = getCacheKey(query, language);
 		CachedOptimization cached = optimizationCache.get(cacheKey);
 		if (cached != null && !cached.isExpired()) {
@@ -59,18 +59,6 @@ public class FoodSearchAiServiceImpl implements FoodSearchAiService {
 		long startTime = System.currentTimeMillis();
 
 		try {
-//			String prompt = buildQueryOptimizationPrompt(query, language);
-//			Map<String, Object> requestBody = buildRequestBody(prompt);
-//
-//			String response = webClient.post().uri("/chat/completions")
-//					.header("Authorization", "Bearer " + openAiApiKey).header("Content-Type", "application/json")
-//					.bodyValue(requestBody).retrieve().bodyToMono(String.class).block();
-//
-//			long elapsed = System.currentTimeMillis() - startTime;
-//			apiLogger.openaiResponseReceived(elapsed, response != null ? response.length() : 0);
-//
-//			SearchOptimization optimization = parseOptimizationResponse(response);
-			
 			String prompt = buildQueryOptimizationPrompt(query, language);
 
 			String content = geminiClient.callFlashModel(prompt);
@@ -80,7 +68,6 @@ public class FoodSearchAiServiceImpl implements FoodSearchAiService {
 
 			SearchOptimization optimization = parseOptimizationDirect(content);
 
-			// Cache the result
 			optimizationCache.put(cacheKey, new CachedOptimization(optimization));
 
 			log.info("[AI-SEARCH] Optimized '{}' -> '{}' ({}ms)", query, optimization.getTranslatedQuery(), elapsed);
@@ -93,7 +80,7 @@ public class FoodSearchAiServiceImpl implements FoodSearchAiService {
 			return createBasicOptimization(query);
 		}
 	}
-	
+
 	private SearchOptimization parseOptimizationDirect(String content) {
 		try {
 			String jsonText = jsonParser.extractJsonObject(content);
@@ -119,7 +106,6 @@ public class FoodSearchAiServiceImpl implements FoodSearchAiService {
 	@Override
 	public List<ScoredFoodResult> rankAndScoreResults(String originalQuery, List<NutritionInfo> results) {
 		if (!isServiceAvailable() || results == null || results.isEmpty()) {
-			// Fallback: return results with default scores and original name as displayName
 			return results.stream().map(r -> new ScoredFoodResult(r, 50, "Standard search", r.getFoodName()))
 					.collect(Collectors.toList());
 		}
@@ -128,18 +114,6 @@ public class FoodSearchAiServiceImpl implements FoodSearchAiService {
 		long startTime = System.currentTimeMillis();
 
 		try {
-//			String prompt = buildRankingPrompt(originalQuery, results);
-//			Map<String, Object> requestBody = buildRequestBody(prompt);
-//
-//			String response = webClient.post().uri("/chat/completions")
-//					.header("Authorization", "Bearer " + openAiApiKey).header("Content-Type", "application/json")
-//					.bodyValue(requestBody).retrieve().bodyToMono(String.class).block();
-//
-//			long elapsed = System.currentTimeMillis() - startTime;
-//			apiLogger.openaiResponseReceived(elapsed, response != null ? response.length() : 0);
-//
-//			List<ScoredFoodResult> scoredResults = parseRankingResponse(response, results);
-			
 			String prompt = buildRankingPrompt(originalQuery, results);
 
 			String content = geminiClient.callFlashModel(prompt);
@@ -149,7 +123,6 @@ public class FoodSearchAiServiceImpl implements FoodSearchAiService {
 
 			List<ScoredFoodResult> scoredResults = parseRankingDirect(content, results);
 
-			// Sort by relevance score (highest first)
 			scoredResults.sort((a, b) -> Integer.compare(b.getRelevanceScore() != null ? b.getRelevanceScore() : 0,
 					a.getRelevanceScore() != null ? a.getRelevanceScore() : 0));
 
@@ -162,7 +135,6 @@ public class FoodSearchAiServiceImpl implements FoodSearchAiService {
 			apiLogger.openaiError(e.getMessage(), e.getClass().getSimpleName());
 			log.error("[AI-SEARCH] Result ranking failed: {}", e.getMessage());
 
-			// Fallback: return results with default scores and original name
 			return results.stream().map(r -> new ScoredFoodResult(r, 50, "AI ranking unavailable", r.getFoodName()))
 					.collect(Collectors.toList());
 		}
@@ -170,12 +142,8 @@ public class FoodSearchAiServiceImpl implements FoodSearchAiService {
 
 	@Override
 	public boolean isServiceAvailable() {
-//		return openAiApiKey != null && !openAiApiKey.isBlank();
 		return geminiClient.isServiceAvailable();
-
 	}
-
-	// ===== PRIVATE HELPER METHODS =====
 
 	private String buildQueryOptimizationPrompt(String query, String language) {
 		return String.format(
@@ -219,7 +187,6 @@ public class FoodSearchAiServiceImpl implements FoodSearchAiService {
 	}
 
 	private String buildRankingPrompt(String originalQuery, List<NutritionInfo> results) {
-		// Build compact results list for the prompt
 		StringBuilder resultsText = new StringBuilder();
 		for (int i = 0; i < results.size(); i++) {
 			NutritionInfo info = results.get(i);
@@ -274,34 +241,6 @@ public class FoodSearchAiServiceImpl implements FoodSearchAiService {
 				""", originalQuery, resultsText.toString());
 	}
 
-//	private Map<String, Object> buildRequestBody(String prompt) {
-//		return Map.of("model", openAiModel, "messages",
-//				List.of(Map.of("role", "system", "content",
-//						"You are a JSON-only response engine. Always return valid JSON."),
-//						Map.of("role", "user", "content", prompt)),
-//				"temperature", 0.3, "response_format", Map.of("type", "json_object"));
-//	}
-
-//	private SearchOptimization parseOptimizationResponse(String jsonResponse) {
-//		try {
-//			String content = extractContentFromResponse(jsonResponse);
-//			String jsonText = extractFirstJsonObject(content);
-//			JsonNode root = objectMapper.readTree(jsonText);
-//
-//			String translatedQuery = root.has("translatedQuery") ? root.get("translatedQuery").asText() : "";
-//
-//			String[] variations = parseJsonArray(root.get("searchVariations"));
-//			String[] excludes = parseJsonArray(root.get("excludeTerms"));
-//			String intent = root.has("intent") ? root.get("intent").asText() : "unknown";
-//
-//			return new SearchOptimization(translatedQuery, variations, excludes, intent);
-//
-//		} catch (Exception e) {
-//			log.error("[AI-SEARCH] Failed to parse optimization response: {}", e.getMessage());
-//			throw new RuntimeException("Failed to parse AI response", e);
-//		}
-//	}
-	
 	private List<ScoredFoodResult> parseRankingDirect(String content, List<NutritionInfo> originalResults) {
 		try {
 			String jsonText = jsonParser.extractJsonObject(content);
@@ -337,53 +276,6 @@ public class FoodSearchAiServiceImpl implements FoodSearchAiService {
 		}
 	}
 
-//	private List<ScoredFoodResult> parseRankingResponse(String jsonResponse, List<NutritionInfo> originalResults) {
-//		try {
-//			String content = extractContentFromResponse(jsonResponse);
-//			String jsonText = extractFirstJsonObject(content);
-//			JsonNode root = objectMapper.readTree(jsonText);
-//
-//			JsonNode rankings = root.get("rankings");
-//			if (rankings == null || !rankings.isArray()) {
-//				throw new IllegalStateException("No rankings array in response");
-//			}
-//
-//			// Create a map of fdcId -> original result for quick lookup
-//			Map<String, NutritionInfo> resultsMap = originalResults.stream()
-//					.collect(Collectors.toMap(NutritionInfo::getFdcId, r -> r, (a, b) -> a));
-//
-//			List<ScoredFoodResult> scoredResults = new ArrayList<>();
-//
-//			for (JsonNode ranking : rankings) {
-//				String fdcId = ranking.get("fdcId").asText();
-//				int score = ranking.get("score").asInt();
-//				String reason = ranking.has("reason") ? ranking.get("reason").asText() : "Relevant match";
-//				String displayName = ranking.has("displayName") ? ranking.get("displayName").asText() : null;
-//
-//				NutritionInfo original = resultsMap.get(fdcId);
-//				if (original != null && score >= 50) { // Filter out low-scoring results
-//					scoredResults.add(new ScoredFoodResult(original, score, reason, displayName));
-//				}
-//			}
-//
-//			return scoredResults;
-//
-//		} catch (Exception e) {
-//			log.error("[AI-SEARCH] Failed to parse ranking response: {}", e.getMessage());
-//			throw new RuntimeException("Failed to parse AI response", e);
-//		}
-//	}
-
-//	private String extractContentFromResponse(String rawResponse) {
-//		return jsonParser.extractContent(rawResponse);
-//	}
-	
-	
-
-	private String extractFirstJsonObject(String raw) {
-		return jsonParser.extractJsonObject(raw);
-	}
-
 	private String[] parseJsonArray(JsonNode arrayNode) {
 		if (arrayNode == null || !arrayNode.isArray()) {
 			return new String[0];
@@ -397,15 +289,12 @@ public class FoodSearchAiServiceImpl implements FoodSearchAiService {
 	}
 
 	private SearchOptimization createBasicOptimization(String query) {
-		// Fallback: create basic optimization without AI
 		return new SearchOptimization(query, new String[] { query }, new String[0], "basic");
 	}
 
 	private String getCacheKey(String query, String language) {
 		return query.toLowerCase().trim() + "|" + language;
 	}
-
-	// ===== CACHE HELPER CLASS =====
 
 	private static class CachedOptimization {
 		final SearchOptimization optimization;

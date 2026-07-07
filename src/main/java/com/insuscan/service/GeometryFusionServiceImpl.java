@@ -4,7 +4,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.insuscan.boundary.FusedMeasurement;
 import com.insuscan.enums.ReferenceObjectDimensions;
-import com.insuscan.util.ApiLogger;
 import com.insuscan.util.GeminiApiClient;
 import com.insuscan.util.OpenAiApiClient;
 import com.insuscan.util.OpenAiJsonParser;
@@ -15,6 +14,9 @@ import org.springframework.stereotype.Service;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Combines AR-provided dimensions with vision-model estimates, applying confidence weighting and conflict detection.
+ */
 @Service
 public class GeometryFusionServiceImpl implements GeometryFusionService {
 
@@ -29,17 +31,14 @@ public class GeometryFusionServiceImpl implements GeometryFusionService {
     private final OpenAiApiClient openAiClient;
     private final GeminiApiClient geminiClient;
     private final OpenAiJsonParser jsonParser;
-    private final ApiLogger apiLogger;
     private final ObjectMapper objectMapper;
 
     public GeometryFusionServiceImpl(OpenAiApiClient openAiClient,
             GeminiApiClient geminiClient,
-            OpenAiJsonParser jsonParser,
-            ApiLogger apiLogger) {
+            OpenAiJsonParser jsonParser) {
         this.openAiClient = openAiClient;
         this.geminiClient = geminiClient;
         this.jsonParser = jsonParser;
-        this.apiLogger = apiLogger;
         this.objectMapper = new ObjectMapper();
     }
 
@@ -97,8 +96,6 @@ public class GeometryFusionServiceImpl implements GeometryFusionService {
 
         return results;
     }
-
-    // ── Core Fusion Logic ──
 
     private FusedMeasurement fuseValues(Float valueA, float confidenceA,
             Float valueB, float confidenceB,
@@ -161,8 +158,6 @@ public class GeometryFusionServiceImpl implements GeometryFusionService {
 
         return new FusedMeasurement(fusedValue, fusedConfidence, source);
     }
-
-    // ── Visual Estimation via AI ──
 
     private Float estimateVisualDiameter(String topImageBase64, String sideImageBase64,
             String referenceObjectType, Float pixelToCmRatio) {
@@ -249,8 +244,6 @@ public class GeometryFusionServiceImpl implements GeometryFusionService {
         return results;
     }
 
-    // ── Prompt Builders ──
-
     private String buildDimensionPrompt(String referenceObjectType, Float pixelToCmRatio,
             boolean measureDiameter, boolean measureDepth) {
 
@@ -303,7 +296,7 @@ public class GeometryFusionServiceImpl implements GeometryFusionService {
             return null;
         }
     }
-    
+
     private float heightCategoryToCm(String category) {
         if (category == null) return 1.5f;
         switch (category.toUpperCase()) {
@@ -314,5 +307,4 @@ public class GeometryFusionServiceImpl implements GeometryFusionService {
             default:            return 1.5f;
         }
     }
-    
 }

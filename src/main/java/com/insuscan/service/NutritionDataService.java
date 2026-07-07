@@ -13,7 +13,6 @@ public interface NutritionDataService {
 
     List<NutritionInfo> searchCandidates(String baseIngredient);
     
-    // Fetch nutrition data by USDA fdcId directly (for Judge results)
     NutritionInfo getNutritionInfoById(String fdcId);
 
     boolean isServiceAvailable();

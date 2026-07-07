@@ -2,6 +2,7 @@ package com.insuscan.pipeline.model;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * The final result returned to the client after all pipeline stages complete.
@@ -62,8 +63,8 @@ public class PipelineResult {
 
     private List<PipelineWarning> warnings = new ArrayList<>();
     private List<String> itemsRequiringValidation = new ArrayList<>();
-    private java.util.Map<String, Long> stepTimingsMs;
-    private java.util.Map<String, Float> stepConfidences;
+    private Map<String, Long> stepTimingsMs;
+    private Map<String, Float> stepConfidences;
 
     // ── Factories ──────────────────────────────────────────────────────────
 
@@ -84,71 +85,65 @@ public class PipelineResult {
         return r;
     }
 
-    // ── Getters & Setters ──────────────────────────────────────────────────
+    // ── Overall status — Getters & Setters ─────────────────────────────────
 
     public boolean isSuccess() { return success; }
     public void setSuccess(boolean success) { this.success = success; }
-
     public String getFailureReason() { return failureReason; }
     public void setFailureReason(String failureReason) { this.failureReason = failureReason; }
-
     public float getOverallConfidence() { return overallConfidence; }
     public void setOverallConfidence(float overallConfidence) { this.overallConfidence = overallConfidence; }
-
     public boolean isSafeForDosing() { return safeForDosing; }
     public void setSafeForDosing(boolean safeForDosing) { this.safeForDosing = safeForDosing; }
+
+    // ── Per-food items — Getters & Setters ─────────────────────────────────
 
     public List<PipelineFoodItem> getFoodItems() { return foodItems; }
     public void setFoodItems(List<PipelineFoodItem> foodItems) { this.foodItems = foodItems; }
 
+    // ── Meal-level totals — Getters & Setters ──────────────────────────────
+
     public Float getTotalWeightG() { return totalWeightG; }
     public void setTotalWeightG(Float totalWeightG) { this.totalWeightG = totalWeightG; }
-
     public Float getTotalNetCarbsG() { return totalNetCarbsG; }
     public void setTotalNetCarbsG(Float totalNetCarbsG) { this.totalNetCarbsG = totalNetCarbsG; }
-
     public Float getTotalCarbsG() { return totalCarbsG; }
     public void setTotalCarbsG(Float totalCarbsG) { this.totalCarbsG = totalCarbsG; }
-
     public Float getTotalProteinG() { return totalProteinG; }
     public void setTotalProteinG(Float totalProteinG) { this.totalProteinG = totalProteinG; }
-
     public Float getTotalFatG() { return totalFatG; }
     public void setTotalFatG(Float totalFatG) { this.totalFatG = totalFatG; }
 
+    // ── Container info — Getters & Setters ─────────────────────────────────
+
     public String getContainerType() { return containerType; }
     public void setContainerType(String containerType) { this.containerType = containerType; }
-
     public Float getPlateDiameterCm() { return plateDiameterCm; }
     public void setPlateDiameterCm(Float plateDiameterCm) { this.plateDiameterCm = plateDiameterCm; }
-
     public Float getPlateDepthCm() { return plateDepthCm; }
     public void setPlateDepthCm(Float plateDepthCm) { this.plateDepthCm = plateDepthCm; }
-
     public Float getPlateFillPercent() { return plateFillPercent; }
     public void setPlateFillPercent(Float plateFillPercent) { this.plateFillPercent = plateFillPercent; }
 
+    // ── Calibration info — Getters & Setters ───────────────────────────────
+
     public Float getPixelToCmRatioTop() { return pixelToCmRatioTop; }
     public void setPixelToCmRatioTop(Float pixelToCmRatioTop) { this.pixelToCmRatioTop = pixelToCmRatioTop; }
-
     public Float getPixelToCmRatioSide() { return pixelToCmRatioSide; }
     public void setPixelToCmRatioSide(Float pixelToCmRatioSide) { this.pixelToCmRatioSide = pixelToCmRatioSide; }
-
     public boolean isRefObjectDetectedTop() { return refObjectDetectedTop; }
     public void setRefObjectDetectedTop(boolean refObjectDetectedTop) { this.refObjectDetectedTop = refObjectDetectedTop; }
-
     public boolean isRefObjectDetectedSide() { return refObjectDetectedSide; }
     public void setRefObjectDetectedSide(boolean refObjectDetectedSide) { this.refObjectDetectedSide = refObjectDetectedSide; }
 
+    // ── Meta — Getters & Setters ───────────────────────────────────────────
+
     public List<PipelineWarning> getWarnings() { return warnings; }
     public void setWarnings(List<PipelineWarning> warnings) { this.warnings = warnings; }
-
     public List<String> getItemsRequiringValidation() { return itemsRequiringValidation; }
     public void setItemsRequiringValidation(List<String> itemsRequiringValidation) { this.itemsRequiringValidation = itemsRequiringValidation; }
-
-    public java.util.Map<String, Long> getStepTimingsMs() { return stepTimingsMs; }
-    public void setStepTimingsMs(java.util.Map<String, Long> stepTimingsMs) { this.stepTimingsMs = stepTimingsMs; }
-
-    public java.util.Map<String, Float> getStepConfidences() { return stepConfidences; }
-    public void setStepConfidences(java.util.Map<String, Float> stepConfidences) { this.stepConfidences = stepConfidences; }
+    public Map<String, Long> getStepTimingsMs() { return stepTimingsMs; }
+    public void setStepTimingsMs(Map<String, Long> stepTimingsMs) { this.stepTimingsMs = stepTimingsMs; }
+    public Map<String, Float> getStepConfidences() { return stepConfidences; }
+    public void setStepConfidences(Map<String, Float> stepConfidences) { this.stepConfidences = stepConfidences; }
 }

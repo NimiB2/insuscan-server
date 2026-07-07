@@ -11,36 +11,18 @@ import com.insuscan.util.GeminiApiClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Analyzes food images via the Gemini vision backend and parses the response into a structured food recognition result.
+ */
 @Service
 public class ImageAnalysisServiceImpl implements ImageAnalysisService {
 
 	private static final Logger log = LoggerFactory.getLogger(ImageAnalysisServiceImpl.class);
 
-	// private final WebClient webClient;
-	// private final ObjectMapper objectMapper;
-	// private final ApiLogger apiLogger;
-	// private final OpenAiJsonParser jsonParser;
-	//
-	// @Value("${openai.api.key:}")
-	// private String openAiApiKey;
-	//
-	// @Value("${openai.model:gpt-4o-mini}")
-	// private String openAiModel;
-	//
-	// public ImageAnalysisServiceImpl(WebClient.Builder webClientBuilder,
-	// ObjectMapper objectMapper,
-	// ApiLogger apiLogger,
-	// OpenAiJsonParser jsonParser) {
-	// this.webClient = webClientBuilder
-	// .baseUrl("https://api.openai.com/v1")
-	// .build();
-	// this.objectMapper = objectMapper;
-	// this.apiLogger = apiLogger;
-	// this.jsonParser = jsonParser;
-	// }
 	private final GeminiApiClient geminiClient;
 	private final ObjectMapper objectMapper;
 	private final ApiLogger apiLogger;
@@ -56,12 +38,6 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
 
 	@Override
 	public FoodRecognitionResult analyzeImage(String base64Image, String referenceObjectType) {
-		// // Log API key status
-		// String keyPreview = (openAiApiKey != null && openAiApiKey.length() > 5)
-		// ? openAiApiKey.substring(0, 5)
-		// : "N/A";
-		// apiLogger.apiKeyStatus("OPENAI", isServiceAvailable(), keyPreview);
-
 		apiLogger.apiKeyStatus("GEMINI", isServiceAvailable(), geminiClient.getKeyPreview());
 
 		if (!isServiceAvailable()) {
@@ -69,17 +45,13 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
 			return FoodRecognitionResult.failure("AI provider is not configured");
 		}
 
-		// Start request
-		// apiLogger.openaiStart(openAiModel, base64Image.length());
 		apiLogger.openaiStart(geminiClient.getVisionModel(), base64Image.length());
 
 		long totalStartTime = System.currentTimeMillis();
 
 		try {
-			// First pass: strict prompt with reference type
 			FoodRecognitionResult parsedResult = analyzeWithPrompt(base64Image, true, referenceObjectType);
 
-			// Retry with relaxed prompt if needed
 			if (parsedResult.getDetectedFoods().isEmpty()) {
 				apiLogger.openaiRetry("Strict prompt returned 0 foods");
 				parsedResult = analyzeWithPrompt(base64Image, false, referenceObjectType);
@@ -88,25 +60,22 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
 			long totalTime = System.currentTimeMillis() - totalStartTime;
 
 			if (parsedResult.getDetectedFoods().isEmpty()) {
-				// v3: If we detected a container type (like REGULAR_BOWL), then an empty list
-				// is
-				// a valid "Empty Bowl" result, not a failure.
+				// Empty items with a non-flat container type is a valid empty-container result, not a failure.
 				if (parsedResult.getDetectedContainerType() != null
 						&& !parsedResult.getDetectedContainerType().equals("FLAT_PLATE")) {
-					log.info("[v3] Empty container detected. Treating as successful scan with 0 foods.");
+					log.info("Empty container detected. Treating as successful scan with 0 foods.");
 				} else {
 					apiLogger.openaiError("No foods detected even with relaxed prompt", "EmptyResult");
 					return FoodRecognitionResult.failure("No foods detected in image. Try a clearer photo.");
 				}
 			}
 
-			// Log parsed foods
 			apiLogger.openaiParsedFoods(parsedResult.getDetectedFoods());
 			apiLogger.openaiSuccess(parsedResult.getDetectedFoods().size(), totalTime);
 
 			parsedResult.setSuccess(true);
 
-			log.info("[v2] Container: type={}, fill={}%", parsedResult.getDetectedContainerType(),
+			log.info("Container: type={}, fill={}%", parsedResult.getDetectedContainerType(),
 					parsedResult.getContainerFillPercent());
 
 			return parsedResult;
@@ -122,65 +91,6 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
 			return FoodRecognitionResult.failure("Image analysis failed: " + e.getMessage());
 		}
 	}
-
-	// @Override
-	// public FoodRecognitionResult analyzeImageFromUrl(String imageUrl, String
-	// referenceObjectType) {
-	// apiLogger.apiKeyStatus("OPENAI", isServiceAvailable(),
-	// openAiApiKey != null && openAiApiKey.length() > 5 ? openAiApiKey.substring(0,
-	// 5) : "N/A");
-	//
-	// if (!isServiceAvailable()) {
-	// return FoodRecognitionResult.failure("AI provider is not configured");
-	// }
-	//
-	// apiLogger.openaiStart(openAiModel, 0);
-	// long startTime = System.currentTimeMillis();
-	//
-	// try {
-	// Map<String, Object> requestBody = buildOpenAiRequestWithUrl(imageUrl,
-	// referenceObjectType);
-	//
-	// String response = webClient.post()
-	// .uri("/chat/completions")
-	// .header("Authorization", "Bearer " + openAiApiKey)
-	// .header("Content-Type", "application/json")
-	// .bodyValue(requestBody)
-	// .retrieve()
-	// .onStatus(status -> status.is4xxClientError() || status.is5xxServerError(),
-	// clientResponse -> clientResponse.bodyToMono(String.class)
-	// .map(body -> new RuntimeException("OpenAI error: " + body)))
-	// .bodyToMono(String.class)
-	// .block();
-	//
-	// long elapsed = System.currentTimeMillis() - startTime;
-	// apiLogger.openaiResponseReceived(elapsed, response != null ?
-	// response.length() : 0);
-	//
-	// if (response == null || response.isBlank()) {
-	// return FoodRecognitionResult.failure("Provider returned empty response");
-	// }
-	//
-	// String content = extractContentFromResponse(response);
-	// apiLogger.openaiRawResponse(content);
-	//
-	// if (content == null || content.isBlank()) {
-	// return FoodRecognitionResult.failure("Could not extract content from
-	// response");
-	// }
-	//
-	// FoodRecognitionResult parsedResult = parseFoodsFromOpenAi(content);
-	// apiLogger.openaiParsedFoods(parsedResult.getDetectedFoods());
-	// parsedResult.setSuccess(true);
-	//
-	// return parsedResult;
-	//
-	// } catch (Exception e) {
-	// apiLogger.openaiError(e.getMessage(), e.getClass().getSimpleName());
-	// return FoodRecognitionResult.failure("Image analysis failed: " +
-	// e.getMessage());
-	// }
-	// }
 
 	@Override
 	public FoodRecognitionResult analyzeImageFromUrl(String imageUrl, String referenceObjectType) {
@@ -221,57 +131,8 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
 
 	@Override
 	public boolean isServiceAvailable() {
-		// return openAiApiKey != null && !openAiApiKey.isBlank();
 		return geminiClient.isServiceAvailable();
 	}
-
-	// private FoodRecognitionResult analyzeWithPrompt(String base64Image, boolean
-	// strict,
-	// String referenceObjectType)
-	// throws Exception {
-	// Map<String, Object> requestBody = buildOpenAiRequestWithBase64(base64Image,
-	// strict, referenceObjectType);
-	//
-	// log.debug("[OPENAI] Sending {} prompt request...", strict ? "STRICT" :
-	// "RELAXED");
-	// long startTime = System.currentTimeMillis();
-	//
-	// String response = webClient.post()
-	// .uri("/chat/completions")
-	// .header("Authorization", "Bearer " + openAiApiKey)
-	// .header("Content-Type", "application/json")
-	// .bodyValue(requestBody)
-	// .retrieve()
-	// .onStatus(status -> status.is4xxClientError() || status.is5xxServerError(),
-	// clientResponse -> {
-	// if (clientResponse.statusCode().value() == 429) {
-	// return clientResponse.bodyToMono(String.class)
-	// .map(body -> new RuntimeException("Rate limit exceeded: " + body));
-	// }
-	// return clientResponse.bodyToMono(String.class)
-	// .map(body -> new RuntimeException("OpenAI API error: " + body));
-	// })
-	// .bodyToMono(String.class)
-	// .block();
-	//
-	// long elapsed = System.currentTimeMillis() - startTime;
-	// apiLogger.openaiResponseReceived(elapsed, response != null ?
-	// response.length() : 0);
-	//
-	// if (response == null || response.isBlank()) {
-	// throw new IllegalStateException("Provider returned empty response");
-	// }
-	//
-	// String content = extractContentFromResponse(response);
-	// apiLogger.openaiRawResponse(content);
-	//
-	// if (content == null || content.isBlank()) {
-	// throw new IllegalStateException("Could not extract content from OpenAI
-	// response");
-	// }
-	//
-	// return parseFoodsFromOpenAi(content);
-	// }
 
 	private FoodRecognitionResult analyzeWithPrompt(String base64Image, boolean strict, String referenceObjectType)
 			throws Exception {
@@ -290,56 +151,10 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
 		return parseFoodsFromOpenAi(content);
 	}
 
-	// private Map<String, Object> buildOpenAiRequestWithBase64(String base64Image,
-	// boolean strict,
-	// String referenceObjectType) {
-	// String prompt = buildPrompt(strict, referenceObjectType);
-	//
-	// Map<String, Object> textContent = Map.of("type", "text", "text", prompt);
-	// Map<String, Object> imageUrlObj = Map.of("url", "data:image/jpeg;base64," +
-	// base64Image);
-	// Map<String, Object> imageContent = Map.of("type", "image_url", "image_url",
-	// imageUrlObj);
-	//
-	// Map<String, Object> userMessage = Map.of(
-	// "role", "user",
-	// "content", List.of(textContent, imageContent));
-	//
-	// return Map.of(
-	// "model", openAiModel,
-	// "messages", List.of(userMessage),
-	// "temperature", 0.0,
-	// "max_tokens", 1200,
-	// "response_format", Map.of("type", "json_object"));
-	// }
-
-	// private Map<String, Object> buildOpenAiRequestWithUrl(String imageUrl, String
-	// referenceObjectType) {
-	// String prompt = buildPrompt(true, referenceObjectType);
-	//
-	// Map<String, Object> textContent = Map.of("type", "text", "text", prompt);
-	// Map<String, Object> imageUrlObj = Map.of("url", imageUrl);
-	// Map<String, Object> imageContent = Map.of("type", "image_url", "image_url",
-	// imageUrlObj);
-	//
-	// Map<String, Object> userMessage = Map.of(
-	// "role", "user",
-	// "content", List.of(textContent, imageContent));
-	//
-	// return Map.of(
-	// "model", openAiModel,
-	// "messages", List.of(userMessage),
-	// "temperature", 0.0,
-	// "max_tokens", 1200,
-	// "response_format", Map.of("type", "json_object"));
-	// }
-
 	private String buildPrompt(boolean strict, String referenceObjectType) {
-		// Determine instructions based on selected reference type
 		boolean isCard = referenceObjectType != null && (referenceObjectType.toLowerCase().contains("card")
 				|| referenceObjectType.toLowerCase().contains("id"));
 
-		// If strict is false (fallback mode), be more encouraging but still accurate
 		if (!strict) {
 			boolean isSyringe = referenceObjectType != null && referenceObjectType.toLowerCase().contains("syringe");
 			String refInstructions = isCard
@@ -391,7 +206,6 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
 					.formatted(refInstructions);
 		}
 
-		// --- MEDICAL GRADE PROMPT ---
 		String referenceInstruction;
 		if (isCard) {
 			referenceInstruction = "- REFERENCE OBJECT: Look for a CREDIT CARD / ID CARD near the food. Known dimensions: "
@@ -512,7 +326,6 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
 		JsonNode root = objectMapper.readTree(jsonText);
 		JsonNode items = root.get("items");
 
-		// v2: Extract container-level fields
 		FoodRecognitionResult result = new FoodRecognitionResult();
 		if (root.has("container_fill_percent")) {
 			result.setContainerFillPercent((float) root.get("container_fill_percent").asDouble());
@@ -524,7 +337,6 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
 		List<FoodRecognitionResult.RecognizedFoodItem> results = new ArrayList<>();
 		if (items != null && items.isArray()) {
 			for (JsonNode item : items) {
-				// 1. Basic Fields extraction
 				String visualName = item.has("visual_name") ? item.get("visual_name").asText()
 						: (item.has("name") ? item.get("name").asText() : "unknown");
 
@@ -539,7 +351,6 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
 				else if (item.has("estimatedPortionGrams"))
 					weight = (float) item.get("estimatedPortionGrams").asDouble();
 
-				// 2. New Medical Fields extraction
 				String baseIngredient = item.has("base_ingredient") ? item.get("base_ingredient").asText() : visualName;
 				String state = item.has("visual_state") ? item.get("visual_state").asText() : "UNKNOWN";
 				boolean needsValidation = item.has("requires_user_validation")
@@ -552,17 +363,14 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
 					}
 				}
 
-				// 3. Construct the Object
 				FoodRecognitionResult.RecognizedFoodItem recognizedItem = new FoodRecognitionResult.RecognizedFoodItem(
 						visualName, conf, weight);
 
-				// Set the new fields
 				recognizedItem.setBaseIngredient(baseIngredient);
 				recognizedItem.setVisualState(state);
 				recognizedItem.setRequiresValidation(needsValidation);
 				recognizedItem.setRiskFlags(risks);
 
-				// Spatial fields for physics-based calculation
 				if (item.has("coverage_percent")) {
 					recognizedItem.setCoveragePercent((float) item.get("coverage_percent").asDouble());
 				}
@@ -570,12 +378,11 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
 				if (item.has("height_category")) {
 					recognizedItem.setHeightCategory(item.get("height_category").asText());
 				}
-				
+
 				if (item.has("texture_type")) {
 				    recognizedItem.setTextureType(item.get("texture_type").asText());
 				}
-				
-				// bounding box for client-side GrabCut segmentation
+
 				if (item.has("bounding_box")) {
 					JsonNode bbox = item.get("bounding_box");
 					recognizedItem.setBoundingBox((float) bbox.path("x_pct").asDouble(0),
@@ -583,7 +390,6 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
 							(float) bbox.path("h_pct").asDouble(0));
 				}
 
-				// Gemini-provided USDA search terms (replaces hardcoded FoodNameNormalizer)
 				List<String> searchTerms = new ArrayList<>();
 				if (item.has("usda_search_terms") && item.get("usda_search_terms").isArray()) {
 					for (JsonNode term : item.get("usda_search_terms")) {
@@ -598,10 +404,6 @@ public class ImageAnalysisServiceImpl implements ImageAnalysisService {
 		result.setDetectedFoods(results);
 		return result;
 	}
-
-	// private String extractContentFromResponse(String rawResponse) {
-	// return jsonParser.extractContent(rawResponse);
-	// }
 
 	private String extractFirstJsonObject(String raw) {
 		return jsonParser.extractJsonObject(raw);
