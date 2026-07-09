@@ -1,13 +1,17 @@
 
 package com.insuscan.pipeline.stage.calibration;
 
-import com.insuscan.enums.ReferenceObjectDimensions;
-import com.insuscan.pipeline.stage.CalibrationService.DetectionResult;
+import com.insuscan.pipeline.stage.calibration.GeminiCalibrationDetector.DetectionResult;
 import com.insuscan.pipeline.support.ReferenceObjectRegistry;
+import com.insuscan.pipeline.support.StandardPlateConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
-import com.insuscan.pipeline.support.StandardPlateConfig;
+
+/**
+ * Resolves calibration results into a final pixel-to-cm ratio, applying a 3-tier fallback:
+ * primary object detected → alternative object detected → standard plate size estimate.
+ */
 
 @Component
 public class CalibrationFallbackResolver {
@@ -37,7 +41,7 @@ public class CalibrationFallbackResolver {
         ) {}
 
     public FallbackResolution resolve(DetectionResult result, String imageView, String selectedType) {
-    	if (result.found()) {
+        if (result.found()) {
             return new FallbackResolution(
                 result.pixelToCmRatio(),
                 FallbackSource.OBJECT_FOUND,

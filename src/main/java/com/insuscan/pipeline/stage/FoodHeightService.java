@@ -1,19 +1,19 @@
 package com.insuscan.pipeline.stage;
 
-
 import com.insuscan.pipeline.model.PipelineContext;
 import com.insuscan.pipeline.model.PipelineFoodItem;
+import com.insuscan.pipeline.model.PipelineWarning;
+import com.insuscan.pipeline.stage.height.HeightResponseParser;
+import com.insuscan.pipeline.stage.height.HeightResult;
 import com.insuscan.pipeline.support.PipelineWarningCollector;
 import com.insuscan.util.GeminiApiClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
-import com.insuscan.pipeline.stage.height.HeightResponseParser;
-import com.insuscan.pipeline.stage.height.HeightResult;
+
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
-
 /**
  * Stage 5 — Estimates the effective height of each food item using the side
  * image.
@@ -27,6 +27,18 @@ import java.util.stream.Collectors;
 public class FoodHeightService {
 
 	private static final Logger log = LoggerFactory.getLogger(FoodHeightService.class);
+
+	/** Default effective height (cm) used when no height data is available for an item. */
+	private static final float DEFAULT_HEIGHT_CM = 2.5f;
+
+	/** Height above this multiple of the plate depth triggers a "height exceeds depth" warning. */
+	private static final float HEIGHT_EXCEEDS_DEPTH_MULTIPLIER = 1.5f;
+
+	/** Confidence assigned when the model omitted an item from its response. */
+	private static final float MODEL_MISS_CONFIDENCE = 0.1f;
+
+	/** Confidence assigned when falling back to default heights entirely (no side calibration or empty response). */
+	private static final float DEFAULT_HEIGHT_CONFIDENCE = 0.2f;
 
 	private final GeminiApiClient geminiApiClient;
 	private final PipelineWarningCollector warningCollector;
@@ -73,10 +85,10 @@ public class FoodHeightService {
 							warningCollector.heightNotVisible(ctx, item.getName());
 							// Fallback to plate depth if not visible
 							float defaultH = ctx.getPlateGeometry() != null ? ctx.getPlateGeometry().getInnerDepthCm()
-									: 2.5f;
+									: DEFAULT_HEIGHT_CM;
 							item.setEffectiveHeightCm(defaultH);
 						} else if (ctx.getPlateGeometry() != null
-						        && hr.heightCm() > ctx.getPlateGeometry().getInnerDepthCm() * 1.5f) {
+						        && hr.heightCm() > ctx.getPlateGeometry().getInnerDepthCm() * HEIGHT_EXCEEDS_DEPTH_MULTIPLIER) {
 						    warningCollector.heightExceedsPlateDepth(ctx, item.getName(), hr.heightCm(),
 						            ctx.getPlateGeometry().getInnerDepthCm());
 						}
@@ -88,9 +100,9 @@ public class FoodHeightService {
 						        String.format("%.2f", hr.confidence()));
 					} else {
 						log.warn("[FoodHeight] Model missed item: {}", item.getName());
-						item.setEffectiveHeightCm(2.5f);
-						item.setHeightConfidence(0.1f);
-						totalConf += 0.1f;
+						item.setEffectiveHeightCm(DEFAULT_HEIGHT_CM);
+						item.setHeightConfidence(MODEL_MISS_CONFIDENCE);
+						totalConf += MODEL_MISS_CONFIDENCE;
 						count++;
 					}
 				}
@@ -103,7 +115,7 @@ public class FoodHeightService {
 		} catch (Exception e) {
 			log.error("[FoodHeight] Vision model call failed: {}", e.getMessage());
 			warningCollector.add(ctx,
-					com.insuscan.pipeline.model.PipelineWarning.high(PipelineWarningCollector.STAGE_FOOD_HEIGHT,
+					PipelineWarning.high(PipelineWarningCollector.STAGE_FOOD_HEIGHT,
 							"HEIGHT_ESTIMATION_FAILED", "Failed to estimate food heights: " + e.getMessage()));
 			applyDefaultHeights(ctx, foods);
 		}
@@ -112,12 +124,12 @@ public class FoodHeightService {
 	}
 
 	private void applyDefaultHeights(PipelineContext ctx, List<PipelineFoodItem> foods) {
-		float defaultH = ctx.getPlateGeometry() != null ? ctx.getPlateGeometry().getInnerDepthCm() : 2.5f;
+		float defaultH = ctx.getPlateGeometry() != null ? ctx.getPlateGeometry().getInnerDepthCm() : DEFAULT_HEIGHT_CM;
 		for (PipelineFoodItem item : foods) {
 			item.setEffectiveHeightCm(defaultH);
-			item.setHeightConfidence(0.2f);
+			item.setHeightConfidence(DEFAULT_HEIGHT_CONFIDENCE);
 		}
-		ctx.recordConfidence("FOOD_HEIGHT", 0.2f);
+		ctx.recordConfidence("FOOD_HEIGHT", DEFAULT_HEIGHT_CONFIDENCE);
 	}
 
 	private String buildPrompt(PipelineContext ctx, List<PipelineFoodItem> foods) {
@@ -144,7 +156,5 @@ public class FoodHeightService {
 				+ "    \"effective_height_cm\": <float>,\n" + "    \"confidence\": <float 0.0-1.0>,\n"
 				+ "    \"bbox_side_pct\": { \"x\": <float 0-100>, \"y\": <float 0-100>, \"w\": <float 0-100>, \"h\": <float 0-100> }\n"
 				+ "  }\n" + "]", ctx.getPixelToCmRatioSide(), plateContext, foodNamesList);
-	}
-
-	
+	}	
 }

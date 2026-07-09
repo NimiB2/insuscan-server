@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.insuscan.pipeline.model.PipelineContext;
 import com.insuscan.pipeline.model.PipelineFoodItem;
+import com.insuscan.pipeline.model.PipelineWarning;
 import com.insuscan.pipeline.support.PipelineWarningCollector;
 import com.insuscan.util.GeminiApiClient;
 import org.slf4j.Logger;
@@ -14,11 +15,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Stage 3 — Detects food items in the top-down image.
- *
- * <p>Focuses strictly on identification, visual state, and bounding box.
- * Also retrieves the model's estimate of 'effectiveDensityFactor' (0.3 - 1.0)
- * which describes how much of the visual volume is actual food vs air.</p>
+ * Stage 3 — Detects food items in the top-down image via Gemini and converts each detection into a {@link PipelineFoodItem}.
+ * Also captures the model's effective density factor estimate (0.3–1.0), representing how much of a food's visual volume is solid food versus air.
  */
 @Service
 public class FoodDetectionService {
@@ -51,7 +49,6 @@ public class FoodDetectionService {
                     // Not necessarily an error (could be an empty plate)
                 } else {
                     ctx.setFoodItems(detectedItems);
-                    // Compute average confidence of detected items
                     double avgConf = detectedItems.stream()
                         .mapToDouble(PipelineFoodItem::getDetectionConfidence)
                         .average()
@@ -63,7 +60,7 @@ public class FoodDetectionService {
             }
         } catch (Exception e) {
             log.error("[FoodDetection] Vision model call failed: {}", e.getMessage());
-            warningCollector.add(ctx, com.insuscan.pipeline.model.PipelineWarning.critical(
+            warningCollector.add(ctx, PipelineWarning.critical(
                 PipelineWarningCollector.STAGE_FOOD_DETECTION,
                 "DETECTION_FAILED",
                 "Failed to detect food items: " + e.getMessage()

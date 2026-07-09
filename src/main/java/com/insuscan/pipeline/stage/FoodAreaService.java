@@ -10,11 +10,10 @@ import org.springframework.stereotype.Service;
 /**
  * Stage 4 — Calculates the 2D surface area of each detected food item.
  *
- * <p>
- * Currently uses a bounding-box approximation (width × height × 0.75). When
- * GrabCut is fully integrated (either server-side via JavaCV or via a two-step
- * client API), this stage will use pixel-perfect segmentation.
- * </p>
+ * <p>Uses a 3-tier strategy in order of precision: SAM segmentation mask (pixel-accurate),
+ * bounding-box approximation (with a shape-correction factor), or a plate-share fallback
+ * when neither is available. Cross-checks the resulting coverage against Gemini's own
+ * visual coverage estimate and lowers confidence on disagreement.</p>
  */
 @Service
 public class FoodAreaService {
@@ -26,6 +25,14 @@ public class FoodAreaService {
 	private static final float SAM_SCORE_CONFIDENCE_CAP = 0.9f;
 	private static final float COVERAGE_DISAGREEMENT_RATIO = 1.5f;
 
+	/** Correction factor for bounding-box area, since a food item rarely fills its full bounding rectangle. */
+	private static final float BBOX_SHAPE_CORRECTION = 0.75f;
+
+	/** Assumed fraction of the plate covered by all food items combined, used only when neither a SAM mask nor a bounding box is available. */
+	private static final float PLATE_FALLBACK_COVERAGE_SHARE = 0.70f;
+
+	/** Default plate area (cm²) used when plate geometry has not been measured, roughly a 24cm-diameter plate. */
+	private static final float DEFAULT_PLATE_AREA_CM2 = 450f;
 
 	private final PipelineWarningCollector warningCollector;
 
@@ -53,7 +60,7 @@ public class FoodAreaService {
 			float r = ctx.getPlateGeometry().getInnerDiameterCm() / 2f;
 			plateAreaCm2 = (float) (Math.PI * r * r);
 		} else {
-			plateAreaCm2 = 450f;
+			plateAreaCm2 = DEFAULT_PLATE_AREA_CM2;
 		}
 
 		float ratio = ctx.getPixelToCmRatioTop();
@@ -80,11 +87,11 @@ public class FoodAreaService {
 			    float[] bbox = item.getBoundingBoxPct();
 			    float widthCm = (bbox[2] / 100f) * imageWidthPx * ratio;
 			    float heightCm = (bbox[3] / 100f) * imageHeightPx * ratio;
-			    estimatedArea = widthCm * heightCm * 0.75f;
+			    estimatedArea = widthCm * heightCm * BBOX_SHAPE_CORRECTION;
 			    log.info("[FoodArea] {} using bbox fallback: area={}cm²",
 			        item.getName(), String.format("%.1f", estimatedArea));
 			} else {
-			    estimatedArea = (plateAreaCm2 * 0.70f) / Math.max(1, ctx.getFoodItems().size());
+			    estimatedArea = (plateAreaCm2 * PLATE_FALLBACK_COVERAGE_SHARE) / Math.max(1, ctx.getFoodItems().size());
 			    log.warn("[FoodArea] {} has no SAM mask or bbox, using plate fallback", item.getName());
 			}
 
@@ -96,7 +103,6 @@ public class FoodAreaService {
 
 			crossCheckCoverage(ctx, item);
 
-			
 			totalAreaCm2 += estimatedArea;
 			log.info("[FoodArea] {} -> area={} cm², coverage={}%", item.getName(), String.format("%.1f", estimatedArea),
 					String.format("%.1f", item.getCoveragePercent()));
@@ -136,9 +142,9 @@ public class FoodAreaService {
 				&& item.getImagePixelCount() != null
 				&& item.getImagePixelCount() > 0;
 
-				if (usedSamMask && item.getSamMaskScore() != null) {
-					return Math.min(item.getSamMaskScore(), SAM_SCORE_CONFIDENCE_CAP);
-				}
+		if (usedSamMask && item.getSamMaskScore() != null) {
+			return Math.min(item.getSamMaskScore(), SAM_SCORE_CONFIDENCE_CAP);
+		}
 		if (usedSamMask) {
 			return SAM_AREA_CONFIDENCE;
 		}

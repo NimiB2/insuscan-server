@@ -4,7 +4,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.insuscan.pipeline.model.PipelineContext;
 import com.insuscan.pipeline.support.PipelineWarningCollector;
-import com.insuscan.pipeline.support.ReferenceObjectRegistry;
 import com.insuscan.pipeline.support.StandardPlateConfig;
 import com.insuscan.util.GeminiApiClient;
 import org.slf4j.Logger;
@@ -14,6 +13,11 @@ import org.springframework.stereotype.Service;
 
 import java.util.concurrent.CompletableFuture;
 
+/**
+ * Stage 2 - Measures plate diameter (top-down image) and depth (side image) in parallel via Gemini.
+ * Applies debug overrides, standard-plate fallback, and forced-diameter test flag as configured.
+ * Derives a top-view pixel-to-cm ratio from the measured diameter when no reference object was calibrated.
+ */
 @Service
 public class PlateGeometryService {
 
@@ -40,23 +44,23 @@ public class PlateGeometryService {
 
     @Value("${plate.geometry.no-reference.assumed-plate-pixel-fraction:0.6}")
     private float assumedPlatePixelFraction;
-    
+
     private final GeminiApiClient geminiApiClient;
-    private final ReferenceObjectRegistry referenceObjectRegistry;
     private final PipelineWarningCollector warningCollector;
     private final ObjectMapper objectMapper;
     private final StandardPlateConfig standardPlateConfig;
+    private final PlateGeometryPromptBuilder promptBuilder;
 
     public PlateGeometryService(GeminiApiClient geminiApiClient,
-                                ReferenceObjectRegistry referenceObjectRegistry,
                                 PipelineWarningCollector warningCollector,
                                 ObjectMapper objectMapper,
-                                StandardPlateConfig standardPlateConfig) {
+                                StandardPlateConfig standardPlateConfig,
+                                PlateGeometryPromptBuilder promptBuilder) {
         this.geminiApiClient = geminiApiClient;
-        this.referenceObjectRegistry = referenceObjectRegistry;
         this.warningCollector = warningCollector;
         this.objectMapper = objectMapper;
         this.standardPlateConfig = standardPlateConfig;
+        this.promptBuilder = promptBuilder;
     }
 
     public void measurePlate(PipelineContext ctx) {
@@ -105,7 +109,7 @@ public class PlateGeometryService {
                 String.format("%.0f", geometry.getFillPercent()),
                 String.format("%.2f", confidence));
     }
-    
+
     private void deriveTopRatioFromDiameter(PipelineContext ctx, float diameterCm, float diameterPx) {
         float effectivePx = diameterPx;
 
@@ -171,8 +175,8 @@ public class PlateGeometryService {
         try {
             boolean hasReferenceRatio = ctx.getPixelToCmRatioTop() != null && ctx.getPixelToCmRatioTop() > 0;
             String prompt = hasReferenceRatio
-                    ? buildDiameterPromptWithReference(ctx)
-                    : buildDiameterPromptNoReference();
+                    ? promptBuilder.diameterPromptWithReference(ctx.getReferenceObjectType())
+                    : promptBuilder.diameterPromptNoReference();
 
             String response = geminiApiClient.callVisionModel(prompt, ctx.getImageTopBase64());
             if (response == null || response.isBlank()) {
@@ -181,8 +185,8 @@ public class PlateGeometryService {
             }
 
             return hasReferenceRatio
-            ? parseDiameterResponseWithReference(response, ctx.getPixelToCmRatioTop(), ctx)
-            : parseDiameterResponseNoReference(response, ctx);
+                    ? parseDiameterResponseWithReference(response, ctx.getPixelToCmRatioTop(), ctx)
+                    : parseDiameterResponseNoReference(response, ctx);
 
         } catch (Exception e) {
             log.warn("[PlateGeometry] Diameter call failed: {}", e.getMessage());
@@ -192,7 +196,7 @@ public class PlateGeometryService {
 
     private DepthResult fetchDepth(PipelineContext ctx) {
         try {
-            String prompt = buildDepthPrompt(ctx);
+            String prompt = promptBuilder.depthPrompt(ctx.getReferenceObjectType(), ctx.getPixelToCmRatioSide());
             String response = geminiApiClient.callVisionModel(prompt, ctx.getImageSideBase64());
             if (response == null || response.isBlank()) {
                 log.warn("[PlateGeometry] Empty depth response, using default");
@@ -203,89 +207,6 @@ public class PlateGeometryService {
             log.warn("[PlateGeometry] Depth call failed: {}", e.getMessage());
             return DepthResult.defaultResult();
         }
-    }
-
-    private String buildDiameterPromptWithReference(PipelineContext ctx) {
-        ReferenceObjectRegistry.Dimensions dims =
-                referenceObjectRegistry.getDimensions(ctx.getReferenceObjectType());
-        String description = referenceObjectRegistry.getDescription(ctx.getReferenceObjectType());
-
-        return String.format(
-                "You are measuring a round plate from a TOP-DOWN view.\n\n" +
-                "A reference object is present in the image: %s (%.2fcm long x %.2fcm wide).\n" +
-                "The reference object is placed NEXT TO the plate (to its left or right), NOT above or below it.\n\n" +
-                "TASK: Identify the vertical extent of the plate in the image.\n" +
-                "- top_y_px: pixel Y coordinate of the TOP edge of the plate (highest point of the plate rim).\n" +
-                "- bottom_y_px: pixel Y coordinate of the BOTTOM edge of the plate (lowest point of the plate rim).\n" +
-                "- plate_center_x_px: pixel X coordinate of the horizontal center of the plate.\n" +
-                "Use the VERTICAL axis (Y) because the reference object lies horizontally next to the plate " +
-                "and would interfere with horizontal (X) measurements.\n\n" +
-                "Also identify the container type and fill percentage.\n\n" +
-                "Return ONLY valid JSON with no markdown or extra text:\n" +
-                "{\n" +
-                "  \"container_type\": \"FLAT_PLATE\" or \"REGULAR_BOWL\" or \"DEEP_BOWL\",\n" +
-                "  \"top_y_px\": <integer>,\n" +
-                "  \"bottom_y_px\": <integer>,\n" +
-                "  \"plate_center_x_px\": <integer>,\n" +
-                "  \"fill_percent\": <integer 0-100>,\n" +
-                "  \"diameter_confidence\": <float 0.0-1.0>,\n" +
-                "  \"reasoning_notes\": \"<max 20 words>\"\n" +
-                "}",
-                description, dims.lengthCm(), dims.widthCm());
-    }
-
-    private String buildDiameterPromptNoReference() {
-        return String.format(
-                "You are measuring a round plate from a TOP-DOWN view.\n\n" +
-                "NO reference object is available for scale calibration.\n" +
-                "Estimate the plate's inner diameter based on visual cues alone.\n\n" +
-                "Typical plate sizes in the world are:\n" +
-                "- Small (%.0fcm): side plate / dessert plate\n" +
-                "- Standard (%.0fcm): regular dinner plate\n" +
-                "- Large (%.0fcm): large dinner plate / serving plate\n\n" +
-                "Estimate the diameter as accurately as possible, and rate your confidence honestly.\n" +
-                "Also identify the plate's pixel geometry so the system can derive scale:\n" +
-                "- top_y_px: pixel Y coordinate of the TOP edge of the plate rim.\n" +
-                "- bottom_y_px: pixel Y coordinate of the BOTTOM edge of the plate rim.\n" +
-                "- plate_center_x_px: pixel X coordinate of the horizontal center of the plate.\n\n" +
-                "Return ONLY valid JSON with no markdown or extra text:\n" +
-                "{\n" +
-                "  \"container_type\": \"FLAT_PLATE\" or \"REGULAR_BOWL\" or \"DEEP_BOWL\",\n" +
-                "  \"inner_diameter_cm\": <float>,\n" +
-                "  \"top_y_px\": <integer>,\n" +
-                "  \"bottom_y_px\": <integer>,\n" +
-                "  \"plate_center_x_px\": <integer>,\n" +
-                "  \"fill_percent\": <integer 0-100>,\n" +
-                "  \"diameter_confidence\": <float 0.0-1.0>,\n" +
-                "  \"reasoning_notes\": \"<max 20 words>\"\n" +
-                "}",
-                standardPlateConfig.getSmallDiameterCm(),
-                standardPlateConfig.getStandardDiameterCm(),
-                standardPlateConfig.getLargeDiameterCm());
-    }
-
-    private String buildDepthPrompt(PipelineContext ctx) {
-        ReferenceObjectRegistry.Dimensions dims =
-                referenceObjectRegistry.getDimensions(ctx.getReferenceObjectType());
-        String description = referenceObjectRegistry.getDescription(ctx.getReferenceObjectType());
-
-        String sideRatio = ctx.getPixelToCmRatioSide() != null
-                ? String.format("%.2f", ctx.getPixelToCmRatioSide())
-                : "not available";
-
-        return String.format(
-                "You are measuring a food container from a SIDE view.\n\n" +
-                "Scale calibration: %s pixels per cm\n" +
-                "Reference object in image: %s (%.2fcm long x %.2fcm wide)\n\n" +
-                "Estimate ONLY the inner depth of the plate or bowl (from rim to bottom, in cm).\n" +
-                "Do NOT estimate diameter or width — that is measured from a top-down image.\n\n" +
-                "Return ONLY valid JSON with no markdown or extra text:\n" +
-                "{\n" +
-                "  \"inner_depth_cm\": <float>,\n" +
-                "  \"depth_confidence\": <float 0.0-1.0>,\n" +
-                "  \"reasoning_notes\": \"<max 20 words>\"\n" +
-                "}",
-                sideRatio, description, dims.lengthCm(), dims.widthCm());
     }
 
     private DiameterResult parseDiameterResponseWithReference(String response, float pixelToCmRatio, PipelineContext ctx) {
@@ -452,6 +373,4 @@ public class PlateGeometryService {
 
         static DepthResult defaultResult() { return new DepthResult(); }
     }
-    
-    
 }

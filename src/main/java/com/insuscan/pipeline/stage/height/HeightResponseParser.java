@@ -12,10 +12,23 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+/**
+ * Parses Gemini's food-height JSON response into a name-keyed map of {@link HeightResult}, delegating malformed-JSON cleanup to {@link HeightResponseSanitizer}.
+ * Also captures each item's side-view bounding box onto the matching {@link PipelineFoodItem} when present.
+ */
 @Component
 public class HeightResponseParser {
 
     private static final Logger log = LoggerFactory.getLogger(HeightResponseParser.class);
+
+    /** Fallback height (cm) used when Gemini omits effective_height_cm for an item. */
+    private static final float DEFAULT_HEIGHT_CM = 2.5f;
+
+    /** Fallback confidence used when Gemini omits confidence for an item. */
+    private static final float DEFAULT_CONFIDENCE = 0.5f;
+
+    /** Fallback side-view bounding box width/height (as % of image) when Gemini omits them. */
+    private static final float DEFAULT_BBOX_SIZE_PCT = 80f;
 
     private final HeightResponseSanitizer sanitizer;
     private final ObjectMapper objectMapper;
@@ -48,6 +61,7 @@ public class HeightResponseParser {
             log.error("[FoodHeight] Failed to parse sanitized response: {}", e.getMessage());
             log.debug("[FoodHeight] Sanitized content: {}", sanitized);
         }
+
         return results;
     }
 
@@ -57,15 +71,15 @@ public class HeightResponseParser {
         if (name == null || name.isBlank()) return;
 
         boolean isVisible = node.path("is_visible_in_side_view").asBoolean(true);
-        float height = (float) node.path("effective_height_cm").asDouble(2.5);
-        float conf = (float) node.path("confidence").asDouble(0.5);
+        float height = (float) node.path("effective_height_cm").asDouble(DEFAULT_HEIGHT_CM);
+        float conf = (float) node.path("confidence").asDouble(DEFAULT_CONFIDENCE);
 
         JsonNode bbox = node.path("bbox_side_pct");
         if (!bbox.isMissingNode() && foodsByName.containsKey(name)) {
             float x = (float) bbox.path("x").asDouble(0);
             float y = (float) bbox.path("y").asDouble(0);
-            float w = (float) bbox.path("w").asDouble(80);
-            float h = (float) bbox.path("h").asDouble(80);
+            float w = (float) bbox.path("w").asDouble(DEFAULT_BBOX_SIZE_PCT);
+            float h = (float) bbox.path("h").asDouble(DEFAULT_BBOX_SIZE_PCT);
             foodsByName.get(name).setBoundingBoxSidePct(new float[]{x, y, w, h});
             log.info("[FoodHeight] {} side bbox: x={} y={} w={} h={}",
                 name, String.format("%.1f", x), String.format("%.1f", y),

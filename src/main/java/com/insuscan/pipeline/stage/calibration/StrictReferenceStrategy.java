@@ -5,6 +5,11 @@ import org.opencv.core.RotatedRect;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/**
+ * Reference-object strategy for elongated, thin objects such as insulin pens and syringes.
+ * A candidate must have a high aspect ratio, be roughly rectangular, meet a minimum length threshold,
+ * and match the expected physical aspect ratio within the configured tolerance.
+ */
 public class StrictReferenceStrategy implements ReferenceObjectStrategy {
 
     private static final Logger log = LoggerFactory.getLogger(StrictReferenceStrategy.class);
