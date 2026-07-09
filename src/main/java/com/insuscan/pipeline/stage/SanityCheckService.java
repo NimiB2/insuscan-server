@@ -10,65 +10,78 @@ import org.springframework.stereotype.Service;
 /**
  * Stage 10 — Medical-grade sanity checks.
  *
- * <p>Examines the final accumulated data to ensure it is physically possible
- * before presenting it to the user for dosing.</p>
+ * <p>
+ * Examines the final accumulated data to ensure it is physically possible
+ * before presenting it to the user for dosing.
+ * </p>
  */
 @Service
 public class SanityCheckService {
 
-    private static final Logger log = LoggerFactory.getLogger(SanityCheckService.class);
-    private final PipelineWarningCollector warningCollector;
+	private static final Logger log = LoggerFactory.getLogger(SanityCheckService.class);
 
-    public SanityCheckService(PipelineWarningCollector warningCollector) {
-        this.warningCollector = warningCollector;
-    }
+	private static final float MIN_REASONABLE_WEIGHT_G = 20f;
+	private static final float MAX_REASONABLE_WEIGHT_G = 1500f;
 
-    public void runSanityChecks(PipelineContext ctx) {
-        PipelineContext.MealTotals totals = ctx.getMealTotals();
-        if (totals == null) {
-            log.warn("[SanityCheck] No meal totals found to check");
-            return;
-        }
+	private static final float CARB_KCAL_PER_GRAM = 4f;
+	private static final float PROTEIN_KCAL_PER_GRAM = 4f;
 
-        float totalWeight = totals.getTotalWeightG();
+	/**
+	 * Calories per gram of pure fat — also the maximum physically possible energy
+	 * density for any food.
+	 */
+	private static final float FAT_KCAL_PER_GRAM = 9f;
 
-        // 1. Minimum reasonable weight
-        if (totalWeight > 0 && totalWeight < 20f) {
-            warningCollector.add(ctx, PipelineWarning.medium(
-                PipelineWarningCollector.STAGE_SANITY_CHECK,
-                "MEAL_TOO_LIGHT",
-                String.format("Total meal weight is very light (%.1fg). Ensure reference object is placed correctly.", totalWeight)
-            ));
-        }
+	private final PipelineWarningCollector warningCollector;
 
-        // 2. Maximum reasonable weight (e.g., a standard meal rarely exceeds 1.5kg)
-        if (totalWeight > 1500f) {
-            warningCollector.add(ctx, PipelineWarning.high(
-                PipelineWarningCollector.STAGE_SANITY_CHECK,
-                "MEAL_TOO_HEAVY",
-                String.format("Total meal weight is very heavy (%.1fg). Calibration or depth may be skewed.", totalWeight)
-            ));
-        }
+	public SanityCheckService(PipelineWarningCollector warningCollector) {
+		this.warningCollector = warningCollector;
+	}
 
-        // 3. Physical impossibility check (Calories vs Weight)
-        // Pure fat is 9 kcal/g. A meal cannot exceed 9 kcal/g.
-        // Let's calculate total calories
-        float totalCalories = (totals.getTotalCarbsG() * 4) + 
-                              (totals.getTotalProteinG() * 4) + 
-                              (totals.getTotalFatG() * 9);
-        
-        if (totalWeight > 0) {
-            float energyDensity = totalCalories / totalWeight;
-            if (energyDensity > 9.0f) {
-                // This indicates a mathematical impossibility (e.g. USDA macros added up to more than 100g per 100g)
-                warningCollector.add(ctx, PipelineWarning.critical(
-                    PipelineWarningCollector.STAGE_SANITY_CHECK,
-                    "IMPOSSIBLE_ENERGY_DENSITY",
-                    String.format("Calculated energy density (%.1f kcal/g) exceeds physical limit of pure fat (9 kcal/g).", energyDensity)
-                ));
-            }
-        }
-        
-        log.info("[SanityCheck] Completed. Total warnings: {}", ctx.getWarnings().size());
-    }
+	public void runSanityChecks(PipelineContext ctx) {
+		PipelineContext.MealTotals totals = ctx.getMealTotals();
+		if (totals == null) {
+			log.warn("[SanityCheck] No meal totals found to check");
+			return;
+		}
+
+		float totalWeight = totals.getTotalWeightG();
+
+		// 1. Minimum reasonable weight
+		if (totalWeight > 0 && totalWeight < MIN_REASONABLE_WEIGHT_G) {
+			warningCollector.add(ctx,
+					PipelineWarning.medium(PipelineWarningCollector.STAGE_SANITY_CHECK, "MEAL_TOO_LIGHT", String.format(
+							"Total meal weight is very light (%.1fg). Ensure reference object is placed correctly.",
+							totalWeight)));
+		}
+
+		// 2. Maximum reasonable weight (e.g., a standard meal rarely exceeds 1.5kg)
+		if (totalWeight > MAX_REASONABLE_WEIGHT_G) {
+			warningCollector.add(ctx,
+					PipelineWarning.high(PipelineWarningCollector.STAGE_SANITY_CHECK, "MEAL_TOO_HEAVY",
+							String.format(
+									"Total meal weight is very heavy (%.1fg). Calibration or depth may be skewed.",
+									totalWeight)));
+		}
+
+		// 3. Physical impossibility check (Calories vs Weight)
+		// Pure fat is 9 kcal/g. A meal cannot exceed 9 kcal/g.
+		float totalCalories = (totals.getTotalCarbsG() * CARB_KCAL_PER_GRAM)
+				+ (totals.getTotalProteinG() * PROTEIN_KCAL_PER_GRAM) + (totals.getTotalFatG() * FAT_KCAL_PER_GRAM);
+
+		if (totalWeight > 0) {
+			float energyDensity = totalCalories / totalWeight;
+			if (energyDensity > FAT_KCAL_PER_GRAM) {
+				// This indicates a mathematical impossibility (e.g. USDA macros added up to
+				// more than 100g per 100g)
+				warningCollector.add(ctx, PipelineWarning.critical(PipelineWarningCollector.STAGE_SANITY_CHECK,
+						"IMPOSSIBLE_ENERGY_DENSITY",
+						String.format(
+								"Calculated energy density (%.1f kcal/g) exceeds physical limit of pure fat (9 kcal/g).",
+								energyDensity)));
+			}
+		}
+
+		log.info("[SanityCheck] Completed. Total warnings: {}", ctx.getWarnings().size());
+	}
 }

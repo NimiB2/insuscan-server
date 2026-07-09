@@ -7,6 +7,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+/**
+ * Fuses ARCore depth-sensor measurements (plate depth, plate diameter, and per-item heights) with the vision pipeline's own estimates.
+ * ARCore's weight in the fusion scales with its reported confidence: high-confidence readings dominate, low-confidence readings are treated as a minor correction.
+ * A successful fusion also nudges up the corresponding confidence score, since a second independent measurement source increases certainty.
+ */
+
 @Service
 public class ArcoreDepthFusionService {
 
@@ -18,6 +24,9 @@ public class ArcoreDepthFusionService {
     private static final float CONFIDENCE_HIGH_THRESHOLD   = 0.80f;
     private static final float CONFIDENCE_MEDIUM_THRESHOLD = 0.50f;
     private static final float METERS_TO_CM = 100f;
+    
+    /** Confidence boost applied per fused measurement, scaled by ARCore's weight in the fusion. */
+    private static final float ARCORE_CONFIDENCE_BOOST = 0.2f;
 
     public void fuseDepths(PipelineContext ctx) {
         ArcoreDepthData arcore = ctx.getArcoreDepthData();
@@ -54,7 +63,7 @@ public class ArcoreDepthFusionService {
 
         ctx.getPlateGeometry().setInnerDepthCm(fusedDepthCm);
         ctx.getPlateGeometry().setDepthConfidence(
-                Math.min(1.0f, ctx.getPlateGeometry().getDepthConfidence() + (arcoreWeight * 0.2f)));
+                Math.min(1.0f, ctx.getPlateGeometry().getDepthConfidence() + (arcoreWeight * ARCORE_CONFIDENCE_BOOST)));
     }
 
     private void fusePlateDiameter(PipelineContext ctx, ArcoreDepthData arcore,
@@ -77,7 +86,7 @@ public class ArcoreDepthFusionService {
 
         ctx.getPlateGeometry().setInnerDiameterCm(fusedDiameterCm);
         ctx.getPlateGeometry().setDiameterConfidence(
-                Math.min(1.0f, ctx.getPlateGeometry().getDiameterConfidence() + (arcoreWeight * 0.2f)));
+                Math.min(1.0f, ctx.getPlateGeometry().getDiameterConfidence() + (arcoreWeight * ARCORE_CONFIDENCE_BOOST)));
     }
 
     private void fuseFoodHeights(PipelineContext ctx, ArcoreDepthData arcore,
@@ -103,7 +112,7 @@ public class ArcoreDepthFusionService {
             item.setEffectiveHeightCm(fusedHeightCm);
             item.setHeightConfidence(Math.min(1.0f,
                     (item.getHeightConfidence() != null ? item.getHeightConfidence() : 0f)
-                    + (arcoreWeight * 0.2f)));
+                    + (arcoreWeight * ARCORE_CONFIDENCE_BOOST)));
         }
     }
 
