@@ -63,7 +63,7 @@ InsuScan Server is the backend powering a diabetes self-management Android appli
 
 <div align="center">
   <img src="docs/images/Architecture.png"
-       alt="InsuScan Architecture"
+       alt="InsuScan System Architecture"
        width="900">
 </div>
 
