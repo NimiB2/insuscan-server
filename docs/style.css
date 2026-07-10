@@ -314,3 +314,54 @@ footer a:hover { color: #fff; }
   object-fit: contain;
   flex-shrink: 0;
 }
+
+/* Navigation brand name */
+
+.brand-name {
+  color: #fff;
+  white-space: nowrap;
+}
+
+.brand-name .brand-accent {
+  color: var(--accent);
+}
+
+/* Hero logo */
+
+.hero-brand {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  margin-bottom: 28px;
+}
+
+.hero-brand img {
+  display: block;
+  width: 70px;
+  height: 70px;
+  object-fit: contain;
+}
+
+.hero-brand-name {
+  color: #fff;
+  font-size: 2rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  white-space: nowrap;
+}
+
+.hero-brand-name span {
+  color: var(--accent);
+}
+
+@media (max-width: 600px) {
+  .hero-brand img {
+    width: 54px;
+    height: 54px;
+  }
+
+  .hero-brand-name {
+    font-size: 1.6rem;
+  }
+}
