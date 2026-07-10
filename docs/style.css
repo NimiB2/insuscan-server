@@ -612,22 +612,28 @@ footer a:hover { color: #fff; }
   border: 0;
 }
 
-/* Android app screenshots */
+/* Android app screenshot flow */
 
 .app-screen-gallery {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 24px;
+  grid-template-columns:
+    minmax(170px, 220px)
+    42px
+    minmax(170px, 220px)
+    42px
+    minmax(170px, 220px);
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
   margin-top: 32px;
-  align-items: start;
 }
 
 .app-screen-card {
   margin: 0;
-  padding: 14px;
+  padding: 10px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 18px;
+  border-radius: 16px;
   box-shadow: var(--shadow);
 }
 
@@ -635,29 +641,78 @@ footer a:hover { color: #fff; }
   display: block;
   width: 100%;
   height: auto;
-  border-radius: 12px;
+  max-height: 390px;
+  object-fit: contain;
+  border-radius: 10px;
 }
 
 .app-screen-card figcaption {
-  margin-top: 14px;
+  margin-top: 12px;
   color: var(--muted);
-  font-size: 0.9rem;
-  line-height: 1.55;
+  font-size: 0.82rem;
+  line-height: 1.45;
   text-align: center;
 }
 
 .app-screen-card figcaption strong {
   display: block;
-  margin-bottom: 4px;
+  margin-bottom: 3px;
   color: var(--navy);
-  font-size: 1rem;
+  font-size: 0.95rem;
 }
+
+.screen-arrow {
+  color: var(--accent);
+  font-size: 2.2rem;
+  font-weight: 800;
+  line-height: 1;
+  text-align: center;
+}
+
+/* Keep the process horizontal on phones */
 
 @media (max-width: 820px) {
   .app-screen-gallery {
-    grid-template-columns: 1fr;
-    max-width: 380px;
-    margin-left: auto;
-    margin-right: auto;
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    gap: 10px;
+    overflow-x: auto;
+    padding: 8px 4px 18px;
+    scroll-snap-type: x mandatory;
+  }
+
+  .app-screen-card {
+    flex: 0 0 190px;
+    scroll-snap-align: start;
+  }
+
+  .screen-arrow {
+    flex: 0 0 28px;
+    font-size: 1.8rem;
+  }
+}
+
+/* Keep the process horizontal on phones */
+
+@media (max-width: 820px) {
+  .app-screen-gallery {
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    gap: 10px;
+    overflow-x: auto;
+    padding: 8px 4px 18px;
+    scroll-snap-type: x mandatory;
+  }
+
+  .app-screen-card {
+    flex: 0 0 190px;
+    scroll-snap-align: start;
+  }
+
+  .screen-arrow {
+    flex: 0 0 28px;
+    font-size: 1.8rem;
   }
 }
