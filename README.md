@@ -1,109 +1,205 @@
-# InsuScan Server
+<div align="center">
 
-Backend server for the InsuScan diabetes management application. Built with Spring Boot 3.5.0 and Firebase Firestore.
+<img src="https://img.shields.io/badge/InsuScan-Server-0A84FF?style=for-the-badge&logo=spring&logoColor=white" alt="InsuScan Server"/>
+
+# InsuScan — Backend Server
+
+**Intelligent food-scanning and insulin-dose management API**  
+Built with Spring Boot · Firebase Firestore · Computer Vision · AI
+
+[![Java](https://img.shields.io/badge/Java-21-ED8B00?style=flat-square&logo=openjdk&logoColor=white)](https://openjdk.org/projects/jdk/21/)
+[![Spring Boot](https://img.shields.io/badge/Spring_Boot-3.5.0-6DB33F?style=flat-square&logo=spring-boot&logoColor=white)](https://spring.io/projects/spring-boot)
+[![Firebase](https://img.shields.io/badge/Firebase-Firestore-FFCA28?style=flat-square&logo=firebase&logoColor=black)](https://firebase.google.com/)
+[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=flat-square&logo=docker&logoColor=white)](https://www.docker.com/)
+[![OpenAPI](https://img.shields.io/badge/OpenAPI-Swagger-85EA2D?style=flat-square&logo=swagger&logoColor=black)](http://localhost:9693/swagger-ui.html)
+[![License](https://img.shields.io/badge/License-Academic-lightgrey?style=flat-square)](https://www.afeka.ac.il/)
+
+</div>
+
+---
+
+## 🔗 Ecosystem
+
+This server is one half of the **InsuScan** platform:
+
+| Repository | Description | README |
+|---|---|---|
+| **InsuScan Server** *(you are here)* | Spring Boot REST API + AI food-estimation pipeline | — |
+| [**InsuScan Android App**](https://github.com/DanielSelas/InsuScan---AndoridApp) | Kotlin Android client with CameraX, ARCore & AR depth scanning | [View README](https://github.com/DanielSelas/InsuScan---AndoridApp#readme) |
+
+> 📄 **Documentation site** — coming soon at `https://docs.insuscan.app`
+
+---
+
+## 📋 Table of Contents
+
+- [Overview](#overview)
+- [Architecture](#architecture)
+- [Technology Stack](#technology-stack)
+- [Food Estimation Pipeline](#food-estimation-pipeline)
+- [API Reference](#api-reference)
+- [Data Models](#data-models)
+- [Getting Started](#getting-started)
+- [Configuration](#configuration)
+- [Docker Deployment](#docker-deployment)
+- [Project Structure](#project-structure)
+- [Troubleshooting](#troubleshooting)
+
+---
+
+## Overview
+
+InsuScan Server is the backend powering a diabetes self-management Android application. It exposes a REST API that:
+
+- **Receives food photos** from the mobile client (top-view + side-view), processes them through an 11-stage AI + computer-vision pipeline, and returns per-food-item weight, carbohydrates, and a recommended insulin dose.
+- **Manages meal records** — creating, confirming, and completing meal sessions in Firestore.
+- **Manages user profiles** — storing personalised insulin settings (carb-ratio, correction factor, target glucose).
+- **Calculates insulin doses** — personalised dosing with optional real-time blood-glucose correction.
+- **Provides AI-assisted food search** — semantic matching backed by the USDA food database.
+
+---
+
+## Architecture
+
+```
+Android App  ──►  InsuScan Server (Spring Boot :9693)
+                        │
+                        ├── /insuscan/users     ◄── UserController
+                        ├── /insuscan/meals     ◄── MealController
+                        ├── /vision/v2/scan     ◄── ScanPipelineController
+                        ├── /food               ◄── FoodController
+                        ├── /insulin            ◄── InsulinController
+                        └── /insuscan/admin     ◄── AdminController
+                        │
+                        ├── Firebase Firestore  (persistence)
+                        ├── Google Gemini API   (food classification)
+                        ├── USDA FoodData API   (nutrition data)
+                        └── SAM Service (:8001) (image segmentation)
+```
+
+The server follows a **layered architecture**:
+
+```
+Controller  →  Service  →  CRUD (Repository)  →  Firestore
+                 │
+                 └──  Pipeline (11-stage food estimation)
+                           └──  SAM Service (Python microservice)
+```
+
+---
 
 ## Technology Stack
 
-- **Java 21**
-- **Spring Boot 3.5.0**
-- **Firebase Firestore** (database)
-- **Firebase Admin SDK 9.2.0**
-- **OpenAPI/Swagger** (API documentation)
+| Layer | Technology | Version |
+|---|---|---|
+| Runtime | Java (OpenJDK) | 21 |
+| Framework | Spring Boot | 3.5.0 |
+| Build | Gradle | 8.x |
+| Database | Firebase Firestore | Admin SDK 9.2.0 |
+| Image Segmentation | SAM (Python microservice) | — |
+| AI / LLM | Google Gemini API | — |
+| Nutrition DB | USDA FoodData Central | — |
+| API Docs | SpringDoc OpenAPI / Swagger UI | 2.8.8 |
+| Containerisation | Docker + Docker Compose | — |
 
-## Prerequisites
+---
 
-- Java 21 or higher
-- Gradle 8.x
-- Firebase project with Firestore enabled
-- Firebase service account credentials
+## Food Estimation Pipeline
 
-## Firebase Setup
+The core feature is an **11-stage food estimation pipeline** triggered by `POST /vision/v2/scan`.  
+It accepts a top-view image, a side-view image, and optional ARCore depth data from the Android client.
 
-### 1. Create Firebase Project
-
-1. Go to [Firebase Console](https://console.firebase.google.com/)
-2. Create a new project or select existing one
-3. Enable Firestore Database:
-   - Go to **Build > Firestore Database**
-   - Click **Create database**
-   - Choose production or test mode
-   - Select a location
-
-### 2. Generate Service Account Key
-
-1. In Firebase Console, go to **Project Settings > Service Accounts**
-2. Click **Generate new private key**
-3. Save the JSON file as `firebase-service-account.json`
-4. Place it in `src/main/resources/` directory
-
-### 3. Configure Application
-
-Option A: Service account file (recommended for development)
 ```
-src/main/resources/firebase-service-account.json
+Stage 1  ──  Calibration            (reference object detection & scale factor)
+Stage 2  ──  Plate Geometry         (plate bounding box & diameter)
+Stage 3  ──  SAM Segmentation       (segment-anything masks per food item)
+Stage 4  ──  Perspective Correction (rectify top-view for accurate area)
+Stage 5  ──  Food Detection         (Gemini-based food class identification)
+Stage 6  ──  Food Area              (per-item pixel area → real-world area cm²)
+Stage 7  ──  ARCore Depth Fusion    (fuse ARCore point-cloud if available)
+Stage 8  ──  Food Height            (side-image height estimation cm)
+Stage 9  ──  Volume Calculation     (area × height → cm³)
+Stage 10 ──  Nutrition & Density    (USDA lookup → macronutrients per item)
+Stage 11 ──  Sanity Check           (plausibility gate, confidence aggregation)
 ```
 
-Option B: Environment variable (recommended for production)
-```bash
-export FIREBASE_PROJECT_ID=your-project-id
-export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
-```
+**Failure policy:**
+- `FATAL` at any stage → pipeline stops immediately, error returned to client.  
+- `DEGRADED` → pipeline continues with reduced confidence and a warning added to the response.
 
-## Running the Server
+---
 
-### Development
+## API Reference
 
-```bash
-./gradlew bootRun
-```
+Interactive documentation is available via **Swagger UI** when the server is running:
 
-### Production
-
-```bash
-./gradlew build
-java -jar build/libs/insuscan-1.0.0.jar
-```
-
-Server starts on **port 9693** by default.
-
-## API Documentation
-
-Once running, access Swagger UI at:
 ```
 http://localhost:9693/swagger-ui.html
 ```
 
-## API Endpoints
-
-### Users
+### Users — `/insuscan/users`
 
 | Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/insuscan/users` | Create new user |
-| GET | `/insuscan/users/{systemId}/{email}` | Get user by ID |
-| PUT | `/insuscan/users/{systemId}/{email}` | Update user |
-| DELETE | `/insuscan/users/{systemId}/{email}` | Delete user |
-| GET | `/insuscan/users/login/{systemId}/{email}` | User login |
+|---|---|---|
+| `POST` | `/insuscan/users` | Register a new user |
+| `GET` | `/insuscan/users/{systemId}/{email}` | Retrieve user profile |
+| `PUT` | `/insuscan/users/{systemId}/{email}` | Update user profile |
+| `DELETE` | `/insuscan/users/{systemId}/{email}` | Delete user account |
+| `GET` | `/insuscan/users/login/{systemId}/{email}` | Authenticate user |
 
-### Meals
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/insuscan/meals` | Create new meal (scan) |
-| GET | `/insuscan/meals/{systemId}/{mealId}` | Get meal by ID |
-| GET | `/insuscan/meals/user/{systemId}/{email}` | Get user's meals |
-| PUT | `/insuscan/meals/{systemId}/{mealId}/food-items` | Update food items |
-| PUT | `/insuscan/meals/{systemId}/{mealId}/confirm` | Confirm meal |
-| PUT | `/insuscan/meals/{systemId}/{mealId}/complete` | Complete with insulin |
-| DELETE | `/insuscan/meals/{systemId}/{mealId}` | Delete meal |
-
-### Admin
+### Meals — `/insuscan/meals`
 
 | Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/insuscan/admin/users` | Get all users (paginated) |
-| DELETE | `/insuscan/admin/users` | Delete all users |
-| DELETE | `/insuscan/admin/meals` | Delete all meals |
+|---|---|---|
+| `POST` | `/insuscan/meals` | Create a new meal record |
+| `GET` | `/insuscan/meals/{systemId}/{mealId}` | Get meal by ID |
+| `GET` | `/insuscan/meals/user/{systemId}/{email}` | List user's meals (paginated) |
+| `GET` | `/insuscan/meals/user/{systemId}/{email}/by-date` | Filter meals by date range |
+| `GET` | `/insuscan/meals/recent/{systemId}/{email}` | Get N most recent meals |
+| `PUT` | `/insuscan/meals/{systemId}/{mealId}/food-items` | Update food items |
+| `PUT` | `/insuscan/meals/{systemId}/{mealId}/confirm` | Confirm meal (log actual dose) |
+| `PUT` | `/insuscan/meals/{systemId}/{mealId}/complete` | Mark meal complete |
+| `DELETE` | `/insuscan/meals/{systemId}/{mealId}` | Delete meal |
+
+### Vision Pipeline — `/vision/v2`
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/vision/v2/scan` | Analyse food images → return meal + insulin dose |
+
+**Multipart parameters for `/vision/v2/scan`:**
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `topFile` | `file` | ✅ | Top-view photo |
+| `sideFile` | `file` | ✅ | Side-view photo |
+| `referenceObjectType` | `query` | ✅ | Reference object (e.g. `CREDIT_CARD`) |
+| `email` | `query` | ✅ | User email |
+| `arcoreData` | `query` | ❌ | Serialised ARCore depth JSON |
+| `topImageWidth/Height` | `query` | ❌ | Sensor dimensions (px) |
+
+### Food — `/food`
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/food/search?query=&limit=` | Search USDA food database |
+| `POST` | `/food/ai-search` | AI-enhanced semantic food search |
+
+### Insulin — `/insulin`
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/insulin/calculate` | Calculate personalised insulin dose |
+
+### Admin — `/insuscan/admin`
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/insuscan/admin/users` | List all users (paginated) |
+| `DELETE` | `/insuscan/admin/users` | Delete all users |
+| `DELETE` | `/insuscan/admin/meals` | Delete all meals |
+
+---
 
 ## Data Models
 
@@ -128,14 +224,8 @@ http://localhost:9693/swagger-ui.html
 
 ```json
 {
-  "mealId": {
-    "systemId": "insuscan",
-    "id": "meal-uuid"
-  },
-  "userId": {
-    "systemId": "insuscan",
-    "email": "user@example.com"
-  },
+  "mealId": { "systemId": "insuscan", "id": "meal-uuid" },
+  "userId": { "systemId": "insuscan", "email": "user@example.com" },
   "foodItems": [
     {
       "name": "Rice",
@@ -156,87 +246,198 @@ http://localhost:9693/swagger-ui.html
 }
 ```
 
-## Firestore Collections
+**Meal statuses:** `PENDING` → `CONFIRMED` → `COMPLETED`
 
-- **users** - User profiles and settings
-- **meals** - Meal records with food items and insulin calculations
+### User Roles
 
-### Document ID Format
+| Role | Description |
+|---|---|
+| `PATIENT` | Regular user — can scan meals and view personal history |
+| `ADMIN` | Full access — can view and manage all users and meals |
 
-Uses composite IDs: `{systemId}_{identifier}`
+---
 
-Examples:
-- User: `insuscan_user@example.com`
-- Meal: `insuscan_550e8400-e29b-41d4-a716-446655440000`
+## Getting Started
 
-## Demo Data
+### Prerequisites
 
-On startup, the server creates demo data:
-- 4 demo users (3 patients, 1 admin)
-- 3 demo meals with food items
+| Requirement | Version |
+|---|---|
+| Java (OpenJDK) | 21+ |
+| Gradle | 8.x |
+| Firebase project | Firestore enabled |
+| Firebase service account key | JSON file |
 
-Demo admin credentials:
-- Email: `admin@insuscan.com`
-- System ID: `insuscan`
+### Firebase Setup
+
+1. Open [Firebase Console](https://console.firebase.google.com/) and create or select a project.
+2. Navigate to **Build → Firestore Database** and create a database.
+3. Navigate to **Project Settings → Service Accounts** and click **Generate new private key**.
+4. Save the file as `firebase-service-account.json` and place it in `src/main/resources/`.
+
+### Environment Variables
+
+Copy `.env.example` to `.env` and fill in your credentials:
+
+```env
+FIREBASE_PROJECT_ID=your-firebase-project-id
+GOOGLE_APPLICATION_CREDENTIALS=/path/to/firebase-service-account.json
+GEMINI_API_KEY=your-gemini-api-key
+USDA_API_KEY=your-usda-api-key
+```
+
+### Running in Development
+
+```bash
+./gradlew bootRun
+```
+
+The server starts on **port 9693** by default.
+
+### Running in Production
+
+```bash
+./gradlew build
+java -jar build/libs/insuscan-1.0.0.jar
+```
+
+---
 
 ## Configuration
 
-Key properties in `application.properties`:
+Key properties in `src/main/resources/application.properties`:
 
 ```properties
-# Server port
+# Server
 server.port=9693
+spring.application.name=insuscan
 
-# Firebase project ID
+# Firebase
 firebase.project.id=${FIREBASE_PROJECT_ID:insuscan-project}
-
-# Service account file path
 firebase.config.path=firebase-service-account.json
 
-# External APIs (optional)
-insuscan.google.vision.api.key=${GOOGLE_VISION_API_KEY:}
+# External APIs
+gemini.api.key=${GEMINI_API_KEY:}
 insuscan.usda.api.key=${USDA_API_KEY:}
+
+# SAM segmentation microservice
+sam.service.url=${SAM_SERVICE_URL:http://localhost:8001}
 ```
 
-## Troubleshooting
+---
 
-### Firebase Connection Issues
+## Docker Deployment
 
-1. Verify service account JSON file exists and is valid
-2. Check project ID matches your Firebase project
-3. Ensure Firestore is enabled in Firebase Console
-4. Check firewall/network allows Firebase connections
+The repository includes a `Dockerfile` and `docker-compose.yml` that orchestrate two services:
 
-### Port Already in Use
+| Service | Port | Description |
+|---|---|---|
+| `insuscan-server` | `9693` | Spring Boot application |
+| `sam-service` | `8001` | Python SAM image-segmentation microservice |
 
-Change port in `application.properties`:
-```properties
-server.port=9694
-```
-
-Or via command line:
 ```bash
-java -jar build/libs/insuscan-1.0.0.jar --server.port=9694
+# Build and start both services
+docker-compose up --build
+
+# Start in background
+docker-compose up -d --build
+
+# Stop all services
+docker-compose down
 ```
+
+> **Note:** Ensure your `.env` file is present before starting with Docker Compose — it is loaded automatically.
+
+---
 
 ## Project Structure
 
 ```
-src/main/java/com/insuscan/
-├── Application.java          # Main entry point
-├── boundary/                 # API DTOs
-├── config/                   # Firebase configuration
-├── controller/               # REST controllers
-├── converter/                # Entity <-> Boundary converters
-├── crud/                     # Firestore repositories
-├── data/                     # Entity classes
-├── enums/                    # Enumerations
-├── exception/                # Custom exceptions
-├── init/                     # Data initializer
-├── service/                  # Business logic
-└── util/                     # Utilities (insulin calculator)
+insuscan-server/
+├── src/main/java/com/insuscan/
+│   ├── Application.java          # Spring Boot entry point
+│   ├── boundary/                 # Request/response DTOs (API surface)
+│   ├── calculation/              # Shared calculation utilities
+│   ├── config/                   # Firebase & app configuration beans
+│   ├── controller/               # REST controllers (8 controllers)
+│   │   ├── AdminController.java
+│   │   ├── FoodController.java
+│   │   ├── InsulinController.java
+│   │   ├── MealController.java
+│   │   ├── ScanPipelineController.java
+│   │   └── UserController.java
+│   ├── converter/                # Entity ↔ Boundary mappers
+│   ├── crud/                     # Firestore repositories
+│   ├── data/                     # Firestore entity classes
+│   ├── enums/                    # Enumerations (MealStatus, UserRole, …)
+│   ├── exception/                # Custom exception types
+│   ├── init/                     # Demo-data initialiser (runs on startup)
+│   ├── pipeline/                 # 11-stage food estimation pipeline
+│   │   ├── FoodEstimationPipeline.java
+│   │   ├── stage/                # One class per pipeline stage
+│   │   ├── model/                # Pipeline context & result models
+│   │   ├── calculation/          # Volume, weight, nutrition aggregators
+│   │   └── support/              # Confidence aggregator, reference registry
+│   ├── service/                  # Business logic (interfaces + impls)
+│   └── util/                     # Insulin calculator, ID generators
+├── sam-service/                  # Python SAM microservice
+│   ├── main.py
+│   ├── requirements.txt
+│   └── Dockerfile
+├── Dockerfile                    # Server Dockerfile
+├── docker-compose.yml            # Multi-service orchestration
+└── build.gradle                  # Gradle build script
 ```
 
-## License
+### Firestore Collections
 
-Internal project - Afeka College of Engineering
+| Collection | Document ID Format | Contents |
+|---|---|---|
+| `users` | `insuscan_{email}` | User profile & insulin settings |
+| `meals` | `insuscan_{uuid}` | Meal records, food items, calculations |
+
+---
+
+## Troubleshooting
+
+### Firebase connection issues
+
+1. Verify `firebase-service-account.json` exists in `src/main/resources/` and is valid JSON.
+2. Confirm `FIREBASE_PROJECT_ID` matches the project in Firebase Console.
+3. Ensure **Firestore** (not Realtime Database) is enabled.
+4. Check network/firewall allows outbound HTTPS to `*.googleapis.com`.
+
+### Port already in use
+
+Override the port at runtime:
+
+```bash
+java -jar build/libs/insuscan-1.0.0.jar --server.port=9694
+```
+
+Or in `application.properties`:
+
+```properties
+server.port=9694
+```
+
+### SAM service not responding
+
+Ensure the Python SAM microservice is running on port `8001`. When using Docker Compose, both services start together. For local development, start the SAM service separately:
+
+```bash
+cd sam-service
+pip install -r requirements.txt
+uvicorn main:app --port 8001
+```
+
+---
+
+<div align="center">
+
+**InsuScan** — Afeka College of Engineering  
+Academic project · Not for clinical use
+
+[Android App](https://github.com/DanielSelas/InsuScan---AndoridApp) · [Documentation](https://docs.insuscan.app) *(coming soon)*
+
+</div>
