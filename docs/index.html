@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>InsuScan — AI-Powered Carb Estimation & Insulin Dosing</title>
+<meta name="description" content="InsuScan photographs a meal, estimates carbohydrates with computer vision and AI, and calculates a personalised insulin dose.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<nav>
+  <div class="nav-inner">
+    <a class="brand" href="index.html">Insu<span>Scan</span></a>
+    <div class="nav-links">
+      <a href="index.html" class="active">Home</a>
+      <a href="pipeline.html">Pipeline</a>
+      <a href="insulin.html">Dosing</a>
+      <a href="api.html">API</a>
+      <a href="client.html">App</a>
+      <a class="gh" href="https://github.com/NimiB2/insuscan-server" target="_blank">GitHub</a>
+    </div>
+  </div>
+</nav>
+
+<header class="page-header" id="top">
+  <div class="container">
+    <div class="badge">Final Project · Afeka College of Engineering</div>
+    <h1>Snap a photo.<br>Get your <span>insulin dose</span>.</h1>
+    <p class="tagline">InsuScan photographs a meal, estimates carbohydrates using computer vision and AI, and calculates a personalised insulin dose — all in seconds.</p>
+    <div class="hero-actions">
+      <a class="btn btn-primary" href="#demo">▶ Watch the Demo</a>
+      <a class="btn btn-outline" href="https://github.com/NimiB2/insuscan-server" target="_blank">Server Repo</a>
+      <a class="btn btn-outline" href="https://github.com/DanielSelas/InsuScan---AndoridApp" target="_blank">Android Repo</a>
+    </div>
+  </div>
+</header>
+
+<section id="demo">
+  <div class="container">
+    <div class="section-label">Overview</div>
+    <h2>See InsuScan in Action</h2>
+    <p class="section-intro">A short walkthrough showing the problem, the solution, and the app in use.</p>
+    <div class="video-wrap">
+      <iframe src="https://www.youtube.com/embed/mownNstQMNU" title="InsuScan Overview" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+    </div>
+  </div>
+</section>
+
+<section id="problem" class="alt">
+  <div class="container">
+    <div class="section-label">Motivation</div>
+    <h2>The Problem &amp; The Solution</h2>
+    <div class="two-col" style="margin-top:32px">
+      <div class="card">
+        <h3><span class="icon-dot">⚠</span>The Problem</h3>
+        <p>People with insulin-dependent diabetes must estimate the carbohydrates in every meal to calculate their insulin dose. Manual carb counting is slow, error-prone, and requires constant guesswork about portion sizes — and dosing errors have real health consequences.</p>
+      </div>
+      <div class="card">
+        <h3><span class="icon-dot">✓</span>The Solution</h3>
+        <p>InsuScan replaces guesswork with measurement. The user photographs their plate; the system detects each food item, measures its real-world size using a physical reference object, estimates weight and carbohydrates, and returns a personalised insulin dose based on the user's own insulin plan.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="architecture">
+  <div class="container">
+    <div class="section-label">System Design</div>
+    <h2>System Architecture</h2>
+    <p class="section-intro">A full-stack platform: a native Android client, a Spring Boot backend with a layered architecture, a Python segmentation microservice, and external AI and data services.</p>
+    <img class="diagram" src="images/Architecture.png" alt="InsuScan system architecture diagram">
+    <div class="grid-3">
+      <div class="card">
+        <h3><span class="icon-dot">📱</span>Android Client</h3>
+        <p>Native Kotlin app. Captures top-view and side-view meal photos with CameraX, collects optional ARCore depth data, manages personal insulin plans, and signs in with Firebase Authentication.</p>
+      </div>
+      <div class="card">
+        <h3><span class="icon-dot">⚙</span>Spring Boot Server</h3>
+        <p>Java 21 REST API on port 9693. Runs the 11-stage food-estimation pipeline, manages users and meal records, calculates insulin doses, and exposes Swagger UI API docs.</p>
+      </div>
+      <div class="card">
+        <h3><span class="icon-dot">✂</span>SAM Service</h3>
+        <p>Python microservice on port 8001 running MobileSAM for pixel-accurate segmentation masks and Depth-Anything-V2 for monocular depth estimation.</p>
+      </div>
+      <div class="card">
+        <h3><span class="icon-dot">🤖</span>Google Gemini</h3>
+        <p>Vision-language model used for semantic tasks: identifying what each segmented food item is, estimating coverage percentages, and classifying visual state.</p>
+      </div>
+      <div class="card">
+        <h3><span class="icon-dot">🥗</span>USDA FoodData Central</h3>
+        <p>Official nutrition database providing carbohydrates, macronutrients, and density data per 100 g for every identified food item.</p>
+      </div>
+      <div class="card">
+        <h3><span class="icon-dot">🔥</span>Firebase Firestore</h3>
+        <p>Cloud database storing user profiles with insulin settings, and complete meal records with scan results, food items, and dose calculations.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="alt">
+  <div class="container">
+    <div class="section-label">Core Technology</div>
+    <h2>The 11-Stage Pipeline</h2>
+    <p class="section-intro">The heart of InsuScan. A single scan request travels through eleven ordered stages — from raw pixels to grams of carbohydrates per food item. Each stage reads its predecessors' outputs and writes its own.</p>
+    <img class="diagram" src="images/pipeline_diagram.png" alt="InsuScan 11-stage food estimation pipeline">
+    <p style="margin-top:24px">
+      <a href="pipeline.html" class="btn btn-primary btn-sm">Read the full pipeline deep-dive →</a>
+    </p>
+  </div>
+</section>
+
+<section id="explore">
+  <div class="container">
+    <div class="section-label">Documentation</div>
+    <h2>Explore the Details</h2>
+    <p class="section-intro">Each area of the system has its own dedicated documentation page.</p>
+    <div class="grid-3">
+      <a href="pipeline.html" class="card" style="text-decoration:none;transition:transform .2s">
+        <h3><span class="icon-dot">🔬</span>Pipeline Deep-Dive</h3>
+        <p>How every stage works, the design decisions behind them, and where errors propagate.</p>
+      </a>
+      <a href="insulin.html" class="card" style="text-decoration:none;transition:transform .2s">
+        <h3><span class="icon-dot">💉</span>Insulin Dosing</h3>
+        <p>The dose formula, insulin plans, validation rules, safety thresholds, and the testing strategy.</p>
+      </a>
+      <a href="api.html" class="card" style="text-decoration:none;transition:transform .2s">
+        <h3><span class="icon-dot">📡</span>API Reference</h3>
+        <p>Every REST endpoint, request/response models, meal lifecycle, and data schemas.</p>
+      </a>
+      <a href="client.html" class="card" style="text-decoration:none;transition:transform .2s">
+        <h3><span class="icon-dot">📱</span>Android App</h3>
+        <p>The scan flow, camera coaching system, profile management, and client-side architecture.</p>
+      </a>
+    </div>
+  </div>
+</section>
+
+<section id="stack" class="alt">
+  <div class="container">
+    <div class="section-label">Under the Hood</div>
+    <h2>Technology Stack</h2>
+    <div class="two-col" style="margin-top:32px">
+      <div>
+        <table>
+          <tr><th colspan="2">Android Client</th></tr>
+          <tr><td>Language</td><td class="mono">Kotlin</td></tr>
+          <tr><td>Camera</td><td class="mono">CameraX</td></tr>
+          <tr><td>Depth Sensing</td><td class="mono">ARCore (optional)</td></tr>
+          <tr><td>Networking</td><td class="mono">Retrofit2</td></tr>
+          <tr><td>Auth</td><td class="mono">Firebase Auth (Google Sign-In)</td></tr>
+          <tr><td>Reference Detection</td><td class="mono">OpenCV 4.9</td></tr>
+        </table>
+      </div>
+      <div>
+        <table>
+          <tr><th colspan="2">Backend Server</th></tr>
+          <tr><td>Runtime</td><td class="mono">Java 21 · Spring Boot 3.5</td></tr>
+          <tr><td>Segmentation</td><td class="mono">MobileSAM (Python)</td></tr>
+          <tr><td>Depth</td><td class="mono">Depth-Anything-V2-Small</td></tr>
+          <tr><td>AI / Vision</td><td class="mono">Google Gemini API</td></tr>
+          <tr><td>Nutrition</td><td class="mono">USDA FoodData Central</td></tr>
+          <tr><td>Database</td><td class="mono">Firebase Firestore</td></tr>
+          <tr><td>Deployment</td><td class="mono">Docker Compose</td></tr>
+          <tr><td>API Docs</td><td class="mono">SpringDoc / Swagger UI</td></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="repos">
+  <div class="container">
+    <div class="section-label">Source Code</div>
+    <h2>Explore the Repositories</h2>
+    <div class="repo-cards" style="margin-top:28px">
+      <a class="repo-card" href="https://github.com/NimiB2/insuscan-server" target="_blank">
+        <h3>⚙ InsuScan Server</h3>
+        <p>Spring Boot REST API, the 11-stage food-estimation pipeline, insulin dose calculation, and the SAM Python microservice.</p>
+        <span class="link">github.com/NimiB2/insuscan-server →</span>
+      </a>
+      <a class="repo-card" href="https://github.com/DanielSelas/InsuScan---AndoridApp" target="_blank">
+        <h3>📱 InsuScan Android App</h3>
+        <p>Kotlin client with CameraX capture, ARCore depth scanning, insulin plan management, and the full scan-to-dose user flow.</p>
+        <span class="link">github.com/DanielSelas/InsuScan---AndoridApp →</span>
+      </a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="container">
+    <div class="footer-links">
+      <a href="https://github.com/NimiB2/insuscan-server" target="_blank">Server Repo</a>
+      <a href="https://github.com/DanielSelas/InsuScan---AndoridApp" target="_blank">Android Repo</a>
+      <a href="https://youtu.be/mownNstQMNU" target="_blank">Demo Video</a>
+    </div>
+    <p>InsuScan · Final Project · Afeka College of Engineering</p>
+  </div>
+</footer>
+
+</body>
+</html>

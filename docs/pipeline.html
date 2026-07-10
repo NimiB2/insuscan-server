@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pipeline Deep-Dive — InsuScan Documentation</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<nav>
+  <div class="nav-inner">
+    <a class="brand" href="index.html">Insu<span>Scan</span></a>
+    <div class="nav-links">
+      <a href="index.html">Home</a>
+      <a href="pipeline.html" class="active">Pipeline</a>
+      <a href="insulin.html">Dosing</a>
+      <a href="api.html">API</a>
+      <a href="client.html">App</a>
+      <a class="gh" href="https://github.com/NimiB2/insuscan-server" target="_blank">GitHub</a>
+    </div>
+  </div>
+</nav>
+
+<header class="page-header compact">
+  <div class="container">
+    <div class="badge">Core Technology</div>
+    <h1>The 11-Stage <span>Pipeline</span></h1>
+    <p class="tagline">A deep dive into how InsuScan transforms raw meal photographs into per-item weight, carbohydrates, and confidence scores.</p>
+  </div>
+</header>
+
+<!-- Overview -->
+<section>
+  <div class="container">
+    <div class="section-label">Overview</div>
+    <h2>How It Works</h2>
+    <p class="section-intro">
+      The pipeline is triggered by a single <code>POST /vision/v2/scan</code> request carrying a top-view image, a side-view image, the user's chosen reference object type, and optional ARCore depth data. All eleven stages run in strict order inside a shared <code>PipelineContext</code> — each stage reads what it needs and writes its own outputs, never reading outputs from a later stage.
+    </p>
+    <img class="diagram" src="images/pipeline_diagram.png" alt="InsuScan 11-stage food estimation pipeline">
+
+    <div class="detail-box danger" style="margin-top:28px">
+      <strong>DESIGN PRINCIPLE — ERROR PROPAGATION</strong>
+      Calibration errors in Stage 1 propagate multiplicatively through the rest of the pipeline. An error in the pixel-to-cm ratio is squared when computing area (cm²) and approximately cubed when computing volume (cm³). This makes Stage 1 the single highest-leverage point in the entire system.
+    </div>
+
+    <div class="two-col" style="margin-top:24px">
+      <div class="detail-box danger">
+        <strong>FATAL FAILURE</strong>
+        Pipeline stops immediately. A clear error message is returned to the client. Example: no food detected at all.
+      </div>
+      <div class="detail-box warning">
+        <strong>DEGRADED FAILURE</strong>
+        Pipeline continues with reduced confidence. A warning is attached to the response so the user knows accuracy may be lower. Example: reference object not found — falling back to plate size estimate.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Stage 1 -->
+<section class="alt">
+  <div class="container">
+    <div class="section-label">Stages 1–2</div>
+    <h2>Calibration &amp; Plate Geometry</h2>
+
+    <div class="stage-deep">
+      <div class="stage-head">
+        <div class="stage-num">1</div>
+        <div>
+          <h3>Calibration — Reference Object Detection</h3>
+          <div class="subtitle">Establishes the pixel-to-centimeter scale for both images</div>
+        </div>
+      </div>
+      <div class="body">
+        <p>
+          The user places a physical object of known dimensions next to their plate. The system currently supports two reference object types: an <strong>insulin pen</strong> (16.0 cm × 1.25 cm) and a <strong>credit card / ID card</strong> (8.56 cm × 5.398 cm). A third option, "None," skips reference detection and falls back to a plate-size estimate — which is the lowest-accuracy path.
+        </p>
+        <p>
+          Detection runs in a <strong>CV-first, Gemini-fallback</strong> order. The server first attempts to detect the reference object using OpenCV with a strategy pattern — <code>CardReferenceStrategy</code> evaluates aspect ratio, rectangularity, and optionally a homography estimate; the pen strategy uses contour-based fragment clustering. If the CV detector succeeds with confidence above a configurable threshold, its result is used directly. If it fails or its confidence is too low, Gemini Vision is called to locate the object and provide a bounding box.
+        </p>
+        <p>
+          When both CV and Gemini succeed, their pixel-to-cm ratios are <strong>cross-checked</strong>. If they disagree by more than a configured gap, the CV result is rejected and Gemini's ratio is used, since CV detection can be fooled by similar-looking objects in the frame.
+        </p>
+
+        <div class="detail-box insight">
+          <strong>3-TIER FALLBACK CHAIN</strong>
+          If the primary object is not detected, the system checks whether an <em>alternative</em> reference object was found (e.g., the user selected "pen" but a card is visible). If that also fails, calibration falls back to a standard plate size estimate — a 700-pixel approximation that allows the pipeline to continue in DEGRADED mode.
+        </div>
+
+        <p>
+          The output of this stage is a <code>pixelToCmRatio</code> for each image (top and side), plus the bounding box coordinates of the detected reference object.
+        </p>
+      </div>
+    </div>
+
+    <div class="stage-deep">
+      <div class="stage-head">
+        <div class="stage-num">2</div>
+        <div>
+          <h3>Plate Geometry</h3>
+          <div class="subtitle">Locates the plate and measures its real-world diameter</div>
+        </div>
+      </div>
+      <div class="body">
+        <p>
+          With the pixel-to-cm ratio established, this stage detects the plate's bounding box and circle in the top image. The plate's real-world diameter is computed by converting the pixel measurements using the calibration ratio. Gemini provides a visual estimate of the plate dimensions, but when both images fell back to the plate-size estimate in Stage 1 (meaning no reference object was found at all), the standard plate configuration overrides Gemini's estimate to prevent compounding inaccuracies.
+        </p>
+        <p>
+          The plate geometry (center, radius, bounding box) serves as a spatial anchor for all subsequent stages: SAM masks are clipped to the plate boundary, food area percentages are computed relative to the plate area, and volume sanity checks compare against the plate's estimated container volume.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Stages 3–5 -->
+<section>
+  <div class="container">
+    <div class="section-label">Stages 3–5</div>
+    <h2>Segmentation &amp; Food Detection</h2>
+
+    <div class="stage-deep">
+      <div class="stage-head">
+        <div class="stage-num">3</div>
+        <div>
+          <h3>SAM Segmentation</h3>
+          <div class="subtitle">Pixel-accurate masks for every food item on the plate</div>
+        </div>
+      </div>
+      <div class="body">
+        <p>
+          The Python SAM microservice (running MobileSAM with the <code>vit_t</code> architecture) receives the top-view image along with bounding boxes for each food item (initially estimated by Gemini). For each bounding box, SAM generates a binary mask — the exact set of pixels belonging to that food item.
+        </p>
+        <p>
+          If a plate circle was detected in Stage 2, every mask is <strong>clipped to the plate boundary</strong> (logical AND with the plate mask). This prevents food pixels outside the plate from inflating area estimates.
+        </p>
+        <p>
+          When multiple food items overlap, an <strong>exclusive assignment</strong> step resolves conflicts: overlapping pixels are assigned to the item whose SAM confidence score is highest, ensuring each pixel is counted exactly once. The output is a <code>maskPixelCount</code> and a <code>samMaskScore</code> per item.
+        </p>
+
+        <div class="detail-box insight">
+          <strong>SIDE-VIEW SEGMENTATION</strong>
+          SAM also runs on the side-view image. For each item's side bounding box, it produces a mask and measures the vertical pixel extent (top row to bottom row), converting it to centimeters using the side-image calibration ratio. This height measurement is later fused with Gemini's estimate.
+        </div>
+      </div>
+    </div>
+
+    <div class="stage-deep">
+      <div class="stage-head">
+        <div class="stage-num">4</div>
+        <div>
+          <h3>Perspective Correction</h3>
+          <div class="subtitle">Rectifies the top-view for geometrically accurate area measurement</div>
+        </div>
+      </div>
+      <div class="body">
+        <p>
+          Even when the user holds the phone approximately flat, slight tilt introduces perspective distortion — a circle appears as an ellipse, and area measurements become biased. This stage applies a geometric correction to ensure pixel areas in the top-view image correspond to true real-world areas.
+        </p>
+      </div>
+    </div>
+
+    <div class="stage-deep">
+      <div class="stage-head">
+        <div class="stage-num">5</div>
+        <div>
+          <h3>Food Detection</h3>
+          <div class="subtitle">Gemini identifies what each segmented item actually is</div>
+        </div>
+      </div>
+      <div class="body">
+        <p>
+          This is where AI handles semantics. Gemini Vision receives the top-view image along with instructions about the reference object and container type, and returns a structured JSON response identifying every food item. For each item, Gemini provides: a visual name (e.g., "Grilled Chicken Breast"), a base ingredient (e.g., "chicken"), a confidence score, USDA search terms, the food's visual state (RAW, COOKED, FRIED, etc.), texture type (SOLID, GRANULAR, LEAFY, MIXED), a height category, a coverage percentage, and a bounding box.
+        </p>
+
+        <div class="detail-box insight">
+          <strong>DESIGN DECISION — SEPARATION OF CONCERNS</strong>
+          Gemini handles semantics (what is this food?); OpenCV, SAM, and ARCore handle measurement (how big is it?). The vision-language model is not asked to measure physical dimensions — it is unreliable for precise geometric tasks. Instead, its bounding boxes serve as prompts for SAM, and its coverage percentages serve as cross-checks against the mask-based area.
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Stages 6–8 -->
+<section class="alt">
+  <div class="container">
+    <div class="section-label">Stages 6–8</div>
+    <h2>Measurement — Area, Depth &amp; Height</h2>
+
+    <div class="stage-deep">
+      <div class="stage-head">
+        <div class="stage-num">6</div>
+        <div>
+          <h3>Food Area</h3>
+          <div class="subtitle">Per-item pixel area → real-world area in cm²</div>
+        </div>
+      </div>
+      <div class="body">
+        <p>
+          Each item's mask pixel count from Stage 3 is converted to square centimeters using the calibration ratio from Stage 1. A coverage percentage (item area / plate area × 100) is also computed. If SAM segmentation was successful, it is the primary area source; Gemini's <code>coverage_percent</code> estimate is used as a cross-check and fallback.
+        </p>
+        <p>
+          If the total food area exceeds the plate area, a high-severity warning is emitted — this usually signals a calibration or segmentation error.
+        </p>
+      </div>
+    </div>
+
+    <div class="stage-deep">
+      <div class="stage-head">
+        <div class="stage-num">7</div>
+        <div>
+          <h3>ARCore Depth Fusion</h3>
+          <div class="subtitle">Fuses device depth data when available</div>
+        </div>
+      </div>
+      <div class="body">
+        <p>
+          When the Android client has ARCore support and the device hardware allows it, a depth point cloud is captured alongside the meal photo. This stage fuses the ARCore depth data into the pipeline context, providing an additional per-pixel depth signal that can improve height estimation accuracy.
+        </p>
+        <p>
+          ARCore is declared as <code>optional</code> in the Android manifest — the app runs without it on devices that don't support it, and the pipeline gracefully skips this stage when no depth data is provided.
+        </p>
+      </div>
+    </div>
+
+    <div class="stage-deep">
+      <div class="stage-head">
+        <div class="stage-num">8</div>
+        <div>
+          <h3>Food Height</h3>
+          <div class="subtitle">Estimating how tall each food item is, in centimeters</div>
+        </div>
+      </div>
+      <div class="body">
+        <p>
+          Height estimation fuses two independent signals: Gemini's effective height estimate (which accounts for the food's "effective" cylindrical height — a dome of rice is not the same as a flat steak, even at the same tallest point) and SAM's pixel-based measurement from the side-view mask (raw vertical extent converted to cm).
+        </p>
+        <p>
+          The fusion logic follows a preference order: when both sources agree (within a configurable ratio threshold), a high-confidence fused estimate is produced. When they disagree, <strong>Gemini's estimate is preferred</strong> because it captures effective height rather than raw pixel extent. When only one source produced a result, that source is used with reduced confidence. If both report zero, a fallback of 1.0 cm is applied with very low confidence.
+        </p>
+
+        <div class="detail-box insight">
+          <strong>MONOCULAR DEPTH ESTIMATION</strong>
+          The SAM service also runs Depth-Anything-V2-Small, a monocular depth estimation model. Its <code>/depth_items</code> endpoint computes a per-item depth signal using a ring-baseline approach: for each food item, the median depth inside the mask is compared to the median depth in a ring of pixels surrounding the mask (excluding other food items). The difference — the "protrusion" — represents how much the food rises above the plate surface.
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Stages 9–11 -->
+<section>
+  <div class="container">
+    <div class="section-label">Stages 9–11</div>
+    <h2>Volume, Nutrition &amp; Sanity Check</h2>
+
+    <div class="stage-deep">
+      <div class="stage-head">
+        <div class="stage-num">9</div>
+        <div>
+          <h3>Volume Calculation</h3>
+          <div class="subtitle">Area × Height → cm³</div>
+        </div>
+      </div>
+      <div class="body">
+        <p>
+          Each item's real-world area (cm²) is multiplied by its effective height (cm) to produce a volume estimate in cubic centimeters. An <code>effectiveDensityFactor</code> from Gemini (0.3–1.0) is applied to account for void space — bread is roughly 0.65 (35% air), leafy salad is about 0.35, and solid chicken is close to 1.0.
+        </p>
+        <p>
+          If the total volume across all items exceeds the plate's estimated container volume, a high-severity warning is raised.
+        </p>
+      </div>
+    </div>
+
+    <div class="stage-deep">
+      <div class="stage-head">
+        <div class="stage-num">10</div>
+        <div>
+          <h3>Nutrition &amp; Density Lookup</h3>
+          <div class="subtitle">USDA database → macronutrients and density per item</div>
+        </div>
+      </div>
+      <div class="body">
+        <p>
+          For each identified food item, the USDA FoodData Central API is queried using the search terms provided by Gemini. The response provides carbohydrates, protein, fat, fiber, and water content per 100 g. A density value (g/cm³) is derived from the nutrient profile and texture type, enabling the conversion from volume to weight: <code>weightG = volumeCm3 × densityGPerCm3</code>.
+        </p>
+        <p>
+          If a food is not found in the USDA database, a high-severity warning is raised and manual weight input is required from the user.
+        </p>
+        <p>
+          From the weight and the per-100g nutrient data, the system computes per-item carbs, protein, fat, and fiber in grams. A <code>netCarbsG</code> field (carbs minus fiber) represents the carbohydrates that actually impact blood sugar.
+        </p>
+      </div>
+    </div>
+
+    <div class="stage-deep">
+      <div class="stage-head">
+        <div class="stage-num">11</div>
+        <div>
+          <h3>Sanity Check</h3>
+          <div class="subtitle">Plausibility gate and final confidence aggregation</div>
+        </div>
+      </div>
+      <div class="body">
+        <p>
+          The final stage reviews the full set of results for plausibility. Per-item weight is checked against a plausible range (3 g – 500 g); weights outside this range trigger a warning. Per-stage confidence scores — from calibration, segmentation, area, height, and nutrition — are aggregated into a single final confidence score that accompanies the response.
+        </p>
+        <p>
+          The complete result is returned to the client as a <code>MealBoundary</code> containing: every food item with its name, estimated weight, carbs, and confidence; meal totals; and a list of any warnings generated along the way.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Data Flow Summary -->
+<section class="alt">
+  <div class="container">
+    <div class="section-label">Data Flow</div>
+    <h2>What Flows Through the Pipeline</h2>
+    <p class="section-intro">A simplified view of the key data transformations across stages.</p>
+    <table>
+      <tr><th>Stage</th><th>Key Input</th><th>Key Output</th></tr>
+      <tr><td>1 — Calibration</td><td class="mono">images + ref object type</td><td class="mono">pixelToCmRatio (top & side)</td></tr>
+      <tr><td>2 — Plate Geometry</td><td class="mono">pixelToCmRatio</td><td class="mono">plateCircle, diameter cm</td></tr>
+      <tr><td>3 — SAM Segmentation</td><td class="mono">image + bounding boxes</td><td class="mono">maskPixelCount per item</td></tr>
+      <tr><td>4 — Perspective</td><td class="mono">top image</td><td class="mono">rectified image</td></tr>
+      <tr><td>5 — Food Detection</td><td class="mono">top image (Gemini)</td><td class="mono">food names, search terms, state</td></tr>
+      <tr><td>6 — Food Area</td><td class="mono">maskPixelCount + ratio</td><td class="mono">areaCm2 per item</td></tr>
+      <tr><td>7 — ARCore Depth</td><td class="mono">ARCore point cloud</td><td class="mono">fused depth data</td></tr>
+      <tr><td>8 — Food Height</td><td class="mono">side masks + Gemini est.</td><td class="mono">effectiveHeightCm per item</td></tr>
+      <tr><td>9 — Volume</td><td class="mono">areaCm2 × heightCm</td><td class="mono">volumeCm3 per item</td></tr>
+      <tr><td>10 — Nutrition</td><td class="mono">USDA lookup + volume</td><td class="mono">weightG, carbsG per item</td></tr>
+      <tr><td>11 — Sanity Check</td><td class="mono">all results</td><td class="mono">warnings, final confidence</td></tr>
+    </table>
+  </div>
+</section>
+
+<footer>
+  <div class="container">
+    <div class="footer-links">
+      <a href="index.html">Home</a>
+      <a href="insulin.html">Dosing →</a>
+      <a href="https://github.com/NimiB2/insuscan-server" target="_blank">Server Repo</a>
+      <a href="https://github.com/DanielSelas/InsuScan---AndoridApp" target="_blank">Android Repo</a>
+    </div>
+    <p>InsuScan · Final Project · Afeka College of Engineering</p>
+  </div>
+</footer>
+
+</body>
+</html>
