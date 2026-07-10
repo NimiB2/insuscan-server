@@ -122,6 +122,7 @@ It accepts a top-view image, a side-view image, and optional ARCore depth data f
 </div>
 
 <br>
+
 ```text
 Stage 1  ──  Calibration            (reference object detection & scale factor)
 Stage 2  ──  Plate Geometry         (plate bounding box & diameter)
