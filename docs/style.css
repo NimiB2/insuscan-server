@@ -301,12 +301,16 @@ footer a:hover { color: #fff; }
 .brand {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
+  white-space: nowrap;
 }
 
 .brand-logo {
-  width: 32px;
-  height: 32px;
+  display: block;
+  width: 32px !important;
+  height: 32px !important;
+  max-width: 32px;
+  max-height: 32px;
   object-fit: contain;
   flex-shrink: 0;
 }
