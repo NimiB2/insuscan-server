@@ -62,7 +62,7 @@ InsuScan Server is the backend powering a diabetes self-management Android appli
 ## System Architecture
 
 <div align="center">
-  <img src="images/Architecture.png"
+  <img src="docs/images/Architecture.png"
        alt="InsuScan System Architecture"
        width="900">
 </div>
@@ -116,7 +116,7 @@ The core feature is an **11-stage food estimation pipeline** triggered by `POST 
 It accepts a top-view image, a side-view image, and optional ARCore depth data from the Android client.
 
 <div align="center">
-  <img src="images/pipeline_diagram.png"
+  <img src="docs/images/pipeline_diagram.png"
        alt="InsuScan 11-Stage Food Estimation Pipeline"
        width="1000">
 </div>
@@ -153,7 +153,7 @@ http://localhost:9693/swagger-ui.html
 ```
 
 <div align="center">
-  <img src="images/swagger_scan_endpoint.png"
+  <img src="docs/images/swagger_scan_endpoint.png"
        alt="Swagger documentation for POST /vision/v2/scan"
        width="1000">
 </div>
