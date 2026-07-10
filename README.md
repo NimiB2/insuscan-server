@@ -122,9 +122,7 @@ It accepts a top-view image, a side-view image, and optional ARCore depth data f
 </div>
 
 <br>
-
-
-```
+```text
 Stage 1  ──  Calibration            (reference object detection & scale factor)
 Stage 2  ──  Plate Geometry         (plate bounding box & diameter)
 Stage 3  ──  SAM Segmentation       (segment-anything masks per food item)
@@ -139,6 +137,7 @@ Stage 11 ──  Sanity Check           (plausibility gate, confidence aggregati
 ```
 
 **Failure policy:**
+
 - `FATAL` at any stage → pipeline stops immediately, error returned to client.
 - `DEGRADED` → pipeline continues with reduced confidence and a warning added to the response.
 
