@@ -27,7 +27,7 @@ This server is one half of the **InsuScan** platform:
 | **InsuScan Server** *(you are here)* | Spring Boot REST API + AI food-estimation pipeline | — |
 | [**InsuScan Android App**](https://github.com/DanielSelas/InsuScan---AndoridApp) | Kotlin Android client with CameraX, ARCore & AR depth scanning | [View README](https://github.com/DanielSelas/InsuScan---AndoridApp#readme) |
 
-> 📄 **Documentation site** — coming soon at `https://docs.insuscan.app`
+> 📄 **Documentation site** — [nimib2.github.io/insuscan-server](https://nimib2.github.io/insuscan-server/)
 
 ---
 
