@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>API Reference — InsuScan Documentation</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<nav>
+  <div class="nav-inner">
+    <a class="brand" href="index.html">Insu<span>Scan</span></a>
+    <div class="nav-links">
+      <a href="index.html">Home</a>
+      <a href="pipeline.html">Pipeline</a>
+      <a href="insulin.html">Dosing</a>
+      <a href="api.html" class="active">API</a>
+      <a href="client.html">App</a>
+      <a class="gh" href="https://github.com/NimiB2/insuscan-server" target="_blank">GitHub</a>
+    </div>
+  </div>
+</nav>
+
+<header class="page-header compact">
+  <div class="container">
+    <div class="badge">REST API</div>
+    <h1><span>API</span> Reference</h1>
+    <p class="tagline">Every endpoint exposed by the InsuScan server, the data models they consume and produce, and the meal lifecycle they support.</p>
+  </div>
+</header>
+
+<!-- Interactive Docs -->
+<section>
+  <div class="container">
+    <div class="section-label">Interactive Docs</div>
+    <h2>Swagger UI</h2>
+    <p class="section-intro">
+      When the server is running locally, full interactive API documentation is available via SpringDoc OpenAPI at:
+    </p>
+    <pre><code>http://localhost:9693/swagger-ui.html</code></pre>
+    <p style="margin-top:16px">
+      Swagger UI lets you inspect every endpoint, see request/response schemas, and execute test calls directly from the browser. The reference below mirrors that structure for offline reading.
+    </p>
+  </div>
+</section>
+
+<!-- Vision Pipeline -->
+<section class="alt">
+  <div class="container">
+    <div class="section-label">Core Endpoint</div>
+    <h2>Vision Pipeline — <code>/vision/v2</code></h2>
+    <p class="section-intro">
+      The main endpoint that receives meal photos and returns food items with carbohydrate estimates and a recommended insulin dose.
+    </p>
+
+    <div class="endpoint-group">
+      <div class="endpoint">
+        <span class="method post">POST</span>
+        <span class="path">/vision/v2/scan</span>
+        <span class="desc">Analyse food images → return meal + insulin dose</span>
+      </div>
+    </div>
+
+    <h3 style="margin-top:24px">Multipart Parameters</h3>
+    <table>
+      <tr><th>Parameter</th><th>Type</th><th>Required</th><th>Description</th></tr>
+      <tr><td class="mono">topFile</td><td>file</td><td>✅</td><td>Top-view photo of the meal</td></tr>
+      <tr><td class="mono">sideFile</td><td>file</td><td>✅</td><td>Side-view photo of the meal</td></tr>
+      <tr><td class="mono">referenceObjectType</td><td>query</td><td>✅</td><td>Reference object type: <code>INSULIN_SYRINGE</code>, <code>CARD</code>, or <code>NONE</code></td></tr>
+      <tr><td class="mono">email</td><td>query</td><td>✅</td><td>User email for profile lookup</td></tr>
+      <tr><td class="mono">arcoreData</td><td>query</td><td>❌</td><td>Serialised ARCore depth JSON (when available)</td></tr>
+      <tr><td class="mono">topImageWidth</td><td>query</td><td>❌</td><td>Sensor width in pixels</td></tr>
+      <tr><td class="mono">topImageHeight</td><td>query</td><td>❌</td><td>Sensor height in pixels</td></tr>
+    </table>
+
+    <p style="margin-top:16px">
+      The response is a <code>MealBoundary</code> containing all detected food items, their estimated weights and carbs, a confidence score, an insulin calculation result, and any pipeline warnings. See the <a href="#models">Data Models</a> section below.
+    </p>
+  </div>
+</section>
+
+<!-- Users -->
+<section>
+  <div class="container">
+    <div class="section-label">User Management</div>
+    <h2>Users — <code>/users</code></h2>
+
+    <div class="endpoint-group">
+      <div class="endpoint">
+        <span class="method post">POST</span>
+        <span class="path">/users</span>
+        <span class="desc">Register a new user</span>
+      </div>
+      <div class="endpoint">
+        <span class="method get">GET</span>
+        <span class="path">/users/login/{systemId}/{email}</span>
+        <span class="desc">Authenticate / retrieve user</span>
+      </div>
+      <div class="endpoint">
+        <span class="method get">GET</span>
+        <span class="path">/users/{systemId}/{email}</span>
+        <span class="desc">Get user profile by ID</span>
+      </div>
+      <div class="endpoint">
+        <span class="method get">GET</span>
+        <span class="path">/users/by-email?systemId=&amp;email=</span>
+        <span class="desc">Look up user by email (query param)</span>
+      </div>
+      <div class="endpoint">
+        <span class="method put">PUT</span>
+        <span class="path">/users/{systemId}/{email}</span>
+        <span class="desc">Update user profile</span>
+      </div>
+      <div class="endpoint">
+        <span class="method del">DEL</span>
+        <span class="path">/users/{systemId}/{email}</span>
+        <span class="desc">Delete user account</span>
+      </div>
+      <div class="endpoint">
+        <span class="method get">GET</span>
+        <span class="path">/users/{systemId}/{email}/medical-complete</span>
+        <span class="desc">Check if medical profile is complete</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Meals -->
+<section class="alt">
+  <div class="container">
+    <div class="section-label">Meal Lifecycle</div>
+    <h2>Meals — <code>/meals</code></h2>
+    <p class="section-intro">
+      Meals follow a three-state lifecycle. The scan endpoint creates a meal in PENDING state; the user reviews, optionally edits food items, then confirms; finally the meal is marked complete.
+    </p>
+
+    <div class="flow-steps" style="margin-bottom:32px">
+      <div class="flow-step">PENDING<br><small>scan creates meal</small></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">CONFIRMED<br><small>user accepts + logs dose</small></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">COMPLETED<br><small>meal finalised</small></div>
+    </div>
+
+    <div class="endpoint-group">
+      <div class="endpoint">
+        <span class="method post">POST</span>
+        <span class="path">/meals/{systemId}/{email}</span>
+        <span class="desc">Create a new meal record</span>
+      </div>
+      <div class="endpoint">
+        <span class="method post">POST</span>
+        <span class="path">/meals/{systemId}/{email}/save-scanned</span>
+        <span class="desc">Save a scanned meal with food items</span>
+      </div>
+      <div class="endpoint">
+        <span class="method get">GET</span>
+        <span class="path">/meals/{systemId}/{mealId}</span>
+        <span class="desc">Get meal by ID</span>
+      </div>
+      <div class="endpoint">
+        <span class="method get">GET</span>
+        <span class="path">/meals/user/{systemId}/{email}</span>
+        <span class="desc">List user's meals (paginated)</span>
+      </div>
+      <div class="endpoint">
+        <span class="method get">GET</span>
+        <span class="path">/meals/recent/{systemId}/{email}?count=5</span>
+        <span class="desc">Get N most recent meals</span>
+      </div>
+      <div class="endpoint">
+        <span class="method get">GET</span>
+        <span class="path">/meals/user/{systemId}/{email}/by-date?from=&amp;to=</span>
+        <span class="desc">Filter meals by date range</span>
+      </div>
+      <div class="endpoint">
+        <span class="method get">GET</span>
+        <span class="path">/meals/count/{systemId}/{email}</span>
+        <span class="desc">Get total meal count for user</span>
+      </div>
+      <div class="endpoint">
+        <span class="method put">PUT</span>
+        <span class="path">/meals/{systemId}/{mealId}/fooditems</span>
+        <span class="desc">Update food items (user edits)</span>
+      </div>
+      <div class="endpoint">
+        <span class="method put">PUT</span>
+        <span class="path">/meals/{systemId}/{mealId}/confirm</span>
+        <span class="desc">Confirm meal — log actual dose &amp; glucose</span>
+      </div>
+      <div class="endpoint">
+        <span class="method put">PUT</span>
+        <span class="path">/meals/{systemId}/{mealId}/complete</span>
+        <span class="desc">Mark meal as completed</span>
+      </div>
+      <div class="endpoint">
+        <span class="method put">PUT</span>
+        <span class="path">/meals/{systemId}/{mealId}/portion</span>
+        <span class="desc">Update portion analysis data</span>
+      </div>
+      <div class="endpoint">
+        <span class="method del">DEL</span>
+        <span class="path">/meals/{systemId}/{mealId}</span>
+        <span class="desc">Delete meal</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Food & Insulin -->
+<section>
+  <div class="container">
+    <div class="section-label">Supporting Endpoints</div>
+    <h2>Food Search &amp; Insulin</h2>
+
+    <div class="two-col">
+      <div>
+        <h3 style="margin-bottom:14px">Food — <code>/food</code></h3>
+        <div class="endpoint">
+          <span class="method get">GET</span>
+          <span class="path">/food/search?query=&amp;limit=</span>
+        </div>
+        <p style="margin-top:8px;color:var(--muted);font-size:.9rem">Search USDA FoodData Central database by keyword.</p>
+        <div class="endpoint" style="margin-top:10px">
+          <span class="method post">POST</span>
+          <span class="path">/food/ai-search</span>
+        </div>
+        <p style="margin-top:8px;color:var(--muted);font-size:.9rem">AI-enhanced semantic food search using Gemini for fuzzy matching.</p>
+      </div>
+      <div>
+        <h3 style="margin-bottom:14px">Insulin — <code>/insulin</code></h3>
+        <div class="endpoint">
+          <span class="method post">POST</span>
+          <span class="path">/insulin/calculate</span>
+        </div>
+        <p style="margin-top:8px;color:var(--muted);font-size:.9rem">Calculate a personalised insulin dose given carbs and user profile. See the <a href="insulin.html">Dosing page</a> for the full formula.</p>
+      </div>
+    </div>
+
+    <h3 style="margin-top:36px;margin-bottom:14px">Admin — <code>/insuscan/admin</code></h3>
+    <div class="endpoint-group">
+      <div class="endpoint">
+        <span class="method get">GET</span>
+        <span class="path">/insuscan/admin/users</span>
+        <span class="desc">List all users (paginated)</span>
+      </div>
+      <div class="endpoint">
+        <span class="method del">DEL</span>
+        <span class="path">/insuscan/admin/users</span>
+        <span class="desc">Delete all users</span>
+      </div>
+      <div class="endpoint">
+        <span class="method del">DEL</span>
+        <span class="path">/insuscan/admin/meals</span>
+        <span class="desc">Delete all meals</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Data Models -->
+<section id="models" class="alt">
+  <div class="container">
+    <div class="section-label">Data Schemas</div>
+    <h2>Data Models</h2>
+
+    <h3 style="margin-top:28px">User</h3>
+    <pre><code>{
+  "userId": {
+    "systemId": "insuscan",
+    "email": "user@example.com"
+  },
+  "username": "John Doe",
+  "role": "PATIENT",
+  "insulinCarbRatio": "1:10",
+  "correctionFactor": 50.0,
+  "targetGlucose": 100,
+  "syringeType": "STANDARD_1ML"
+}</code></pre>
+
+    <div class="two-col" style="margin-top:20px">
+      <div>
+        <h3>User Roles</h3>
+        <table>
+          <tr><th>Role</th><th>Description</th></tr>
+          <tr><td class="mono">PATIENT</td><td>Regular user — scan meals, view personal history</td></tr>
+          <tr><td class="mono">ADMIN</td><td>Full access — manage all users and meals</td></tr>
+        </table>
+      </div>
+      <div>
+        <h3>Firestore Collections</h3>
+        <table>
+          <tr><th>Collection</th><th>Document ID</th></tr>
+          <tr><td class="mono">users</td><td class="mono">insuscan_{email}</td></tr>
+          <tr><td class="mono">meals</td><td class="mono">insuscan_{uuid}</td></tr>
+        </table>
+      </div>
+    </div>
+
+    <h3 style="margin-top:32px">Meal</h3>
+    <pre><code>{
+  "mealId": { "systemId": "insuscan", "id": "meal-uuid" },
+  "userId": { "systemId": "insuscan", "email": "user@example.com" },
+  "foodItems": [
+    {
+      "name": "Rice",
+      "estimatedWeightGrams": 150.0,
+      "carbsGrams": 45.0,
+      "confidence": 0.85
+    }
+  ],
+  "totalCarbs": 45.0,
+  "status": "PENDING",
+  "insulinCalculation": {
+    "totalCarbs": 45.0,
+    "carbDose": 4.5,
+    "correctionDose": 0.0,
+    "recommendedDose": 4.5,
+    "insulinCarbRatio": "1:10"
+  }
+}</code></pre>
+
+    <h3 style="margin-top:32px">Meal Statuses</h3>
+    <div class="flow-steps">
+      <div class="flow-step" style="background:var(--amber-soft);border-color:rgba(217,119,6,.3)">PENDING<br><small>Created by scan</small></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step" style="background:var(--accent-soft);border-color:rgba(10,132,255,.3)">CONFIRMED<br><small>User reviewed &amp; accepted</small></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step" style="background:var(--green-soft);border-color:rgba(22,163,74,.3)">COMPLETED<br><small>Finalised</small></div>
+    </div>
+
+    <div class="detail-box insight" style="margin-top:28px">
+      <strong>PENDING MEALS FILTERED FROM HISTORY</strong>
+      When the client fetches the user's meal history, meals with status PENDING are filtered out server-side. This prevents abandoned or in-progress scans from appearing in the history list.
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="container">
+    <div class="footer-links">
+      <a href="index.html">Home</a>
+      <a href="insulin.html">← Dosing</a>
+      <a href="client.html">App →</a>
+      <a href="https://github.com/NimiB2/insuscan-server" target="_blank">Server Repo</a>
+    </div>
+    <p>InsuScan · Final Project · Afeka College of Engineering</p>
+  </div>
+</footer>
+
+</body>
+</html>
