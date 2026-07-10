@@ -365,3 +365,33 @@ footer a:hover { color: #fff; }
     font-size: 1.6rem;
   }
 }
+
+.hero-layout {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 48px;
+}
+
+.hero-logo {
+  width: 130px;
+  height: 130px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.hero-content {
+  text-align: center;
+}
+
+@media (max-width: 750px) {
+  .hero-layout {
+    flex-direction: column;
+    gap: 24px;
+  }
+
+  .hero-logo {
+    width: 85px;
+    height: 85px;
+  }
+}
