@@ -693,26 +693,3 @@ footer a:hover { color: #fff; }
   }
 }
 
-/* Keep the process horizontal on phones */
-
-@media (max-width: 820px) {
-  .app-screen-gallery {
-    display: flex;
-    justify-content: flex-start;
-    align-items: center;
-    gap: 10px;
-    overflow-x: auto;
-    padding: 8px 4px 18px;
-    scroll-snap-type: x mandatory;
-  }
-
-  .app-screen-card {
-    flex: 0 0 190px;
-    scroll-snap-align: start;
-  }
-
-  .screen-arrow {
-    flex: 0 0 28px;
-    font-size: 1.8rem;
-  }
-}
