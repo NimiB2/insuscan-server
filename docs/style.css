@@ -395,3 +395,12 @@ footer a:hover { color: #fff; }
     height: 85px;
   }
 }
+
+.brand-text {
+  display: inline;
+  white-space: nowrap;
+}
+
+.brand-text > span {
+  color: var(--accent);
+}
