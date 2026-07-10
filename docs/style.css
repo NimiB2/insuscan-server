@@ -595,7 +595,7 @@ footer a:hover { color: #fff; }
 /* Vertical Android app demo */
 
 .app-demo-video {
-  width: min(100%, 290px);
+  width: min(100%, 220px);
   aspect-ratio: 9 / 16;
   margin: 32px auto 0;
   overflow: hidden;
