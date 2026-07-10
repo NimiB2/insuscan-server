@@ -61,17 +61,6 @@ InsuScan Server is the backend powering a diabetes self-management Android appli
 
 ## System Architecture
 
-<!-- ============================================================
-     📸 IMAGE PLACEHOLDER — System Architecture Diagram
-     Instructions:
-       1. Place your architecture image file at:
-          docs/architecture.png   (relative to this README)
-       2. Replace the lines below with:
-          ![InsuScan System Architecture](docs/architecture.png)
-     ============================================================ -->
-
-> 🖼️ **Architecture diagram** — add your image at `docs/architecture.png` and uncomment the line below.
-
 <div align="center">
   <img src="images/Architecture.png"
        alt="InsuScan System Architecture"
