@@ -389,8 +389,8 @@ footer a:hover { color: #fff; }
   top: 50%;
   transform: translateY(-50%);
 
-  width: 190px;
-  height: 190px;
+  width: 230px;
+  height: 230px;
   object-fit: contain;
 }
 
