@@ -102,6 +102,43 @@
         <p>
           The output of this stage is a <code>pixelToCmRatio</code> for each image (top and side), plus the bounding box coordinates of the detected reference object.
         </p>
+        <div class="image-gallery three-columns">
+  <figure class="image-figure">
+    <img
+      class="doc-image"
+      src="images/Drawing a plate and an object.png"
+      alt="Meal plate with a reference object positioned beside it"
+      loading="lazy"
+    >
+    <figcaption>
+      Recommended plate and reference-object placement
+    </figcaption>
+  </figure>
+
+  <figure class="image-figure">
+    <img
+      class="doc-image"
+      src="images/Reference object.png"
+      alt="Detected physical reference object"
+      loading="lazy"
+    >
+    <figcaption>
+      Reference-object detection
+    </figcaption>
+  </figure>
+
+  <figure class="image-figure">
+    <img
+      class="doc-image"
+      src="images/Reference object and approximate plate.png"
+      alt="Reference object and approximate plate detection"
+      loading="lazy"
+    >
+    <figcaption>
+      Reference object with approximate plate geometry
+    </figcaption>
+  </figure>
+</div>
       </div>
     </div>
 
@@ -120,6 +157,31 @@
         <p>
           The plate geometry (center, radius, bounding box) serves as a spatial anchor for all subsequent stages: SAM masks are clipped to the plate boundary, food area percentages are computed relative to the plate area, and volume sanity checks compare against the plate's estimated container volume.
         </p>
+        <div class="image-gallery">
+  <figure class="image-figure">
+    <img
+      class="doc-image"
+      src="images/Plate top.png"
+      alt="Plate detection from the top-view image"
+      loading="lazy"
+    >
+    <figcaption>
+      Top-view plate detection
+    </figcaption>
+  </figure>
+
+  <figure class="image-figure">
+    <img
+      class="doc-image"
+      src="images/Plate side.png"
+      alt="Plate detection from the side-view image"
+      loading="lazy"
+    >
+    <figcaption>
+      Side-view plate detection
+    </figcaption>
+  </figure>
+</div>
       </div>
     </div>
   </div>
@@ -154,6 +216,67 @@
           <strong>SIDE-VIEW SEGMENTATION</strong>
           SAM also runs on the side-view image. For each item's side bounding box, it produces a mask and measures the vertical pixel extent (top row to bottom row), converting it to centimeters using the side-image calibration ratio. This height measurement is later fused with Gemini's estimate.
         </div>
+        <div class="image-gallery">
+  <figure class="image-figure">
+    <img
+      class="doc-image"
+      src="images/Rice segmentation top.png"
+      alt="Rice segmentation from the top view"
+      loading="lazy"
+    >
+    <figcaption>Rice — top-view segmentation</figcaption>
+  </figure>
+
+  <figure class="image-figure">
+    <img
+      class="doc-image"
+      src="images/Rice segmentation side.png"
+      alt="Rice segmentation from the side view"
+      loading="lazy"
+    >
+    <figcaption>Rice — side-view segmentation</figcaption>
+  </figure>
+
+  <figure class="image-figure">
+    <img
+      class="doc-image"
+      src="images/Green bean segmentation top.png"
+      alt="Green bean segmentation from the top view"
+      loading="lazy"
+    >
+    <figcaption>Green beans — top-view segmentation</figcaption>
+  </figure>
+
+  <figure class="image-figure">
+    <img
+      class="doc-image"
+      src="images/Green bean segmentation side.png"
+      alt="Green bean segmentation from the side view"
+      loading="lazy"
+    >
+    <figcaption>Green beans — side-view segmentation</figcaption>
+  </figure>
+
+  <figure class="image-figure">
+    <img
+      class="doc-image"
+      src="images/Schnitzel segmentation top.png"
+      alt="Schnitzel segmentation from the top view"
+      loading="lazy"
+    >
+    <figcaption>Schnitzel — top-view segmentation</figcaption>
+  </figure>
+
+  <figure class="image-figure">
+    <img
+      class="doc-image"
+      src="images/Schnitzel segmentation side.png"
+      alt="Schnitzel segmentation from the side view"
+      loading="lazy"
+    >
+    <figcaption>Schnitzel — side-view segmentation</figcaption>
+  </figure>
+</div>
       </div>
     </div>
 
