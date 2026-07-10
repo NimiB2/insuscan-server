@@ -34,7 +34,7 @@ This server is one half of the **InsuScan** platform:
 ## 📋 Table of Contents
 
 - [Overview](#overview)
-- [Architecture](#architecture)
+- [System Architecture](#system-architecture)
 - [Technology Stack](#technology-stack)
 - [Food Estimation Pipeline](#food-estimation-pipeline)
 - [API Reference](#api-reference)
@@ -59,31 +59,42 @@ InsuScan Server is the backend powering a diabetes self-management Android appli
 
 ---
 
-## Architecture
+## System Architecture
 
-```
-Android App  ──►  InsuScan Server (Spring Boot :9693)
-                        │
-                        ├── /insuscan/users     ◄── UserController
-                        ├── /insuscan/meals     ◄── MealController
-                        ├── /vision/v2/scan     ◄── ScanPipelineController
-                        ├── /food               ◄── FoodController
-                        ├── /insulin            ◄── InsulinController
-                        └── /insuscan/admin     ◄── AdminController
-                        │
-                        ├── Firebase Firestore  (persistence)
-                        ├── Google Gemini API   (food classification)
-                        ├── USDA FoodData API   (nutrition data)
-                        └── SAM Service (:8001) (image segmentation)
-```
+<!-- ============================================================
+     📸 IMAGE PLACEHOLDER — System Architecture Diagram
+     Instructions:
+       1. Place your architecture image file at:
+          docs/architecture.png   (relative to this README)
+       2. Replace the lines below with:
+          ![InsuScan System Architecture](docs/architecture.png)
+     ============================================================ -->
+
+> 🖼️ **Architecture diagram** — add your image at `docs/architecture.png` and uncomment the line below.
+>
+> <!-- ![InsuScan System Architecture](docs/architecture.png) -->
 
 The server follows a **layered architecture**:
 
 ```
-Controller  →  Service  →  CRUD (Repository)  →  Firestore
-                 │
-                 └──  Pipeline (11-stage food estimation)
-                           └──  SAM Service (Python microservice)
+Android App  ──► (HTTPS / Retrofit2)  ──►  InsuScan Server (Spring Boot :9693)
+                                                    │
+                          ┌─────────────────────────┼──────────────────────────┐
+                          │                         │                          │
+                   REST API Layer           11-Stage Pipeline          Business Logic
+                  ┌───────────────┐       ┌──────────────────┐       ┌─────────────────┐
+                  │ UserController│       │ Calibration       │       │ MealService      │
+                  │ MealController│  ───► │ SAM Segmentation  │       │ UserService      │
+                  │ ScanPipeline  │       │ Food Detection    │       │ InsulinService   │
+                  │ FoodController│       │ Volume Calc       │       │ NutritionService │
+                  │ InsulinCtrl   │       │ Sanity Check      │       └─────────────────┘
+                  └───────────────┘       └──────────────────┘
+                          │                         │
+            ┌─────────────┼─────────────────────────┼────────────────┐
+            ▼             ▼                          ▼                ▼
+     Firebase        Google                      USDA            SAM Service
+     Firestore       Gemini API               FoodData API       (Python :8001)
+    (persistence)  (food classif.)           (nutrition DB)    (segmentation)
 ```
 
 ---
@@ -109,6 +120,19 @@ Controller  →  Service  →  CRUD (Repository)  →  Firestore
 The core feature is an **11-stage food estimation pipeline** triggered by `POST /vision/v2/scan`.  
 It accepts a top-view image, a side-view image, and optional ARCore depth data from the Android client.
 
+<!-- ============================================================
+     📸 IMAGE PLACEHOLDER — Pipeline Flow Diagram
+     Instructions:
+       1. Place a diagram/screenshot of the pipeline at:
+          docs/pipeline.png   (relative to this README)
+       2. Replace the lines below with:
+          ![Food Estimation Pipeline](docs/pipeline.png)
+     ============================================================ -->
+
+> 🖼️ **Pipeline diagram** — add a flow diagram at `docs/pipeline.png` and uncomment the line below.
+>
+> <!-- ![Food Estimation Pipeline](docs/pipeline.png) -->
+
 ```
 Stage 1  ──  Calibration            (reference object detection & scale factor)
 Stage 2  ──  Plate Geometry         (plate bounding box & diameter)
@@ -124,7 +148,7 @@ Stage 11 ──  Sanity Check           (plausibility gate, confidence aggregati
 ```
 
 **Failure policy:**
-- `FATAL` at any stage → pipeline stops immediately, error returned to client.  
+- `FATAL` at any stage → pipeline stops immediately, error returned to client.
 - `DEGRADED` → pipeline continues with reduced confidence and a warning added to the response.
 
 ---
@@ -136,6 +160,19 @@ Interactive documentation is available via **Swagger UI** when the server is run
 ```
 http://localhost:9693/swagger-ui.html
 ```
+
+<!-- ============================================================
+     📸 IMAGE PLACEHOLDER — Swagger UI Screenshot
+     Instructions:
+       1. Take a screenshot of the Swagger UI at http://localhost:9693/swagger-ui.html
+       2. Save it at: docs/swagger_ui.png
+       3. Replace the lines below with:
+          ![Swagger UI](docs/swagger_ui.png)
+     ============================================================ -->
+
+> 🖼️ **Swagger UI screenshot** — add a screenshot at `docs/swagger_ui.png` and uncomment the line below.
+>
+> <!-- ![Swagger UI](docs/swagger_ui.png) -->
 
 ### Users — `/insuscan/users`
 
@@ -354,6 +391,10 @@ docker-compose down
 
 ```
 insuscan-server/
+├── docs/                         # 📁 Place README images here
+│   ├── architecture.png          #    System architecture diagram
+│   ├── pipeline.png              #    Pipeline flow diagram (optional)
+│   └── swagger_ui.png            #    Swagger UI screenshot (optional)
 ├── src/main/java/com/insuscan/
 │   ├── Application.java          # Spring Boot entry point
 │   ├── boundary/                 # Request/response DTOs (API surface)
