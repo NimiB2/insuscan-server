@@ -295,3 +295,19 @@ footer a:hover { color: #fff; }
   .flow-steps { flex-direction: column; }
   .flow-arrow { transform: rotate(90deg); }
 }
+
+/* Navigation logo */
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.brand-logo {
+  width: 34px;
+  height: 34px;
+  object-fit: contain;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
