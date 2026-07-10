@@ -115,19 +115,13 @@ Android App  ──► (HTTPS / Retrofit2)  ──►  InsuScan Server (Spring B
 The core feature is an **11-stage food estimation pipeline** triggered by `POST /vision/v2/scan`.  
 It accepts a top-view image, a side-view image, and optional ARCore depth data from the Android client.
 
-<!-- ============================================================
-     📸 IMAGE PLACEHOLDER — Pipeline Flow Diagram
-     Instructions:
-       1. Place a diagram/screenshot of the pipeline at:
-          docs/pipeline.png   (relative to this README)
-       2. Replace the lines below with:
-          ![Food Estimation Pipeline](docs/pipeline.png)
-     ============================================================ -->
+<div align="center">
+  <img src="images/pipeline_diagram.png"
+       alt="InsuScan 11-Stage Food Estimation Pipeline"
+       width="1000">
+</div>
 
-> 🖼️ **Pipeline diagram** — add a flow diagram at `docs/pipeline.png` and uncomment the line below.
->
-> <!-- ![Food Estimation Pipeline](docs/pipeline.png) -->
-
+<br>
 ```
 Stage 1  ──  Calibration            (reference object detection & scale factor)
 Stage 2  ──  Plate Geometry         (plate bounding box & diameter)
@@ -156,18 +150,13 @@ Interactive documentation is available via **Swagger UI** when the server is run
 http://localhost:9693/swagger-ui.html
 ```
 
-<!-- ============================================================
-     📸 IMAGE PLACEHOLDER — Swagger UI Screenshot
-     Instructions:
-       1. Take a screenshot of the Swagger UI at http://localhost:9693/swagger-ui.html
-       2. Save it at: docs/swagger_ui.png
-       3. Replace the lines below with:
-          ![Swagger UI](docs/swagger_ui.png)
-     ============================================================ -->
+<div align="center">
+  <img src="images/swagger_scan_endpoint.png"
+       alt="Swagger documentation for POST /vision/v2/scan"
+       width="1000">
+</div>
 
-> 🖼️ **Swagger UI screenshot** — add a screenshot at `docs/swagger_ui.png` and uncomment the line below.
->
-> <!-- ![Swagger UI](docs/swagger_ui.png) -->
+<br>
 
 ### Users — `/insuscan/users`
 
