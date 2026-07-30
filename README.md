@@ -4,7 +4,7 @@
 
 # InsuScan - Backend Server
 
-**Intelligent food-scanning and insulin-dose management API**  
+**Intelligent food-scanning and insulin-dose management**  
 Built with Spring Boot · Firebase Firestore · Computer Vision · AI
 
 [![Java](https://img.shields.io/badge/Java-21-ED8B00?style=flat-square&logo=openjdk&logoColor=white)](https://openjdk.org/projects/jdk/21/)
