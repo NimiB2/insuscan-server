@@ -369,10 +369,6 @@ docker-compose down
 
 ```
 insuscan-server/
-├── docs/                         # 📁 Place README images here
-│   ├── architecture.png          #    System architecture diagram
-│   ├── pipeline.png              #    Pipeline flow diagram (optional)
-│   └── swagger_ui.png            #    Swagger UI screenshot (optional)
 ├── src/main/java/com/insuscan/
 │   ├── Application.java          # Spring Boot entry point
 │   ├── boundary/                 # Request/response DTOs (API surface)
@@ -388,7 +384,7 @@ insuscan-server/
 │   ├── converter/                # Entity ↔ Boundary mappers
 │   ├── crud/                     # Firestore repositories
 │   ├── data/                     # Firestore entity classes
-│   ├── enums/                    # Enumerations (MealStatus, UserRole, …)
+│   ├── enums/                    # Enumerations (MealStatus, UserRole)
 │   ├── exception/                # Custom exception types
 │   ├── init/                     # Demo-data initialiser (runs on startup)
 │   ├── pipeline/                 # 11-stage food estimation pipeline
