@@ -51,7 +51,7 @@ This server is one half of the **InsuScan** platform:
 
 InsuScan Server is the backend powering a diabetes self-management Android application. It exposes a REST API that:
 
-- **Receives food photos** from the mobile client (top-view + side-view), processes them through an 11-stage AI + computer-vision pipeline, and returns per-food-item weight, carbohydrates, and a recommended insulin dose.
+- **Receives food photos** from the mobile client (top-view + side-view), processes them through an 11-stage computer-vision pipeline, and returns per-food-item weight, carbohydrates, and a recommended insulin dose.
 - **Manages meal records** - creating, confirming, and completing meal sessions in Firestore.
 - **Manages user profiles** - storing personalised insulin settings (carb-ratio, correction factor, target glucose).
 - **Calculates insulin doses** - personalised dosing with optional real-time blood-glucose correction.
