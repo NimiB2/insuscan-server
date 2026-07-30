@@ -77,19 +77,18 @@ Android App  ──► (HTTPS / Retrofit2)  ──►  InsuScan Server (Spring B
                           ┌─────────────────────────┼──────────────────────────┐
                           │                         │                          │
                    REST API Layer           11-Stage Pipeline          Business Logic
-                  ┌───────────────┐       ┌──────────────────┐       ┌─────────────────┐
+                  ┌───────────────┐       ┌───────────────────┐       ┌──────────────────┐
                   │ UserController│       │ Calibration       │       │ MealService      │
                   │ MealController│  ───► │ SAM Segmentation  │       │ UserService      │
                   │ ScanPipeline  │       │ Food Detection    │       │ InsulinService   │
                   │ FoodController│       │ Volume Calc       │       │ NutritionService │
-                  │ InsulinCtrl   │       │ Sanity Check      │       └─────────────────┘
-                  └───────────────┘       └──────────────────┘
+                  │ InsuController│       │ Sanity Check      │       └──────────────────┘
+                  └───────────────┘       └───────────────────┘
                           │                         │
             ┌─────────────┼─────────────────────────┼────────────────┐
-            ▼             ▼                          ▼                ▼
-     Firebase        Google                      USDA            SAM Service
-     Firestore       Gemini API               FoodData API       (Python :8001)
-    (persistence)  (food classif.)           (nutrition DB)    (segmentation)
+            ▼             ▼                         ▼                ▼
+         Firebase       Google                     USDA         SAM Service
+         Firestore    Gemini API               FoodData API    (Python :8001)
 ```
 
 ---
