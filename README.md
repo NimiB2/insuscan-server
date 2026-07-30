@@ -2,7 +2,7 @@
 
 <img src="https://img.shields.io/badge/InsuScan-Server-0A84FF?style=for-the-badge&logo=spring&logoColor=white" alt="InsuScan Server"/>
 
-# InsuScan — Backend Server
+# InsuScan - Backend Server
 
 **Intelligent food-scanning and insulin-dose management API**  
 Built with Spring Boot · Firebase Firestore · Computer Vision · AI
@@ -24,7 +24,7 @@ This server is one half of the **InsuScan** platform:
 
 | Repository | Description | README |
 |---|---|---|
-| **InsuScan Server** *(you are here)* | Spring Boot REST API + AI food-estimation pipeline | — |
+| **InsuScan Server** *(you are here)* | Spring Boot REST API + AI food-estimation pipeline | - |
 | [**InsuScan Android App**](https://github.com/DanielSelas/InsuScan---AndoridApp) | Kotlin Android client with CameraX, ARCore & AR depth scanning | [View README](https://github.com/DanielSelas/InsuScan---AndoridApp#readme) |
 
 > 📄 **[Documentation site](https://nimib2.github.io/insuscan-server/)**
@@ -52,10 +52,10 @@ This server is one half of the **InsuScan** platform:
 InsuScan Server is the backend powering a diabetes self-management Android application. It exposes a REST API that:
 
 - **Receives food photos** from the mobile client (top-view + side-view), processes them through an 11-stage AI + computer-vision pipeline, and returns per-food-item weight, carbohydrates, and a recommended insulin dose.
-- **Manages meal records** — creating, confirming, and completing meal sessions in Firestore.
-- **Manages user profiles** — storing personalised insulin settings (carb-ratio, correction factor, target glucose).
-- **Calculates insulin doses** — personalised dosing with optional real-time blood-glucose correction.
-- **Provides AI-assisted food search** — semantic matching backed by the USDA food database.
+- **Manages meal records** - creating, confirming, and completing meal sessions in Firestore.
+- **Manages user profiles** - storing personalised insulin settings (carb-ratio, correction factor, target glucose).
+- **Calculates insulin doses** - personalised dosing with optional real-time blood-glucose correction.
+- **Provides AI-assisted food search** - semantic matching backed by the USDA food database.
 
 ---
 
@@ -102,11 +102,11 @@ Android App  ──► (HTTPS / Retrofit2)  ──►  InsuScan Server (Spring B
 | Framework | Spring Boot | 3.5.0 |
 | Build | Gradle | 8.x |
 | Database | Firebase Firestore | Admin SDK 9.2.0 |
-| Image Segmentation | SAM (Python microservice) | — |
-| AI / LLM | Google Gemini API | — |
-| Nutrition DB | USDA FoodData Central | — |
+| Image Segmentation | SAM (Python microservice) | - |
+| AI / LLM | Google Gemini API | - |
+| Nutrition DB | USDA FoodData Central | - |
 | API Docs | SpringDoc OpenAPI / Swagger UI | 2.8.8 |
-| Containerisation | Docker + Docker Compose | — |
+| Containerisation | Docker + Docker Compose | - |
 
 ---
 
@@ -160,7 +160,7 @@ http://localhost:9693/swagger-ui.html
 
 <br>
 
-### Users — `/insuscan/users`
+### Users - `/insuscan/users`
 
 | Method | Endpoint | Description |
 |---|---|---|
@@ -170,7 +170,7 @@ http://localhost:9693/swagger-ui.html
 | `DELETE` | `/insuscan/users/{systemId}/{email}` | Delete user account |
 | `GET` | `/insuscan/users/login/{systemId}/{email}` | Authenticate user |
 
-### Meals — `/insuscan/meals`
+### Meals - `/insuscan/meals`
 
 | Method | Endpoint | Description |
 |---|---|---|
@@ -184,7 +184,7 @@ http://localhost:9693/swagger-ui.html
 | `PUT` | `/insuscan/meals/{systemId}/{mealId}/complete` | Mark meal complete |
 | `DELETE` | `/insuscan/meals/{systemId}/{mealId}` | Delete meal |
 
-### Vision Pipeline — `/vision/v2`
+### Vision Pipeline - `/vision/v2`
 
 | Method | Endpoint | Description |
 |---|---|---|
@@ -201,20 +201,20 @@ http://localhost:9693/swagger-ui.html
 | `arcoreData` | `query` | ❌ | Serialised ARCore depth JSON |
 | `topImageWidth/Height` | `query` | ❌ | Sensor dimensions (px) |
 
-### Food — `/food`
+### Food - `/food`
 
 | Method | Endpoint | Description |
 |---|---|---|
 | `GET` | `/food/search?query=&limit=` | Search USDA food database |
 | `POST` | `/food/ai-search` | AI-enhanced semantic food search |
 
-### Insulin — `/insulin`
+### Insulin - `/insulin`
 
 | Method | Endpoint | Description |
 |---|---|---|
 | `POST` | `/insulin/calculate` | Calculate personalised insulin dose |
 
-### Admin — `/insuscan/admin`
+### Admin - `/insuscan/admin`
 
 | Method | Endpoint | Description |
 |---|---|---|
@@ -275,8 +275,8 @@ http://localhost:9693/swagger-ui.html
 
 | Role | Description |
 |---|---|
-| `PATIENT` | Regular user — can scan meals and view personal history |
-| `ADMIN` | Full access — can view and manage all users and meals |
+| `PATIENT` | Regular user - can scan meals and view personal history |
+| `ADMIN` | Full access - can view and manage all users and meals |
 
 ---
 
@@ -369,7 +369,7 @@ docker-compose up -d --build
 docker-compose down
 ```
 
-> **Note:** Ensure your `.env` file is present before starting with Docker Compose — it is loaded automatically.
+> **Note:** Ensure your `.env` file is present before starting with Docker Compose - it is loaded automatically.
 
 ---
 
@@ -462,7 +462,7 @@ uvicorn main:app --port 8001
 
 <div align="center">
 
-**InsuScan** — Afeka College of Engineering  
+**InsuScan** - Afeka College of Engineering  
 Academic project · Not for clinical use
 
 [Android App](https://github.com/DanielSelas/InsuScan---AndoridApp) · [Documentation](https://docs.insuscan.app) *(coming soon)*
