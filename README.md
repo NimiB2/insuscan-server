@@ -413,46 +413,11 @@ insuscan-server/
 
 ---
 
-## Troubleshooting
-
-### Firebase connection issues
-
-1. Verify `firebase-service-account.json` exists in `src/main/resources/` and is valid JSON.
-2. Confirm `FIREBASE_PROJECT_ID` matches the project in Firebase Console.
-3. Ensure **Firestore** (not Realtime Database) is enabled.
-4. Check network/firewall allows outbound HTTPS to `*.googleapis.com`.
-
-### Port already in use
-
-Override the port at runtime:
-
-```bash
-java -jar build/libs/insuscan-1.0.0.jar --server.port=9694
-```
-
-Or in `application.properties`:
-
-```properties
-server.port=9694
-```
-
-### SAM service not responding
-
-Ensure the Python SAM microservice is running on port `8001`. When using Docker Compose, both services start together. For local development, start the SAM service separately:
-
-```bash
-cd sam-service
-pip install -r requirements.txt
-uvicorn main:app --port 8001
-```
-
----
-
 <div align="center">
 
 **InsuScan** - Afeka College of Engineering  
 Academic project · Not for clinical use
 
-[Android App](https://github.com/DanielSelas/InsuScan---AndoridApp) · [Documentation](https://docs.insuscan.app) *(coming soon)*
+[Android App](https://github.com/DanielSelas/InsuScan---AndoridApp) · [Documentation](https://nimib2.github.io/insuscan-server/)
 
 </div>
