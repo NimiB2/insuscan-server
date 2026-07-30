@@ -270,13 +270,6 @@ http://localhost:9693/swagger-ui.html
 
 **Meal statuses:** `PENDING` → `CONFIRMED` → `COMPLETED`
 
-### User Roles
-
-| Role | Description |
-|---|---|
-| `PATIENT` | Regular user - can scan meals and view personal history |
-| `ADMIN` | Full access - can view and manage all users and meals |
-
 ---
 
 ## Getting Started
