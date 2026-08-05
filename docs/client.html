@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Android App — InsuScan Documentation</title>
+<title>Android App - InsuScan Documentation</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -60,7 +60,7 @@
     <h2>See the App in Action</h2>
 
     <p class="section-intro">
-      Watch the complete InsuScan flow — from capturing a meal to reviewing
+      Watch the complete InsuScan flow - from capturing a meal to reviewing
       the carbohydrate estimate and recommended insulin dose.
     </p>
 
@@ -137,7 +137,7 @@
     <div class="section-label">Core Flow</div>
     <h2>The Scan-to-Dose Journey</h2>
     <p class="section-intro">
-      The scan flow is the app's primary use case. It is orchestrated by <code>ScanFlowController</code>, <code>ScanHardwareController</code>, and <code>ScanPipelineManager</code> — three classes that divide responsibilities between UI flow, hardware management, and server communication.
+      The scan flow is the app's primary use case. It is orchestrated by <code>ScanFlowController</code>, <code>ScanHardwareController</code>, and <code>ScanPipelineManager</code> - three classes that divide responsibilities between UI flow, hardware management, and server communication.
     </p>
 
     <div class="flow-steps" style="margin-bottom:36px">
@@ -194,7 +194,7 @@
 
         <div class="detail-box insight" style="margin-top:16px">
           <strong>FORCE-CAPTURE TIMER</strong>
-          If the plate has been detected for more than 5 seconds but a quality check is still failing, a <code>ForceCapture</code> state is emitted. This prevents the user from being permanently blocked by marginal quality issues — the system prioritises getting a usable result over waiting for perfect conditions.
+          If the plate has been detected for more than 5 seconds but a quality check is still failing, a <code>ForceCapture</code> state is emitted. This prevents the user from being permanently blocked by marginal quality issues - the system prioritises getting a usable result over waiting for perfect conditions.
         </div>
       </div>
     </div>
@@ -261,13 +261,13 @@
       <div class="card">
         <h3><span class="icon-dot">📷</span>Live Camera</h3>
         <p>
-          The primary input method. Uses CameraX for the preview and capture. The live preview runs continuous image quality analysis — plate detection, reference object detection, blur check, and lighting assessment. Device orientation is monitored to enforce the flat-above-plate requirement for the top photo and the side-angle requirement for the side photo.
+          The primary input method. Uses CameraX for the preview and capture. The live preview runs continuous image quality analysis - plate detection, reference object detection, blur check, and lighting assessment. Device orientation is monitored to enforce the flat-above-plate requirement for the top photo and the side-angle requirement for the side photo.
         </p>
       </div>
       <div class="card">
         <h3><span class="icon-dot">🖼️</span>Gallery Import</h3>
         <p>
-          Users can also import a photo from their gallery via Android's photo picker (<code>PickVisualMedia</code>). Gallery images bypass the live coaching flow — the reference type is set to "NONE" and the side-photo step is skipped. This provides a quick path for users who already have meal photos.
+          Users can also import a photo from their gallery via Android's photo picker (<code>PickVisualMedia</code>). Gallery images bypass the live coaching flow - the reference type is set to "NONE" and the side-photo step is skipped. This provides a quick path for users who already have meal photos.
         </p>
       </div>
     </div>
@@ -287,7 +287,7 @@
         The <code>ArCoreManager</code> class handles the ARCore session lifecycle. When depth data is available, it is captured at the moment of the top-view photo and stored as an <code>ArcoreDepthData</code> JSON payload. The server's Stage 7 (ARCore Depth Fusion) integrates this data into the pipeline when present, or skips the stage entirely when it is not.
       </p>
       <p>
-        This design means the app works on any Android device with a camera, while automatically leveraging hardware depth sensing when the device supports it — no user configuration required.
+        This design means the app works on any Android device with a camera, while automatically leveraging hardware depth sensing when the device supports it - no user configuration required.
       </p>
     </div>
   </div>
@@ -381,7 +381,7 @@
       <div>
         <h3 style="margin-bottom:14px">Design System</h3>
         <p style="color:var(--muted);font-size:.93rem">
-          The app uses a design system internally called <strong>"Clinical Sanctuary"</strong> — a clean, clinical aesthetic built around navy blue as the primary colour, the Inter font family, and generous whitespace. The design prioritises clarity and trust over visual complexity, reflecting the medical nature of the app's purpose.
+          The app uses a design system internally called <strong>"Clinical Sanctuary"</strong> - a clean, clinical aesthetic built around navy blue as the primary colour, the Inter font family, and generous whitespace. The design prioritises clarity and trust over visual complexity, reflecting the medical nature of the app's purpose.
         </p>
         <p style="color:var(--muted);font-size:.93rem;margin-top:12px">
           UI components include a custom top bar via <code>TopBarHelper</code>, consistent row-based profile editing, a coaching pill overlay during scanning, and toast-based feedback via <code>ToastHelper</code>.
@@ -397,7 +397,7 @@
     <div class="section-label">Computer Vision</div>
     <h2>Client-Side Reference Detection</h2>
     <p class="section-intro">
-      While the server handles the authoritative calibration, the client also runs lightweight OpenCV-based reference detection during the live camera preview — purely for coaching purposes.
+      While the server handles the authoritative calibration, the client also runs lightweight OpenCV-based reference detection during the live camera preview - purely for coaching purposes.
     </p>
     <div class="body" style="max-width:800px">
       <p>
