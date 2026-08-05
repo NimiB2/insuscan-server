@@ -65,7 +65,7 @@
     <div class="two-col" style="margin-top:24px">
       <div class="detail-box danger">
         <strong>FATAL FAILURE</strong>
-        Raised by Calibration, Plate Geometry or Food Detection. The pipeline stops immediately and a clear error message is returned to the client. Example: the vision model call fails outright. Critical issues found in later stages do not stop the pipeline - they withhold the dose recommendation instead.
+        Raised only by Food Detection, when the vision model call itself fails (API error or rate limit). The pipeline stops immediately and an error is returned to the client. Calibration and Plate Geometry never fail fatally by design — both degrade to fallback values and continue.
       </div>
       <div class="detail-box warning">
         <strong>DEGRADED FAILURE</strong>
