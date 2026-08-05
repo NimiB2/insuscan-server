@@ -115,7 +115,7 @@ The core feature is an **11-stage food estimation pipeline** triggered by `POST 
 It accepts a top-view image, a side-view image, and optional ARCore depth data from the Android client.
 
 <div align="center">
-  <img src="docs/images/InsuScanProcessingPipeline.png"
+  <img src="docs/images/ProcessingPipelineDiagram.png"
        alt="InsuScan 11-Stage Food Estimation Pipeline"
        width="1000">
 </div>
