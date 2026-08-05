@@ -368,17 +368,13 @@
       </div>
       <div class="body">
         <p>
-          For each identified food item, the USDA FoodData Central API is queried using the search terms provided by Gemini. Candidates from every term are pooled, and the winner is chosen with preparation-aware matching - a candidate whose USDA name contradicts the expected preparation style (for example "raw" when the food was detected as "cooked") is penalized. The response provides carbohydrates, protein, fat, fiber, and water content per 100 g.
+          For each identified food item, the USDA FoodData Central API is queried using the search terms provided by Gemini. The response provides carbohydrates, protein, fat, fiber, and water content per 100 g. A density value (g/cm³) is derived from the nutrient profile and texture type, enabling the conversion from volume to weight: <code>weightG = volumeCm3 × densityGPerCm3</code>.
         </p>
-        <p>
-          A density value (g/cm³) is then derived using a three-tier strategy: a direct volume-to-weight ratio from the USDA serving portions where available, otherwise the Choi &amp; Okos proximate-composition formula computed from the nutrient profile.
-        </p>
-        <div class="detail-box insight">
-          <strong>VOID-SPACE CORRECTION</strong>
-          When density is derived from the USDA proximate composition, Gemini's <code>effective_density_factor</code> (0.3–1.0) is applied to account for void space - bread is roughly 0.65 (35% air), leafy salad is about 0.35, and solid chicken is close to 1.0. When a direct USDA serving-based density is available it is used as-is, since it already accounts for the food's packing.
-        </div>
         <p>
           If a food is not found in the USDA database, a high-severity warning is raised and manual weight input is required from the user.
+        </p>
+        <p>
+          From the weight and the per-100g nutrient data, the system computes per-item carbs, protein, fat, and fiber in grams. A <code>netCarbsG</code> field (carbs minus fiber) represents the carbohydrates that actually impact blood sugar.
         </p>
       </div>
     </div>
