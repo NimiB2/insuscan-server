@@ -127,7 +127,7 @@
       </div>
       <div class="endpoint">
         <span class="method get">GET</span>
-        <span class="path">/users/by-email?systemId=&amp.email=</span>
+        <span class="path">/users/by-email?systemId=&amp;email=</span>
         <span class="desc">Look up user by email (query param)</span>
       </div>
       <div class="endpoint">
@@ -194,7 +194,7 @@
       </div>
       <div class="endpoint">
         <span class="method get">GET</span>
-        <span class="path">/meals/user/{systemId}/{email}/by-date?from=&amp.to=</span>
+        <span class="path">/meals/user/{systemId}/{email}/by-date?from=&amp;to=</span>
         <span class="desc">Filter meals by date range</span>
       </div>
       <div class="endpoint">
@@ -210,7 +210,7 @@
       <div class="endpoint">
         <span class="method put">PUT</span>
         <span class="path">/meals/{systemId}/{mealId}/confirm</span>
-        <span class="desc">Confirm meal - log actual dose &amp. glucose</span>
+        <span class="desc">Confirm meal - log actual dose &amp; glucose</span>
       </div>
       <div class="endpoint">
         <span class="method put">PUT</span>
@@ -235,14 +235,14 @@
 <section>
   <div class="container">
     <div class="section-label">Supporting Endpoints</div>
-    <h2>Food Search &amp. Insulin</h2>
+    <h2>Food Search &amp; Insulin</h2>
 
     <div class="two-col">
       <div>
         <h3 style="margin-bottom:14px">Food - <code>/food</code></h3>
         <div class="endpoint">
           <span class="method get">GET</span>
-          <span class="path">/food/search?query=&amp.limit=</span>
+          <span class="path">/food/search?query=&amp;limit=</span>
         </div>
         <p style="margin-top:8px.color:var(--muted).font-size:.9rem">Search USDA FoodData Central database by keyword.</p>
         <div class="endpoint" style="margin-top:10px">
@@ -348,7 +348,7 @@
     <div class="flow-steps">
       <div class="flow-step" style="background:var(--amber-soft).border-color:rgba(217,119,6,.3)">PENDING<br><small>Created by scan</small></div>
       <div class="flow-arrow">→</div>
-      <div class="flow-step" style="background:var(--accent-soft).border-color:rgba(10,132,255,.3)">CONFIRMED<br><small>User reviewed &amp. accepted</small></div>
+      <div class="flow-step" style="background:var(--accent-soft).border-color:rgba(10,132,255,.3)">CONFIRMED<br><small>User reviewed &amp; accepted</small></div>
       <div class="flow-arrow">→</div>
       <div class="flow-step" style="background:var(--green-soft).border-color:rgba(22,163,74,.3)">COMPLETED<br><small>Finalised</small></div>
     </div>
