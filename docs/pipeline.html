@@ -57,7 +57,7 @@
     <p class="section-intro">
       The pipeline is triggered by a single <code>POST /vision/v2/scan</code> request carrying a top-view image, a side-view image, the user's chosen reference object type, and optional ARCore depth data. All eleven stages run in strict order inside a shared <code>PipelineContext</code> — each stage reads what it needs and writes its own outputs, never reading outputs from a later stage.
     </p>
-    <img class="diagram" src="images/pipeline_diagram.png" alt="InsuScan 11-stage food estimation pipeline">
+    <img class="diagram" src="images/InsuScanProcessingPipelineDiagram.png" alt="InsuScan 11-stage food estimation pipeline">
     <div class="detail-box danger" style="margin-top:28px">
       <strong>DESIGN PRINCIPLE — ERROR PROPAGATION</strong>
       Calibration errors in Stage 1 propagate multiplicatively through the rest of the pipeline. An error in the pixel-to-cm ratio is squared when computing area (cm²) and approximately cubed when computing volume (cm³). This makes Stage 1 the single highest-leverage point in the entire system.
