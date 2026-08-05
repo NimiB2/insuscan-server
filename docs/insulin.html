@@ -74,7 +74,7 @@
       <div class="card">
         <h3><span class="icon-dot">📋</span>Parameter Definitions</h3>
         <p style="margin-top:12px">
-          <strong>ICR</strong> (Insulin-to-Carb Ratio) - grams of carbs covered by 1 unit of insulin. Stored as "1:X" (e.g., "1:10" means 1 unit covers 10 g). The system auto-normalises inverted values: if a user enters 0.1, it is corrected to 10.
+          <strong>ICR</strong> (Insulin-to-Carb Ratio) - grams of carbs covered by 1 unit of insulin. Stored as "1:X" (e.g. "1:10" means 1 unit covers 10 g). The system auto-normalises inverted values: if a user enters 0.1, it is corrected to 10.
         </p>
         <p>
           <strong>ISF</strong> (Insulin Sensitivity Factor / Correction Factor) - how many mg/dL 1 unit of insulin lowers blood glucose.
@@ -109,7 +109,7 @@
     <div class="stage-deep">
       <div class="body">
         <p>
-          An <code>InsulinPlan</code> has five fields: a unique ID, a user-visible name (e.g., "Regular", "Sick Day", "Workout"), an <code>isDefault</code> flag, and the three dosing parameters - ICR, ISF, and target glucose. Plans are stored locally on the device via <code>UserProfileManager</code> and synced to Firestore through the server's User API.
+          An <code>InsulinPlan</code> has six fields: a unique ID, a user-visible name (e.g., "Regular", "Sick Day", "Workout"), an <code>isDefault</code> flag, and the three dosing parameters - ICR, ISF, and target glucose. Plans are stored locally on the device via <code>UserProfileManager</code> and synced to Firestore through the server's User API.
         </p>
         <p>
           The user selects an active plan from the home screen. When a scan completes, the active plan's parameters are used for dose calculation. If no plan is selected, the app throws <code>InsulinException.NoActivePlan</code> before the calculation is attempted.
@@ -124,7 +124,7 @@
       </div>
       <div class="card">
         <h3><span class="icon-dot">🚫</span>Incomplete Profile Blocking</h3>
-        <p>A plan must have all three parameters (ICR &gt. 0, ISF &gt. 0, target glucose &gt. 0) to be considered complete. The <code>PlanValidator</code> checks this before saving - incomplete plans cannot be saved, and incomplete profiles cannot trigger a dose calculation.</p>
+        <p>A plan must have all three parameters (ICR &gt; 0, ISF &gt; 0, target glucose &gt; 0) to be considered complete. The <code>PlanValidator</code> checks this before saving - incomplete plans cannot be saved, and incomplete profiles cannot trigger a dose calculation.</p>
       </div>
       <div class="card">
         <h3><span class="icon-dot">📐</span>Pen-Step Rounding</h3>
