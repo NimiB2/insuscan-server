@@ -123,22 +123,23 @@ It accepts a top-view image, a side-view image, and optional ARCore depth data f
 <br>
 
 ```text
-Stage 1  ──  Calibration            (reference object detection & scale factor)
-Stage 2  ──  Plate Geometry         (plate bounding box & diameter)
-Stage 3  ──  SAM Segmentation       (segment-anything masks per food item)
-Stage 4  ──  Perspective Correction (rectify top-view for accurate area)
-Stage 5  ──  Food Detection         (Gemini-based food class identification)
-Stage 6  ──  Food Area              (per-item pixel area → real-world area cm²)
-Stage 7  ──  ARCore Depth Fusion    (fuse ARCore point-cloud if available)
-Stage 8  ──  Food Height            (side-image height estimation cm)
-Stage 9  ──  Volume Calculation     (area × height → cm³)
-Stage 10 ──  Nutrition & Density    (USDA lookup → macronutrients per item)
-Stage 11 ──  Sanity Check           (plausibility gate, confidence aggregation)
+Stage 1  ──  Calibration            (reference object → pixel-to-cm ratio, both images)
+Stage 2  ──  Plate Geometry         (diameter, depth, container type, fill percent)
+Stage 3  ──  Perspective Correction (camera-tilt rectification — currently disabled)
+Stage 4  ──  Food Detection         (Gemini Vision → items, bboxes, density factor)
+Stage 5  ──  Food Area              (SAM mask → real-world surface area cm²)
+Stage 6  ──  Food Height            (side-image effective height + SAM & ARCore fusion)
+Stage 7  ──  Volume                 (area × height → cm³)
+Stage 8  ──  Nutrition & Density    (USDA lookup → macros per 100g + g/cm³)
+Stage 9  ──  Weight                 (volume × density → grams)
+Stage 10 ──  Aggregation            (per-item macros → meal totals)
+Stage 11 ──  Sanity Check           (physical-plausibility warnings)
 ```
 
 **Failure policy:**
 
-- `FATAL` at any stage → pipeline stops immediately, error returned to client.
+- `CRITICAL` warning after Calibration, Plate Geometry or Food Detection → pipeline stops, error returned to client.
+- `CRITICAL` at any later stage → pipeline completes; `DoseGateEvaluator` withholds the dose recommendation.
 - `DEGRADED` → pipeline continues with reduced confidence and a warning added to the response.
 
 ---
