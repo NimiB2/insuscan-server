@@ -65,7 +65,7 @@
     <div class="two-col" style="margin-top:24px">
       <div class="detail-box danger">
         <strong>FATAL FAILURE</strong>
-        Raised only by Food Detection, when the vision model call itself fails (API error or rate limit). The pipeline stops immediately and an error is returned to the client. Calibration and Plate Geometry never fail fatally by design — both degrade to fallback values and continue.
+        Raised only by Food Detection, when the vision model call itself fails (API error or rate limit). The pipeline stops immediately and an error is returned to the client. Calibration and Plate Geometry never fail fatally by design -both degrade to fallback values and continue.
       </div>
       <div class="detail-box warning">
         <strong>DEGRADED FAILURE</strong>
@@ -302,10 +302,6 @@
         <div class="detail-box insight">
           <strong>ARCORE DEPTH FUSION</strong>
           When the Android client has ARCore support and the device hardware allows it, depth measurements are captured alongside the meal photo. This stage fuses the ARCore measurements - plate depth, plate diameter, and per-item heights - with the pipeline's own vision-based estimates. ARCore's weight in the weighted average scales with its reported confidence (0.70 / 0.50 / 0.25), so a high-confidence reading dominates while a low-confidence one acts as a minor correction. ARCore is declared as <code>optional</code> in the Android manifest - the app runs without it on devices that don't support it, and the fusion is skipped entirely when no depth data is provided.
-        </div>
-        <div class="detail-box insight">
-          <strong>MONOCULAR DEPTH ESTIMATION</strong>
-          The SAM service also runs Depth-Anything-V2-Small, a monocular depth estimation model. Its <code>/depth_items</code> endpoint computes a per-item depth signal using a ring-baseline approach: for each food item, the median depth inside the mask is compared to the median depth in a ring of pixels surrounding the mask (excluding other food items). The difference - the "protrusion" - represents how much the food rises above the plate surface. This endpoint is available in the SAM service but is not yet wired into the pipeline.
         </div>
         <div class="image-gallery">
   <figure class="image-figure">
