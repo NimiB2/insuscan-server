@@ -78,7 +78,7 @@
 <section class="alt">
   <div class="container">
     <div class="section-label">Stages 1–2</div>
-    <h2>Calibration &amp. Plate Geometry</h2>
+    <h2>Calibration &amp; Plate Geometry</h2>
     <div class="stage-deep">
       <div class="stage-head">
         <div class="stage-num">1</div>
@@ -191,7 +191,7 @@
 <section>
   <div class="container">
     <div class="section-label">Stages 3–4</div>
-    <h2>Perspective Correction &amp. Food Detection</h2>
+    <h2>Perspective Correction &amp; Food Detection</h2>
     <div class="stage-deep">
       <div class="stage-head">
         <div class="stage-num">3</div>
@@ -234,7 +234,7 @@
 <section class="alt">
   <div class="container">
     <div class="section-label">Stages 5–7</div>
-    <h2>Measurement - Area, Height &amp. Volume</h2>
+    <h2>Measurement - Area, Height &amp; Volume</h2>
     <div class="stage-deep">
       <div class="stage-head">
         <div class="stage-num">5</div>
@@ -361,12 +361,12 @@
 <section>
   <div class="container">
     <div class="section-label">Stages 8–11</div>
-    <h2>Nutrition, Weight &amp. Sanity Check</h2>
+    <h2>Nutrition, Weight &amp; Sanity Check</h2>
     <div class="stage-deep">
       <div class="stage-head">
         <div class="stage-num">8</div>
         <div>
-          <h3>Nutrition &amp. Density Lookup</h3>
+          <h3>Nutrition &amp; Density Lookup</h3>
           <div class="subtitle">USDA database → macronutrients and density per item</div>
         </div>
       </div>
@@ -375,7 +375,7 @@
           For each identified food item, the USDA FoodData Central API is queried using the search terms provided by Gemini. Candidates from every term are pooled, and the winner is chosen with preparation-aware matching - a candidate whose USDA name contradicts the expected preparation style (for example "raw" when the food was detected as "cooked") is penalized. The response provides carbohydrates, protein, fat, fiber, and water content per 100 g.
         </p>
         <p>
-          A density value (g/cm³) is then derived using a three-tier strategy: a direct volume-to-weight ratio from the USDA serving portions where available, otherwise the Choi &amp. Okos proximate-composition formula computed from the nutrient profile.
+          A density value (g/cm³) is then derived using a three-tier strategy: a direct volume-to-weight ratio from the USDA serving portions where available, otherwise the Choi &amp; Okos proximate-composition formula computed from the nutrient profile.
         </p>
         <div class="detail-box insight">
           <strong>VOID-SPACE CORRECTION</strong>
