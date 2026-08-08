@@ -8,14 +8,19 @@ services:
       - .env
     environment:
       SAM_SERVICE_URL: http://sam-service:8001
+      SCAN_REPORT_DIR: /app/debug/sessions
+    volumes:
+      - "${DEBUG_DIR}:/app/debug"
     depends_on:
       - sam-service
 
   sam-service:
-      build: ./sam-service
-      container_name: sam-service
-      ports:
-        - "8001:8001"
-      environment:
-        SAM_DEBUG_ENABLED: "true"
-        SAM_DEBUG_DIR: /app/debug/masks
+    build: ./sam-service
+    container_name: sam-service
+    ports:
+      - "8001:8001"
+    environment:
+      SAM_DEBUG_ENABLED: "true"
+      SAM_DEBUG_DIR: /app/debug/sessions
+    volumes:
+      - "${DEBUG_DIR}:/app/debug"

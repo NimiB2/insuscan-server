@@ -1,4 +1,3 @@
-import uuid
 import base64
 import os
 import io
@@ -6,7 +5,7 @@ import numpy as np
 from fastapi import FastAPI
 from pydantic import BaseModel
 from typing import List, Optional
-from PIL import Image
+from PIL import Image, ImageDraw
 import torch
 from mobile_sam import sam_model_registry, SamPredictor
 
@@ -19,31 +18,73 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 DEBUG_DIR = os.getenv("SAM_DEBUG_DIR", "/app/debug/masks")
 
 
-def save_mask_debug(image_np, mask, label, scan_id):
-    if not os.getenv("SAM_DEBUG_ENABLED", "false").lower() == "true":
+def debug_enabled():
+    return os.getenv("SAM_DEBUG_ENABLED", "false").lower() == "true"
+
+
+def safe_name(value):
+    return "".join(c if c.isalnum() else "_" for c in str(value))
+
+
+def session_dir(session_id):
+    folder = os.path.join(DEBUG_DIR, safe_name(session_id or "unassigned"))
+    os.makedirs(folder, exist_ok=True)
+    return folder
+
+
+def save_image_debug(image_np, label, session_id):
+    if not debug_enabled():
         return
-    os.makedirs(DEBUG_DIR, exist_ok=True)
+    path = os.path.join(session_dir(session_id), f"{safe_name(label)}.png")
+    Image.fromarray(image_np).save(path)
+
+
+def save_mask_debug(image_np, mask, label, session_id):
+    if not debug_enabled():
+        return
     overlay = image_np.copy()
     colored = np.zeros_like(overlay)
     colored[mask] = [255, 0, 0]
     blended = (overlay * 0.6 + colored * 0.4).astype(np.uint8)
-    safe_label = "".join(c if c.isalnum() else "_" for c in label)
-    filename = f"{scan_id}_{safe_label}.png"
-    Image.fromarray(blended).save(os.path.join(DEBUG_DIR, filename))
+    path = os.path.join(session_dir(session_id), f"{safe_name(label)}.png")
+    Image.fromarray(blended).save(path)
 
 
-def save_depth_debug(depth_np, scan_id):
-    if not os.getenv("SAM_DEBUG_ENABLED", "false").lower() == "true":
+def save_boxes_debug(image_np, bboxes, plate_circle, label, session_id):
+    if not debug_enabled():
         return
-    os.makedirs(DEBUG_DIR, exist_ok=True)
+    H, W = image_np.shape[:2]
+    image = Image.fromarray(image_np.copy())
+    draw = ImageDraw.Draw(image)
+    if plate_circle is not None and plate_circle.r > 0:
+        draw.ellipse(
+            [plate_circle.cx - plate_circle.r, plate_circle.cy - plate_circle.r,
+             plate_circle.cx + plate_circle.r, plate_circle.cy + plate_circle.r],
+            outline=(0, 128, 255), width=4
+        )
+    for idx, bbox in enumerate(bboxes):
+        x1 = (bbox.x_pct / 100.0) * W
+        y1 = (bbox.y_pct / 100.0) * H
+        x2 = ((bbox.x_pct + bbox.w_pct) / 100.0) * W
+        y2 = ((bbox.y_pct + bbox.h_pct) / 100.0) * H
+        draw.rectangle([x1, y1, x2, y2], outline=(0, 255, 0), width=4)
+        draw.text((x1 + 6, y1 + 6), str(idx), fill=(0, 255, 0))
+    image.save(os.path.join(session_dir(session_id), f"{safe_name(label)}.png"))
+
+
+def save_depth_debug(depth_np, session_id):
+    if not debug_enabled():
+        return
     d_min = float(depth_np.min())
     d_max = float(depth_np.max())
     if d_max - d_min < 1e-6:
         normalized = np.zeros_like(depth_np, dtype=np.uint8)
     else:
         normalized = ((depth_np - d_min) / (d_max - d_min) * 255.0).astype(np.uint8)
-    filename = f"{scan_id}_depth.png"
-    Image.fromarray(normalized).save(os.path.join(DEBUG_DIR, filename))
+    Image.fromarray(normalized).save(os.path.join(session_dir(session_id), "depth.png"))
+
+
+
 
 sam = sam_model_registry[MODEL_TYPE](checkpoint=CHECKPOINT)
 sam.to(device=DEVICE)
@@ -68,6 +109,7 @@ class PlateCircle(BaseModel):
 
 
 class SegmentRequest(BaseModel):
+    session_id: Optional[str] = None
     image_base64: str
     bboxes: List[BoundingBox]
     plate_circle: Optional[PlateCircle] = None
@@ -86,6 +128,7 @@ class HeightResult(BaseModel):
 
 
 class SideSegmentRequest(BaseModel):
+    session_id: Optional[str] = None
     image_base64: str
     bboxes: List[BoundingBox]
     pixel_to_cm_ratio: float
@@ -161,17 +204,19 @@ def segment(request: SegmentRequest):
 
     plate_mask = build_plate_mask(request.plate_circle, H, W)
 
-    scan_id = uuid.uuid4().hex[:8]
+    sid = request.session_id
+    save_image_debug(image_np, "top_input", sid)
+    save_boxes_debug(image_np, request.bboxes, request.plate_circle, "top_boxes", sid)
     masks = []
     scores = []
     for idx, bbox in enumerate(request.bboxes):
         raw_mask, score = run_sam(image_np, bbox, W, H)
-        save_mask_debug(image_np, raw_mask, f"{idx}_raw", scan_id)
+        save_mask_debug(image_np, raw_mask, f"top_{idx}_raw", sid)
         if plate_mask is not None:
             final_mask = raw_mask & plate_mask
         else:
             final_mask = raw_mask
-        save_mask_debug(image_np, final_mask, f"{idx}_final", scan_id)
+        save_mask_debug(image_np, final_mask, f"top_{idx}_final", sid)
         masks.append(final_mask)
         scores.append(score)
 
@@ -192,12 +237,14 @@ def segment_side(request: SideSegmentRequest):
 
     predictor.set_image(image_np)
 
-    scan_id = uuid.uuid4().hex[:8]
+    sid = request.session_id
+    save_image_debug(image_np, "side_input", sid)
+    save_boxes_debug(image_np, request.bboxes, None, "side_boxes", sid)
     heights = []
     for idx, bbox in enumerate(request.bboxes):
         mask, _ = run_sam(image_np, bbox, W, H)
-        save_mask_debug(image_np, mask, f"side_{idx}", scan_id)
-
+        save_mask_debug(image_np, mask, f"side_{idx}", sid)
+        
         rows = np.any(mask, axis=1)
         if rows.any():
             top_row = np.argmax(rows)
@@ -218,6 +265,7 @@ def segment_side(request: SideSegmentRequest):
 
 
 class DepthRequest(BaseModel):
+    session_id: Optional[str] = None
     image_base64: str
 
 
@@ -234,8 +282,7 @@ def depth(request: DepthRequest):
     result = depth_estimator(image)
     depth_np = np.array(result["depth"], dtype=np.float32)
 
-    scan_id = uuid.uuid4().hex[:8]
-    save_depth_debug(depth_np, scan_id)
+    save_depth_debug(depth_np, request.session_id)
 
     return DepthResult(
         width=image.width,
@@ -245,6 +292,7 @@ def depth(request: DepthRequest):
     )
 
 class DepthItemsRequest(BaseModel):
+    session_id: Optional[str] = None
     image_base64: str
     bboxes: List[BoundingBox]
     ring_width: int = 20
@@ -275,8 +323,7 @@ def depth_items(request: DepthItemsRequest):
     result = depth_estimator(image)
     depth_np = np.array(result["depth"], dtype=np.float32)
 
-    scan_id = uuid.uuid4().hex[:8]
-    save_depth_debug(depth_np, scan_id)
+    save_depth_debug(depth_np, request.session_id)
 
     masks = []
     for bbox in request.bboxes:

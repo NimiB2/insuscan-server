@@ -128,6 +128,7 @@ public class SamSegmentationService {
 
     private String buildRequestBody(PipelineContext ctx, List<PipelineFoodItem> items) throws Exception {
         ObjectNode root = objectMapper.createObjectNode();
+        root.put("session_id", ctx.getSessionId());
         root.put("image_base64", ctx.getImageTopBase64());
 
         ArrayNode bboxes = objectMapper.createArrayNode();
@@ -235,6 +236,7 @@ public class SamSegmentationService {
 
     private String buildSideRequestBody(PipelineContext ctx, List<PipelineFoodItem> items) throws Exception {
         ObjectNode root = objectMapper.createObjectNode();
+        root.put("session_id", ctx.getSessionId());
         root.put("image_base64", ctx.getImageSideBase64());
         root.put("pixel_to_cm_ratio", ctx.getPixelToCmRatioSide());
 
