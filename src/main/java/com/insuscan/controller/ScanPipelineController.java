@@ -52,6 +52,9 @@ public class ScanPipelineController {
 
     private static final Logger log = LoggerFactory.getLogger(ScanPipelineController.class);
 
+    /** Number of times a fresh meal id is generated when the previous one is already taken. */
+    private static final int MEAL_ID_MAX_ATTEMPTS = 5;
+    
     private final FoodEstimationPipeline pipeline;
     private final UserRepository userRepository;
     private final MealRepository mealRepository;
@@ -151,8 +154,8 @@ public class ScanPipelineController {
         }
 
         String userDocId = systemId + "_" + email;
-        String newId = mealIdGenerator.generateMealId(email);
-
+        String newId = mealIdGenerator.generateMealId();
+        
         MealEntity meal = new MealEntity();
         meal.setId(systemId + "_" + newId);
         meal.setUserId(userDocId);
@@ -246,7 +249,10 @@ public class ScanPipelineController {
             meal.setInsulinMessage("User profile not found. Please log in.");
         }
 
-        mealRepository.save(meal);
+        if (!persistNewMeal(meal)) {
+            log.error("[ScanV2] Could not allocate a free meal id after {} attempts", MEAL_ID_MAX_ATTEMPTS);
+            return ResponseEntity.internalServerError().body("Could not save the scanned meal. Please try again.");
+        }
         log.info("[ScanV2] Saved MealEntity (id={}) with totalCarbs={}, estimatedWeight={}",
             meal.getId(), meal.getTotalCarbs(), meal.getEstimatedWeight());
 
@@ -272,6 +278,20 @@ public class ScanPipelineController {
         }
         return mealService.getRecentMeals(systemId, userEmail, limit);
     }
+    
+    private boolean persistNewMeal(MealEntity meal) {
+        for (int attempt = 1; attempt <= MEAL_ID_MAX_ATTEMPTS; attempt++) {
+            if (mealRepository.createIfAbsent(meal)) {
+                return true;
+            }
+            String retryId = systemId + "_" + mealIdGenerator.generateMealId();
+            log.warn("[ScanV2] Meal id {} was taken, retrying with {} (attempt {}/{})",
+                    meal.getId(), retryId, attempt, MEAL_ID_MAX_ATTEMPTS);
+            meal.setId(retryId);
+        }
+        return false;
+    }
+    
 
     @GetMapping(path = "/saved/{mealId}", produces = MediaType.APPLICATION_JSON_VALUE)
     public MealBoundary getSavedAnalysis(@PathVariable("mealId") String mealId) {

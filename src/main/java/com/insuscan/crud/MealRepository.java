@@ -12,6 +12,9 @@ import java.util.*;
 import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
 
+import io.grpc.Status;
+import io.grpc.StatusRuntimeException;
+
 /**
  * Firestore-backed repository for {@link MealEntity}, providing CRUD operations,
  * queries by user and date range, pagination with index-missing fallback,
@@ -22,7 +25,14 @@ public class MealRepository {
 
     private static final Logger log = LoggerFactory.getLogger(MealRepository.class);
     private static final String COLLECTION_NAME = "meals";
-
+    
+    /**
+     * Highest Unicode code point used as an exclusive upper bound in prefix range queries.
+     * Firestore orders strings lexicographically, so {@code [prefix, prefix + \uf8ff)}
+     * matches exactly the documents whose id starts with the prefix.
+     */
+    private static final String PREFIX_RANGE_END = "\uf8ff";
+    
     private final Firestore firestore;
 
     public MealRepository(Firestore firestore) {
@@ -39,6 +49,41 @@ public class MealRepository {
             log.error("Error saving meal: {}", meal.getId(), e);
             throw new RuntimeException("Failed to save meal", e);
         }
+    }
+    
+    /**
+     * Creates a new meal document, failing if one already exists with the same id.
+     * <p>
+     * Unlike {@link #save(MealEntity)}, which overwrites, this is used for first-time
+     * inserts so that a sequence collision surfaces as an error instead of silently
+     * destroying a previously stored meal.
+     *
+     * @return {@code true} if the document was created, {@code false} if the id was taken
+     */
+    public boolean createIfAbsent(MealEntity meal) {
+        try {
+            DocumentReference docRef = firestore.collection(COLLECTION_NAME).document(meal.getId());
+            docRef.create(entityToMap(meal)).get();
+            log.debug("Created meal: {}", meal.getId());
+            return true;
+        } catch (ExecutionException e) {
+            if (isAlreadyExists(e)) {
+                log.warn("Meal id already taken, not overwriting: {}", meal.getId());
+                return false;
+            }
+            log.error("Error creating meal: {}", meal.getId(), e);
+            throw new RuntimeException("Failed to create meal", e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.error("Interrupted while creating meal: {}", meal.getId(), e);
+            throw new RuntimeException("Failed to create meal", e);
+        }
+    }
+
+    private boolean isAlreadyExists(ExecutionException e) {
+        Throwable cause = e.getCause();
+        return cause instanceof StatusRuntimeException
+                && ((StatusRuntimeException) cause).getStatus().getCode() == Status.Code.ALREADY_EXISTS;
     }
 
     public Optional<MealEntity> findById(String id) {
@@ -232,6 +277,28 @@ public class MealRepository {
         }
     }
 
+    /**
+     * Returns the ids of all meals whose document id starts with the given prefix.
+     * Uses a lexicographic range query, so no composite index is required.
+     */
+    public List<String> findIdsByPrefix(String prefix) {
+        try {
+            Query query = firestore.collection(COLLECTION_NAME)
+                    .whereGreaterThanOrEqualTo("id", prefix)
+                    .whereLessThan("id", prefix + PREFIX_RANGE_END)
+                    .select("id");
+
+            QuerySnapshot snapshot = query.get().get();
+            return snapshot.getDocuments().stream()
+                    .map(doc -> doc.getString("id"))
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toList());
+        } catch (InterruptedException | ExecutionException e) {
+            log.error("Error finding meal ids by prefix: {}", prefix, e);
+            throw new RuntimeException("Failed to find meal ids by prefix", e);
+        }
+    }
+    
     private List<MealEntity> executeQuery(Query query) throws ExecutionException, InterruptedException {
         QuerySnapshot snapshot = query.get().get();
         return snapshot.getDocuments().stream()
@@ -281,9 +348,11 @@ public class MealRepository {
         map.put("status", entity.getStatus() != null ? entity.getStatus().name() : null);
         map.put("scannedAt", entity.getScannedAt());
         map.put("confirmedAt", entity.getConfirmedAt());
+        map.put("completedAt", entity.getCompletedAt());
 
         map.put("carbDose", entity.getCarbDose());
         map.put("correctionDose", entity.getCorrectionDose());
+        map.put("activeInsulin", entity.getActiveInsulin());
 
         map.put("currentGlucose", entity.getCurrentGlucose());
 
@@ -293,6 +362,9 @@ public class MealRepository {
         map.put("note", entity.getNote());
 
         map.put("savedPlanName", entity.getSavedPlanName());
+
+        map.put("reviewWarnings", entity.getReviewWarnings());
+        map.put("requiresManualReview", entity.isRequiresManualReview());
 
         return map;
     }
@@ -305,6 +377,13 @@ public class MealRepository {
         map.put("carbs", item.getCarbs());
         map.put("confidence", item.getConfidence());
         map.put("usdaFdcId", item.getUsdaFdcId());
+        map.put("note", item.getNote());
+
+        map.put("bboxXPct", item.getBboxXPct());
+        map.put("bboxYPct", item.getBboxYPct());
+        map.put("bboxWPct", item.getBboxWPct());
+        map.put("bboxHPct", item.getBboxHPct());
+
         return map;
     }
 
@@ -342,9 +421,11 @@ public class MealRepository {
 
         entity.setScannedAt(doc.getDate("scannedAt"));
         entity.setConfirmedAt(doc.getDate("confirmedAt"));
+        entity.setCompletedAt(doc.getDate("completedAt"));
 
         entity.setCarbDose(getFloat(doc, "carbDose"));
         entity.setCorrectionDose(getFloat(doc, "correctionDose"));
+        entity.setActiveInsulin(getFloat(doc, "activeInsulin"));
 
         entity.setCurrentGlucose(doc.getLong("currentGlucose") != null
                 ? doc.getLong("currentGlucose").intValue()
@@ -352,10 +433,15 @@ public class MealRepository {
 
         Boolean profileComplete = doc.getBoolean("profileComplete");
         entity.setProfileComplete(profileComplete != null && profileComplete);
+        entity.setMissingProfileFields(getStringList(doc, "missingProfileFields"));
         entity.setInsulinMessage(doc.getString("insulinMessage"));
         entity.setNote(doc.getString("note"));
 
         entity.setSavedPlanName(doc.getString("savedPlanName"));
+
+        Boolean requiresManualReview = doc.getBoolean("requiresManualReview");
+        entity.setRequiresManualReview(requiresManualReview != null && requiresManualReview);
+        entity.setReviewWarnings(getStringList(doc, "reviewWarnings"));
 
         return entity;
     }
@@ -368,6 +454,13 @@ public class MealRepository {
         item.setCarbs(toFloat(map.get("carbs")));
         item.setConfidence(toFloat(map.get("confidence")));
         item.setUsdaFdcId((String) map.get("usdaFdcId"));
+        item.setNote((String) map.get("note"));
+
+        item.setBboxXPct(toFloat(map.get("bboxXPct")));
+        item.setBboxYPct(toFloat(map.get("bboxYPct")));
+        item.setBboxWPct(toFloat(map.get("bboxWPct")));
+        item.setBboxHPct(toFloat(map.get("bboxHPct")));
+
         return item;
     }
 
@@ -382,5 +475,11 @@ public class MealRepository {
         if (value instanceof Long) return ((Long) value).floatValue();
         if (value instanceof Integer) return ((Integer) value).floatValue();
         return null;
+    }
+    
+    @SuppressWarnings("unchecked")
+    private List<String> getStringList(DocumentSnapshot doc, String field) {
+        Object value = doc.get(field);
+        return value instanceof List ? (List<String>) value : null;
     }
 }
