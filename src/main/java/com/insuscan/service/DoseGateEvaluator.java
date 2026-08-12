@@ -22,7 +22,7 @@ public class DoseGateEvaluator {
 
 	private static final Logger log = LoggerFactory.getLogger(DoseGateEvaluator.class);
 
-	@Value("${insulin.dose-gate.blocking-codes:WEIGHT_OUT_OF_RANGE,MEAL_TOO_HEAVY,AREA_EXCEEDS_PLATE,VOLUME_EXCEEDS_CONTAINER}")
+	@Value("${insulin.dose-gate.blocking-codes:WEIGHT_OUT_OF_RANGE,MEAL_TOO_HEAVY,AREA_EXCEEDS_PLATE,VOLUME_EXCEEDS_CONTAINER,PLATE_SIZE_OUT_OF_RANGE}")
 	private String blockingCodesRaw;
 
 	@Value("${insulin.dose-gate.block-on-critical:true}")
