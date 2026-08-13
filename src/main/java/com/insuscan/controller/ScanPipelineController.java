@@ -108,7 +108,10 @@ public class ScanPipelineController {
         @RequestParam(value = "topImageWidth",   required = false) Integer topImageWidth,
         @RequestParam(value = "topImageHeight",  required = false) Integer topImageHeight,
         @RequestParam(value = "sideImageWidth",  required = false) Integer sideImageWidth,
-        @RequestParam(value = "sideImageHeight", required = false) Integer sideImageHeight
+        @RequestParam(value = "sideImageHeight", required = false) Integer sideImageHeight,
+        @RequestParam(value = "planIcr",           required = false) Float planIcr,
+        @RequestParam(value = "planIsf",           required = false) Float planIsf,
+        @RequestParam(value = "planTargetGlucose", required = false) Integer planTargetGlucose
         ) throws IOException {
 
         if (topFile == null || topFile.isEmpty()) {
@@ -121,7 +124,8 @@ public class ScanPipelineController {
             return ResponseEntity.badRequest().body("referenceObjectType is required");
         }
 
-        log.info("[ScanV2] Request from user={}, refType={}", email, referenceObjectType);
+        log.info("[ScanV2] Request from user={}, refType={}, plan(icr={}, isf={}, target={})",
+                email, referenceObjectType, planIcr, planIsf, planTargetGlucose);
 
         PipelineContext ctx = new PipelineContext();
         ctx.setImageTopBase64(Base64.getEncoder().encodeToString(topFile.getBytes()));
@@ -221,10 +225,13 @@ public class ScanPipelineController {
                 userIdBoundary.setEmail(email);
 
                 calc = insulinCalculationService.calculateDose(
-                    meal.getTotalCarbs() != null ? meal.getTotalCarbs() : 0f,
-                    null,
-                    userIdBoundary
-                );
+                        meal.getTotalCarbs() != null ? meal.getTotalCarbs() : 0f,
+                        null,
+                        userIdBoundary,
+                        planIcr,
+                        planIsf,
+                        planTargetGlucose
+                    );
                 meal.setProfileComplete(calc.isProfileComplete());
                 meal.setMissingProfileFields(calc.getMissingFields());
             } catch (Exception e) {
