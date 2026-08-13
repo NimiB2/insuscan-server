@@ -113,9 +113,12 @@ public class InsulinCalculationServiceImpl implements InsulinCalculationService 
 
 		response.setCarbDose(result.getCarbDose());
 		response.setCorrectionDose(result.getCorrectionDose());
-
 		response.setTotalRecommendedDose(result.getRoundedDose());
 		response.setWarning(result.getWarning());
+
+		response.setProfileComplete(result.isProfileComplete());
+		response.setMissingFields(result.getMissingFields());
+		response.setMessage(result.getWarning());
 
 		return response;
 	}

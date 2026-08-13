@@ -210,33 +210,21 @@ public class ScanPipelineController {
 
         Float gateWeight = ctx.getMealTotals() != null ? ctx.getMealTotals().getTotalWeightG() : null;
         Float gateCarbs  = ctx.getMealTotals() != null ? ctx.getMealTotals().getTotalNetCarbsG() : null;
-        DoseGateDecision gateDecision = doseGateEvaluator.evaluate(result.getWarnings(), gateWeight, gateCarbs);
 
         UserEntity user = userRepository.findById(userDocId).orElse(null);
-        if (gateDecision.blocked()) {
-            meal.setRecommendedDose(null);
-            meal.setCarbDose(null);
-            meal.setCorrectionDose(null);
-            meal.setRequiresManualReview(true);
-            meal.setInsulinMessage("Dose recommendation withheld — please review manually. Reason: "
-                    + gateDecision.summary());
-            log.warn("[ScanV2] Dose recommendation blocked for meal {}: {}", meal.getId(), gateDecision.summary());
-        } else if (user != null) {
+
+        InsulinCalculationBoundary calc = null;
+        if (user != null) {
             try {
                 UserIdBoundary userIdBoundary = new UserIdBoundary();
                 userIdBoundary.setSystemId(systemId);
                 userIdBoundary.setEmail(email);
 
-                InsulinCalculationBoundary calc = insulinCalculationService.calculateDose(
+                calc = insulinCalculationService.calculateDose(
                     meal.getTotalCarbs() != null ? meal.getTotalCarbs() : 0f,
                     null,
                     userIdBoundary
                 );
-
-                meal.setRecommendedDose(calc.getTotalRecommendedDose());
-                meal.setCarbDose(calc.getCarbDose());
-                meal.setCorrectionDose(calc.getCorrectionDose());
-                meal.setInsulinMessage(calc.getMessage());
                 meal.setProfileComplete(calc.isProfileComplete());
                 meal.setMissingProfileFields(calc.getMissingFields());
             } catch (Exception e) {
@@ -247,6 +235,24 @@ public class ScanPipelineController {
             log.warn("[ScanV2] User not found ({}), saving meal without profile/insulin", userDocId);
             meal.setProfileComplete(false);
             meal.setInsulinMessage("User profile not found. Please log in.");
+        }
+
+        DoseGateDecision gateDecision = doseGateEvaluator.evaluate(
+                result.getWarnings(), gateWeight, gateCarbs, resolveMissingProfileFields(calc));
+
+        if (gateDecision.blocked()) {
+            meal.setRecommendedDose(null);
+            meal.setCarbDose(null);
+            meal.setCorrectionDose(null);
+            meal.setRequiresManualReview(true);
+            meal.setInsulinMessage("Dose recommendation withheld — please review manually. Reason: "
+                    + gateDecision.summary());
+            log.warn("[ScanV2] Dose recommendation blocked for meal {}: {}", meal.getId(), gateDecision.summary());
+        } else if (calc != null) {
+            meal.setRecommendedDose(calc.getTotalRecommendedDose());
+            meal.setCarbDose(calc.getCarbDose());
+            meal.setCorrectionDose(calc.getCorrectionDose());
+            meal.setInsulinMessage(calc.getMessage());
         }
 
         if (!persistNewMeal(meal)) {
@@ -290,6 +296,19 @@ public class ScanPipelineController {
             meal.setId(retryId);
         }
         return false;
+    }
+    
+    /**
+     * Returns the profile fields the dose gate should block on, or an empty list when the
+     * profile is usable. The completeness flag is authoritative; the field list is only used
+     * to give the user a precise message when the calculator provided one.
+     */
+    private List<String> resolveMissingProfileFields(InsulinCalculationBoundary calc) {
+        if (calc == null || calc.isProfileComplete()) {
+            return List.of();
+        }
+        List<String> reported = calc.getMissingFields();
+        return (reported != null && !reported.isEmpty()) ? reported : List.of("medical profile values");
     }
     
 
