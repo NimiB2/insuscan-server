@@ -14,7 +14,7 @@ import java.util.stream.Collectors;
 
 /**
  * Clinical safety gate that decides whether a calculated dose can be recommended
- * to the user, based on meal validity and pipeline warnings.
+ * to the user, based on meal validity, pipeline warnings, and medical profile completeness.
  */
 
 @Component
@@ -22,17 +22,22 @@ public class DoseGateEvaluator {
 
 	private static final Logger log = LoggerFactory.getLogger(DoseGateEvaluator.class);
 
-	@Value("${insulin.dose-gate.blocking-codes:WEIGHT_OUT_OF_RANGE,MEAL_TOO_HEAVY,AREA_EXCEEDS_PLATE,VOLUME_EXCEEDS_CONTAINER}")
+	@Value("${insulin.dose-gate.blocking-codes:WEIGHT_OUT_OF_RANGE,MEAL_TOO_HEAVY,AREA_EXCEEDS_PLATE,VOLUME_EXCEEDS_CONTAINER,PLATE_SIZE_OUT_OF_RANGE}")
 	private String blockingCodesRaw;
 
 	@Value("${insulin.dose-gate.block-on-critical:true}")
 	private boolean blockOnCritical;
 
-	public DoseGateDecision evaluate(List<PipelineWarning> warnings, Float totalWeightG, Float totalCarbsG) {
+	public DoseGateDecision evaluate(List<PipelineWarning> warnings, Float totalWeightG, Float totalCarbsG,
+			List<String> missingProfileFields) {
 		List<String> reasons = new ArrayList<>();
 
 		if (totalCarbsG == null || totalWeightG == null || totalWeightG <= 0f) {
 			reasons.add("Meal result is invalid (weight=" + totalWeightG + ", carbs=" + totalCarbsG + ")");
+		}
+
+		if (missingProfileFields != null && !missingProfileFields.isEmpty()) {
+			reasons.add("Medical profile is incomplete, missing: " + String.join(", ", missingProfileFields));
 		}
 
 		if (warnings != null && !warnings.isEmpty()) {

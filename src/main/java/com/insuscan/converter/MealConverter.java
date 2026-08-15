@@ -184,7 +184,7 @@ public class MealConverter {
     public MealEntity createNewMealEntity(String userEmail, String imageUrl) {
         MealEntity entity = new MealEntity();
 
-        entity.setId(mealIdGenerator.generateMealId(systemId));
+        entity.setId(systemId + "_" + mealIdGenerator.generateMealId());
 
         entity.setUserId(systemId + "_" + userEmail);
 

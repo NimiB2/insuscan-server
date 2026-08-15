@@ -98,6 +98,17 @@ public class PipelineWarningCollector {
 		add(ctx, PipelineWarning.medium(STAGE_PLATE_GEOMETRY, "TYPE_DEPTH_MISMATCH",
 				String.format("Container type '%s' inconsistent with depth %.1fcm.", containerType, depthCm)));
 	}
+	
+	public void plateDiameterOutOfRange(PipelineContext ctx, float diameterCm) {
+		add(ctx, PipelineWarning.high(STAGE_PLATE_GEOMETRY, "PLATE_SIZE_OUT_OF_RANGE",
+				String.format("Measured plate diameter %.1fcm is outside the plausible range "
+						+ "(%.0f-%.0fcm). Scale calibration is likely wrong — please retake the photo "
+						+ "with the reference object clearly visible.",
+						diameterCm,
+						StandardPlateConfig.MIN_PLAUSIBLE_DIAMETER_CM,
+						StandardPlateConfig.MAX_PLAUSIBLE_DIAMETER_CM)));
+	}
+	
 
 	// ── Area warnings ─────────────────────────────────────────────────────
 

@@ -95,6 +95,12 @@ public class PlateGeometryService {
             warningCollector.plateTypeDepthMismatch(ctx, geometry.getContainerType(), geometry.getInnerDepthCm());
         }
 
+        if (!standardPlateConfig.isPlausibleDiameter(geometry.getInnerDiameterCm())) {
+            warningCollector.plateDiameterOutOfRange(ctx, geometry.getInnerDiameterCm());
+            log.warn("[PlateGeometry] Diameter {}cm is outside the plausible range — calibration is likely wrong",
+                    String.format("%.1f", geometry.getInnerDiameterCm()));
+        }
+
         ctx.setPlateGeometry(geometry);
         ctx.recordConfidence("PLATE_GEOMETRY", confidence);
 
