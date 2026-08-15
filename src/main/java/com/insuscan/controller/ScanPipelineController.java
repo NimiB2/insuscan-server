@@ -39,6 +39,10 @@ import java.util.List;
 import java.util.stream.Collectors;
 import com.insuscan.boundary.ArcoreDepthData;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.insuscan.pipeline.support.ScanReportWriter;
+import java.util.UUID;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 
 /**
  * New scan endpoint for the dual-image pipeline (Milestone 7).
@@ -64,7 +68,9 @@ public class ScanPipelineController {
     private final MealService mealService;
     private final ObjectMapper objectMapper;
     private final DoseGateEvaluator doseGateEvaluator;
-
+    private final ScanReportWriter scanReportWriter;
+    
+    
     @Value("${spring.application.name}")
     private String systemId;
 
@@ -77,7 +83,8 @@ public class ScanPipelineController {
             MealConverter mealConverter,
             MealService mealService,
             ObjectMapper objectMapper,
-            DoseGateEvaluator doseGateEvaluator) {
+            DoseGateEvaluator doseGateEvaluator,
+            ScanReportWriter scanReportWriter) {
 
         this.pipeline = pipeline;
         this.userRepository = userRepository;
@@ -88,6 +95,7 @@ public class ScanPipelineController {
         this.mealService = mealService;
         this.objectMapper = objectMapper;
         this.doseGateEvaluator = doseGateEvaluator;
+        this.scanReportWriter = scanReportWriter;
     }
 
     @Operation(
@@ -124,10 +132,13 @@ public class ScanPipelineController {
             return ResponseEntity.badRequest().body("referenceObjectType is required");
         }
 
-        log.info("[ScanV2] Request from user={}, refType={}, plan(icr={}, isf={}, target={})",
-                email, referenceObjectType, planIcr, planIsf, planTargetGlucose);
-
         PipelineContext ctx = new PipelineContext();
+        ctx.setSessionId(LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"))
+                + "_" + UUID.randomUUID().toString().substring(0, 4));
+
+        log.info("[ScanV2] Request from user={}, refType={}, sessionId={}, plan(icr={}, isf={}, target={})",
+                email, referenceObjectType, ctx.getSessionId(), planIcr, planIsf, planTargetGlucose);
+
         ctx.setImageTopBase64(Base64.getEncoder().encodeToString(topFile.getBytes()));
         ctx.setImageSideBase64(Base64.getEncoder().encodeToString(sideFile.getBytes()));
         ctx.setReferenceObjectType(referenceObjectType.toUpperCase());
@@ -152,6 +163,7 @@ public class ScanPipelineController {
         }
 
         PipelineResult result = pipeline.run(ctx);
+        scanReportWriter.write(ctx, result);
 
         if (!result.isSuccess()) {
             return ResponseEntity.unprocessableEntity().body(result);

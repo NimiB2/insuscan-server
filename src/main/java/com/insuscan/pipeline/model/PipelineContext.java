@@ -38,6 +38,7 @@ public class PipelineContext {
     private String referenceObjectType;  // e.g. "INSULIN_PEN", "CARD"
     private String userId;
     private String systemId;
+    private String sessionId;
     private ArcoreDepthData arcoreDepthData;
 
     private Integer imageTopWidthPx;
@@ -174,6 +175,8 @@ public class PipelineContext {
     public void setUserId(String userId) { this.userId = userId; }
     public String getSystemId() { return systemId; }
     public void setSystemId(String systemId) { this.systemId = systemId; }
+    public String getSessionId() { return sessionId; }
+    public void setSessionId(String sessionId) { this.sessionId = sessionId; }
     public ArcoreDepthData getArcoreDepthData() { return arcoreDepthData; }
     public void setArcoreDepthData(ArcoreDepthData arcoreDepthData) { this.arcoreDepthData = arcoreDepthData; }
     public Integer getImageTopWidthPx() { return imageTopWidthPx; }
