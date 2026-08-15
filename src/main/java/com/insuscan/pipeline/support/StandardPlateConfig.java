@@ -19,6 +19,18 @@ public class StandardPlateConfig {
     /** Confidence value assigned to any plate measurement produced by this fallback config. */
     public static final float FALLBACK_CONFIDENCE = 0.3f;
 
+    /**
+     * Smallest plausible plate diameter. Below this the measurement is almost certainly a
+     * calibration failure rather than a real dish, espresso plate still sits above it.
+     */
+    public static final float MIN_PLAUSIBLE_DIAMETER_CM = 14.0f;
+
+    /**
+     * Largest plausible plate diameter. Above this the measurement is almost certainly a
+     * calibration failure, a large serving platter or pasta bowl still sits below it.
+     */
+    public static final float MAX_PLAUSIBLE_DIAMETER_CM = 34.0f;
+    
     @Value("${plate.geometry.sizes.small:18.0}")
     private float smallDiameterCm;
 
@@ -57,4 +69,15 @@ public class StandardPlateConfig {
         }
         return closest;
     }
+    
+    /**
+     * Returns whether the given diameter falls within the plausible physical range for a plate.
+     * A value outside this range indicates a calibration or detection failure rather than an
+     * unusually sized dish.
+     */
+    public boolean isPlausibleDiameter(float diameterCm) {
+        return diameterCm >= MIN_PLAUSIBLE_DIAMETER_CM
+                && diameterCm <= MAX_PLAUSIBLE_DIAMETER_CM;
+    }
+    
 }
