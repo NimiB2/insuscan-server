@@ -1,9 +1,9 @@
 package com.insuscan.util;
 
 import com.insuscan.crud.MealRepository;
-import com.insuscan.data.MealEntity;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
@@ -13,65 +13,69 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Generates readable meal IDs in format: systemId_YYYYMMDD_XXX
- * Example: insuscan_20260112_001
+ * Generates the meal id portion that follows the system id, in the format {@code YYYYMMDD_NNN}.
+ * <p>
+ * The full Firestore document id is {@code systemId_YYYYMMDD_NNN} (for example
+ * {@code insuscan_20260812_001}). Callers are responsible for prepending the system id,
+ * consistently with how user ids and meal ids are composed elsewhere in the codebase.
+ * <p>
+ * The sequence counter is global per calendar day rather than per user, which keeps the
+ * document id free of personal data while still guaranteeing uniqueness.
  */
 @Component
 public class MealIdGenerator {
 
     private static final Logger log = LoggerFactory.getLogger(MealIdGenerator.class);
+
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd");
-    private static final Pattern MEAL_ID_PATTERN = Pattern.compile("^(.+)_(\\d{8})_(\\d+)$");
+
+    /** Matches the trailing sequence number of a document id, e.g. the "001" in "insuscan_20260812_001". */
+    private static final Pattern TRAILING_SEQUENCE_PATTERN = Pattern.compile("_(\\d+)$");
+
+    /** Zero-padded width of the daily sequence number. */
+    private static final String SEQUENCE_FORMAT = "%03d";
 
     private final MealRepository mealRepository;
+
+    @Value("${spring.application.name}")
+    private String systemId;
 
     public MealIdGenerator(MealRepository mealRepository) {
         this.mealRepository = mealRepository;
     }
 
-    // Generates a new meal ID like "insuscan_20260112_001"
-    public String generateMealId(String systemId) {
-        String datePrefix = LocalDate.now().format(DATE_FORMATTER);
-        String baseId = systemId + "_" + datePrefix;
+    // ── Public API ────────────────────────────────────────────────────────
 
-        int nextSequence = getNextSequenceNumber(baseId);
-        String sequence = String.format("%03d", nextSequence);
+    public String generateMealId() {
+        String datePart = LocalDate.now().format(DATE_FORMATTER);
+        int sequence = resolveNextSequence(datePart);
 
-        String mealId = baseId + "_" + sequence;
-        log.debug("Generated meal ID: {}", mealId);
+        String mealId = datePart + "_" + String.format(SEQUENCE_FORMAT, sequence);
+        log.debug("Generated meal id: {} (document id: {}_{})", mealId, systemId, mealId);
 
         return mealId;
     }
 
-    private int getNextSequenceNumber(String baseId) {
-        try {
-            int maxSequence = 0;
+    // ── Sequence resolution ───────────────────────────────────────────────
 
-            // Query recent meals (last 200 should cover most of today's meals)
-            List<MealEntity> recentMeals = mealRepository.findAllRecent(200);
+    private int resolveNextSequence(String datePart) {
+        String documentIdPrefix = systemId + "_" + datePart + "_";
+        List<String> existingIds = mealRepository.findIdsByPrefix(documentIdPrefix);
 
-            for (MealEntity meal : recentMeals) {
-                String mealId = meal.getId();
-                if (mealId != null && mealId.startsWith(baseId + "_")) {
-                    Matcher matcher = MEAL_ID_PATTERN.matcher(mealId);
-                    if (matcher.matches()) {
-                        try {
-                            int sequence = Integer.parseInt(matcher.group(3));
-                            if (sequence > maxSequence) {
-                                maxSequence = sequence;
-                            }
-                        } catch (NumberFormatException e) {
-                            log.debug("Invalid sequence in meal ID: {}", mealId);
-                        }
-                    }
-                }
+        int maxSequence = 0;
+        for (String id : existingIds) {
+            Matcher matcher = TRAILING_SEQUENCE_PATTERN.matcher(id);
+            if (!matcher.find()) {
+                log.debug("Meal id has no trailing sequence, skipping: {}", id);
+                continue;
             }
-
-            return maxSequence + 1;
-
-        } catch (Exception e) {
-            log.warn("Error finding next sequence number, starting from 1: {}", e.getMessage());
-            return 1;
+            try {
+                maxSequence = Math.max(maxSequence, Integer.parseInt(matcher.group(1)));
+            } catch (NumberFormatException e) {
+                log.debug("Meal id has an unparsable sequence, skipping: {}", id);
+            }
         }
+
+        return maxSequence + 1;
     }
 }
